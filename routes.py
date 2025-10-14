@@ -3,7 +3,7 @@ import platform
 import random
 import subprocess
 from urllib.parse import unquote
-from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify
+from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify, g
 from file_handler import (
     get_all_folders_info,
     get_folder_images,
@@ -20,6 +20,9 @@ from file_handler import (
     get_eagle_image_details,
     get_eagle_video_details,
     get_subfolders_info,
+    is_eagle_available,
+    has_chrome_bookmarks,
+    has_db_main,
 )
 from config import DB_route_internal, DB_route_external
 
@@ -49,6 +52,24 @@ def _open_in_file_manager(target_path):
     else:
         subprocess.Popen(["xdg-open", target_path])
 
+
+def _compute_feature_flags():
+    eagle_available = is_eagle_available()
+    chrome_available = has_chrome_bookmarks()
+    db_available = has_db_main()
+    return {
+        "eagle": eagle_available,
+        "chrome": chrome_available,
+        "youtube": chrome_available,
+        "db": db_available
+    }
+
+
+def _get_feature_flags():
+    if not hasattr(g, "feature_flags"):
+        g.feature_flags = _compute_feature_flags()
+    return g.feature_flags
+
 def register_routes_debug(app):
     @app.route('/debug/')
     def debug_print():
@@ -66,9 +87,32 @@ def register_routes(app):
     註冊 Flask 路由
     """
 
+    @app.context_processor
+    def inject_feature_flags():
+        return {"feature_flags": _get_feature_flags()}
+
     @app.route('/')
     def index():
         """探索 Eagle 資料庫的首頁推薦"""
+
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            if flags["db"]:
+                return redirect(url_for('view_collections'))
+            if flags["chrome"]:
+                return redirect(url_for('view_chrome_root'))
+            return render_template(
+                'index.html',
+                hero_item=None,
+                featured_media=[],
+                random_images=[],
+                random_videos=[],
+                random_folders=[],
+                eagle_tags=[],
+                curated_clusters=[],
+                fallback_heading="Welcome to Flowinone",
+                fallback_message="Connect Eagle, a media library, or Chrome bookmarks to start exploring."
+            )
 
         hero_item = None
         featured_media = []
@@ -130,7 +174,9 @@ def register_routes(app):
             random_videos=random_videos,
             random_folders=random_folders,
             eagle_tags=eagle_tags,
-            curated_clusters=curated_clusters
+            curated_clusters=curated_clusters,
+            fallback_heading="Welcome to Flowinone",
+            fallback_message="Connect Eagle, a media library, or Chrome bookmarks to start exploring."
         )
     
     @app.route('/open_path/')
@@ -185,12 +231,18 @@ def register_routes(app):
     @app.route('/EAGLE_folders/')
     def list_all_eagle_folder():
         """列出所有 Eagle 資料夾，並符合 EAGLE API 樣式"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         metadata, data = get_eagle_folders()
         return render_template('view_both.html', metadata=metadata, data=data)
 
     @app.route('/collections/')
     def view_collections():
         """顯示 DB main 目錄，使用 view_both 版型"""
+        flags = _get_feature_flags()
+        if not flags["db"]:
+            abort(404)
         source = request.args.get('src', 'external')
         metadata, data = get_all_folders_info(source)
         return render_template('view_both.html', metadata=metadata, data=data)
@@ -198,17 +250,26 @@ def register_routes(app):
     @app.route('/chrome/')
     def view_chrome_root():
         """預設顯示書籤列 (bookmark_bar)。"""
+        flags = _get_feature_flags()
+        if not flags["chrome"]:
+            abort(404)
         return redirect(url_for('view_chrome_folder', folder_path='bookmark_bar'))
 
     @app.route('/chrome/<path:folder_path>/')
     def view_chrome_folder(folder_path):
         """瀏覽 Chrome 書籤資料夾。"""
+        flags = _get_feature_flags()
+        if not flags["chrome"]:
+            abort(404)
         metadata, data = get_chrome_bookmarks(folder_path)
         return render_template('view_both.html', metadata=metadata, data=data)
 
     @app.route('/chrome_youtube/')
     def view_chrome_youtube():
         """專門顯示 YouTube 書籤"""
+        flags = _get_feature_flags()
+        if not flags["youtube"]:
+            abort(404)
         metadata, data = get_chrome_youtube_bookmarks()
         return render_template('view_both.html', metadata=metadata, data=data)
 
@@ -221,6 +282,9 @@ def register_routes(app):
     @app.route('/EAGLE_folder/<eagle_folder_id>/')
     def view_eagle_folder(eagle_folder_id):
         """顯示指定 Eagle 資料夾 ID 下的所有圖片"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         metadata, data = get_eagle_images_by_folderid(eagle_folder_id)
         
         # 加入子資料夾為類似圖片格式
@@ -271,6 +335,9 @@ def register_routes(app):
         Returns:
             渲染的 HTML 頁面，顯示所有具有該標籤的圖片。
         """
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         metadata, data = get_eagle_images_by_tag(target_tag)
 
         current_url = request.full_path
@@ -288,6 +355,9 @@ def register_routes(app):
     @app.route('/search')
     def search_eagle():
         """使用 Eagle API 搜尋並顯示結果。"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         keyword = request.args.get('query', '').strip()
         if not keyword:
             return redirect(request.referrer or url_for('index'))
@@ -309,11 +379,17 @@ def register_routes(app):
     @app.route('/EAGLE_stream/')
     def eagle_stream():
         """顯示無限滾動串流頁面"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         return render_template('eagle_stream.html')
 
     @app.route('/api/EAGLE_stream/')
     def eagle_stream_data():
         """提供 Eagle 串流頁面使用的資料"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         try:
             offset = int(request.args.get('offset', 0))
             limit = int(request.args.get('limit', 30))
@@ -351,6 +427,9 @@ def register_routes(app):
     @app.route('/EAGLE_video/<item_id>/')
     def view_eagle_video(item_id):
         """顯示 Eagle 影片的詳細資訊與播放器頁面"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         metadata, video = get_eagle_video_details(item_id)
         return_to = request.args.get("return_to")
         if return_to:
@@ -362,6 +441,9 @@ def register_routes(app):
     @app.route('/EAGLE_image/<item_id>/')
     def view_eagle_image(item_id):
         """顯示 Eagle 圖片的詳細資訊與展示頁面"""
+        flags = _get_feature_flags()
+        if not flags["eagle"]:
+            abort(404)
         metadata, image = get_eagle_image_details(item_id)
         return_to = request.args.get("return_to")
         if return_to:

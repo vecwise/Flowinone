@@ -4,3 +4,6 @@ __pycache__/
 temp_for_display
 .ipynb_checkpoints
 暫時封存不用
+data/
+data/**
+*.db

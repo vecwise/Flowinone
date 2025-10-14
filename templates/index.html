@@ -262,8 +262,8 @@
         </div>
       {% else %}
         <div class="hero-overlay">
-          <h2>尚無收藏</h2>
-          <p>開始建立你的第一個收藏，讓探索頁充滿驚喜！</p>
+          <h2>{{ fallback_heading or 'Welcome to Flowinone' }}</h2>
+          <p>{{ fallback_message or 'Connect Eagle, media libraries, or bookmarks to start exploring.' }}</p>
         </div>
       {% endif %}
     </div>
@@ -284,6 +284,7 @@
     {% endif %}
   </div>
 
+  {% if random_images %}
   <div class="section-heading">
     <h3>隨機圖像靈感</h3>
     <span class="badge-pill">隨機 PICK</span>
@@ -300,7 +301,9 @@
     </a>
     {% endfor %}
   </div>
+  {% endif %}
 
+  {% if random_videos %}
   <div class="section-heading">
     <h3>隨機影片推薦</h3>
     <span class="badge-pill">影片亮點</span>
@@ -317,7 +320,9 @@
     </a>
     {% endfor %}
   </div>
+  {% endif %}
 
+  {% if random_folders %}
   <div class="section-heading">
     <h3>隨機資料夾推薦</h3>
     <span class="badge-pill">收藏夾亮點</span>
@@ -333,7 +338,9 @@
     </a>
     {% endfor %}
   </div>
+  {% endif %}
 
+  {% if eagle_tags %}
   <div class="section-heading">
     <h3>熱門標籤</h3>
     <span class="badge-pill">EAGLE Tags</span>
@@ -351,7 +358,9 @@
     </a>
     {% endfor %}
   </div>
+  {% endif %}
 
+  {% if curated_clusters %}
   <div class="section-heading">
     <h3>AI 類似主題合集</h3>
     <span class="badge-pill">智慧整理</span>
@@ -371,6 +380,7 @@
     </div>
     {% endfor %}
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}
