@@ -506,6 +506,10 @@ def get_all_folders_info(src):
     }
 
     data = _collect_directory_entries(base_dir, "", normalized_src)
+    metadata["folders"] = [{
+        "name": "Root",
+        "url": _build_folder_url("", normalized_src)
+    }]
     return metadata, data
 
 def get_folder_images(folder_path, src=None):
@@ -726,15 +730,23 @@ def get_eagle_images_by_folderid(eagle_folder_id):
     # folder_name = row.iloc[0]["name"]
     folder_links = []
     current_folder, parent_folder = _get_eagle_folder_context(eagle_folder_id)
-    if parent_folder:
-        parent_id = parent_folder.get("id")
-        parent_name = parent_folder.get("name", parent_id)
-        if parent_id:
-            folder_links.append({
-                "id": parent_id,
-                "name": parent_name,
-                "url": f"/EAGLE_folder/{parent_id}/"
-            })
+    if current_folder:
+        path_stack = []
+        node = current_folder
+        parent = parent_folder
+        while parent:
+            parent_id = parent.get("id")
+            if parent_id:
+                path_stack.append({
+                    "id": parent_id,
+                    "name": parent.get("name", parent_id),
+                    "url": f"/EAGLE_folder/{parent_id}/"
+                })
+                grand = _get_eagle_folder_context(parent_id)[1]
+                parent = grand
+            else:
+                break
+        folder_links = list(reversed(path_stack))
 
     folder_name = current_folder.get("name") if current_folder else eagle_folder_id
 
@@ -939,13 +951,22 @@ def get_chrome_bookmarks(folder_path=None):
         "filesystem_path": CHROME_BOOKMARK_PATH
     }
 
-    if parent:
-        parent_name = parent.get("name") or "上一層"
-        parent_url = "/chrome/" if not parent_path else f"/chrome/{quote(parent_path, safe='/')}"
-        metadata["folders"] = [{
-            "name": parent_name,
-            "url": parent_url
-        }]
+    breadcrumb = []
+    path_cursor = []
+    for idx, part in enumerate(parts):
+        path_cursor.append(part)
+        if idx == 0:
+            node = roots.get(part, {})
+            node_label = "Bookmarks" if part == "bookmark_bar" else node.get("name", part)
+        else:
+            node_label = current.get("name") if idx == len(parts) - 1 else "Folder"
+        breadcrumb.append({
+            "name": node_label or "Folder",
+            "url": f"/chrome/{quote('/'.join(path_cursor), safe='/')}"
+        })
+
+    if breadcrumb:
+        metadata["folders"] = breadcrumb
     else:
         # 根節點時提供快速切換到其他根資料夾
         for key in ["bookmark_bar", "other", "synced"]:

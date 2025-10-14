@@ -34,6 +34,9 @@
          style="margin-right: 5px; background-color: #6c757d; color: white; padding: 0.3em 0.6em; border-radius: 0.5em; text-decoration: none;">
         {{ folder.name }}
       </a>
+      {% if not loop.last %}
+        <span style="margin-right:5px; color:#999;">›</span>
+      {% endif %}
     {% endfor %}
   </p>
   {% endif %}
