@@ -43,10 +43,11 @@ pip install -r requirements.txt   # or install Flask, requests, pandas manually 
 > Current dependencies are lightweight (Flask + requests/pandas for Eagle API). Adjust `requirements.txt` to match your environment.
 
 ### 3. Configure paths
-Edit `config.py` and set:
-- `DB_route_external`: root of your external / primary media library
-- `DB_route_internal`: staging or internal media path
-- `CHROME_BOOKMARK_PATH`: Chrome bookmark JSON (default is macOS path; update for Windows/Linux)
+- `config.json` 內的 `DB_route_external` / `DB_route_internal` 為空時，啟動會跳出圖形化視窗讓你選資料夾，選完自動寫回 `config.json`。
+- 若要手動設定或在 headless 環境執行：
+  - 直接編輯 `config.json` 裡的 `DB_route_external` / `DB_route_internal`
+  - 或預先設定 `FLOWINONE_HEADLESS=1` 並提供有效路徑，避免啟動時顯示 GUI。
+- `CHROME_BOOKMARK_PATH`: Chrome bookmark JSON (預設為 macOS；Windows/Linux 請自行修改)
 
 ### 4. Launch the app
 ```bash

@@ -1,19 +1,53 @@
+import html
 import json
 import os
 import random
+import re
+import sqlite3
+import hashlib
+import time
 from collections import OrderedDict
 from datetime import datetime
-from urllib.parse import quote
+from pathlib import Path
+from urllib.parse import quote, quote_plus, urlparse
+from typing import Dict, List, Optional, Tuple
 import mimetypes
+import requests
 import src.eagle_api as EG
 from flask import abort
-from config import DB_route_internal, DB_route_external, CHROME_BOOKMARK_PATH
+from config import (
+    DB_route_internal,
+    DB_route_external,
+    CHROME_BOOKMARK_PATH,
+    SPECIAL_THUMBNAIL_DOMAINS,
+)
 
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v"}
 DEFAULT_THUMBNAIL_ROUTE = "/static/default_thumbnail.svg"
 DEFAULT_VIDEO_THUMBNAIL_ROUTE = "/static/default_video_thumbnail.svg"
+
+CACHE_DATA_DIR = "data"
+THUMBNAIL_CACHE_DIR = os.path.join(CACHE_DATA_DIR, "thumbnails")
+THUMBNAIL_CACHE_DB = os.path.join(CACHE_DATA_DIR, "cache.db")
+FOCUS_MODES_FILE = Path(CACHE_DATA_DIR) / "focus_modes.json"
+_DEFAULT_FOCUS_CONFIG = {
+    "default_mode": "all",
+    "modes": [
+        {
+            "id": "all",
+            "label": "全部書籤",
+            "description": "顯示所有 Chrome 書籤"
+        }
+    ]
+}
+
+_DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9"
+}
 
 
 def _extract_youtube_id(url):
@@ -30,6 +64,470 @@ def _get_youtube_thumbnail(video_id):
     if not video_id:
         return None
     return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+
+def _fetch_page(url: str) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        response = requests.get(url, timeout=6, headers=_DEFAULT_HEADERS)
+        if response.status_code == 200:
+            return response.text
+    except requests.RequestException:
+        return None
+    return None
+
+
+def _fetch_og_image(url):
+    html_text = _fetch_page(url)
+    if not html_text:
+        return None
+    match = re.search(
+        r"<meta[^>]+property=['\"]og:image['\"][^>]*content=['\"]([^'\"]+)",
+        html_text,
+        re.IGNORECASE
+    )
+    if match:
+        return html.unescape(match.group(1))
+    return None
+
+
+def _get_special_site_thumbnail(url):
+    domain = urlparse(url).netloc.lower()
+    for site in SPECIAL_THUMBNAIL_DOMAINS:
+        if site in domain:
+            return _fetch_og_image(url)
+    return None
+
+
+def _load_or_create_focus_config() -> dict:
+    """
+    Ensure the focus-mode configuration exists on disk and return its raw content.
+    """
+    try:
+        FOCUS_MODES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # If the directory cannot be created, fall back to defaults in-memory.
+        return json.loads(json.dumps(_DEFAULT_FOCUS_CONFIG))
+
+    if not FOCUS_MODES_FILE.exists():
+        try:
+            FOCUS_MODES_FILE.write_text(
+                json.dumps(_DEFAULT_FOCUS_CONFIG, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+        except OSError:
+            return json.loads(json.dumps(_DEFAULT_FOCUS_CONFIG))
+        return json.loads(json.dumps(_DEFAULT_FOCUS_CONFIG))
+
+    try:
+        return json.loads(FOCUS_MODES_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return json.loads(json.dumps(_DEFAULT_FOCUS_CONFIG))
+
+
+def _sanitize_focus_config(raw_config: dict) -> Dict[str, object]:
+    """
+    Normalise the focus-mode configuration to a predictable structure.
+    """
+    modes: List[Dict[str, object]] = []
+    seen: set[str] = set()
+
+    raw_modes = raw_config.get("modes") if isinstance(raw_config, dict) else None
+    if not isinstance(raw_modes, list):
+        raw_modes = []
+
+    for entry in raw_modes:
+        if not isinstance(entry, dict):
+            continue
+
+        mode_id = str(entry.get("id") or "").strip()
+        if not mode_id:
+            continue
+
+        mode_key = mode_id.lower()
+        if mode_key in seen:
+            continue
+
+        seen.add(mode_key)
+
+        label = entry.get("label") or mode_id
+        description = entry.get("description")
+
+        def _collect_strings(values):
+            if not isinstance(values, list):
+                return []
+            collected = []
+            for value in values:
+                if isinstance(value, str):
+                    stripped = value.strip()
+                    if stripped:
+                        collected.append(stripped)
+            return collected
+
+        keywords = _collect_strings(entry.get("keywords"))
+        folders = _collect_strings(entry.get("folders"))
+        include_urls = _collect_strings(entry.get("include_urls"))
+        exclude_keywords = _collect_strings(entry.get("exclude_keywords"))
+        exclude_urls = _collect_strings(entry.get("exclude_urls"))
+
+        modes.append({
+            "id": mode_key,
+            "label": label,
+            "description": description,
+            "keywords": keywords,
+            "keywords_lower": [value.lower() for value in keywords],
+            "folders": folders,
+            "folders_lower": [value.lower() for value in folders],
+            "include_urls": include_urls,
+            "include_urls_lower": [value.lower() for value in include_urls],
+            "exclude_keywords": exclude_keywords,
+            "exclude_keywords_lower": [value.lower() for value in exclude_keywords],
+            "exclude_urls": exclude_urls,
+            "exclude_urls_lower": [value.lower() for value in exclude_urls],
+        })
+
+    if "all" not in seen:
+        modes.insert(0, {
+            "id": "all",
+            "label": "全部書籤",
+            "description": "顯示所有 Chrome 書籤",
+            "keywords": [],
+            "keywords_lower": [],
+            "folders": [],
+            "folders_lower": [],
+            "include_urls": [],
+            "include_urls_lower": [],
+            "exclude_keywords": [],
+            "exclude_keywords_lower": [],
+            "exclude_urls": [],
+            "exclude_urls_lower": [],
+        })
+        seen.add("all")
+
+    default_mode_raw = raw_config.get("default_mode") if isinstance(raw_config, dict) else "all"
+    default_mode = str(default_mode_raw or "all").strip().lower()
+    if default_mode not in seen:
+        default_mode = "all"
+
+    return {
+        "default_mode": default_mode,
+        "modes": modes
+    }
+
+
+def _get_focus_mode_config() -> Dict[str, object]:
+    """
+    Return the normalised focus-mode configuration.
+    """
+    raw_config = _load_or_create_focus_config()
+    return _sanitize_focus_config(raw_config)
+
+
+def _build_focus_matcher(mode: Dict[str, object]):
+    """
+    Build a predicate that checks whether a bookmark matches the supplied focus mode.
+    """
+    keywords = mode.get("keywords_lower", []) or []
+    folder_terms = mode.get("folders_lower", []) or []
+    include_urls = mode.get("include_urls_lower", []) or []
+    exclude_keywords = mode.get("exclude_keywords_lower", []) or []
+    exclude_urls = mode.get("exclude_urls_lower", []) or []
+
+    def _match(name: str = "",
+               url: Optional[str] = None,
+               description: Optional[str] = None,
+               folder_labels: Optional[List[str]] = None) -> bool:
+        url_lower = (url or "").lower()
+        labels = folder_labels or []
+        path_blob = " / ".join(label.lower() for label in labels if label)
+        text_blob_parts = [name or ""]
+        if description:
+            text_blob_parts.append(description)
+        if path_blob:
+            text_blob_parts.append(path_blob)
+        text_blob = " ".join(part.lower() for part in text_blob_parts if part)
+
+        if exclude_urls and any(token in url_lower for token in exclude_urls):
+            return False
+        if exclude_keywords and any(token in text_blob for token in exclude_keywords):
+            return False
+
+        positive_checks = []
+        if keywords:
+            positive_checks.append(any(token in text_blob for token in keywords))
+        if folder_terms:
+            positive_checks.append(any(token in path_blob for token in folder_terms))
+        if include_urls:
+            positive_checks.append(any(token in url_lower for token in include_urls))
+
+        if not positive_checks:
+            # No positive filters defined -> accept everything unless excluded.
+            return True
+
+        return any(positive_checks)
+
+    return _match
+
+
+def _count_focus_matches(node: dict,
+                         matcher,
+                         parent_labels: List[str],
+                         cache: Dict[str, int]) -> int:
+    """
+    Count the number of bookmarks within a node (recursively) that match the focus mode.
+    """
+    node_id = node.get("id") or "|".join(parent_labels + [node.get("name") or ""])
+    if node_id in cache:
+        return cache[node_id]
+
+    node_name = node.get("name") or "(未命名資料夾)"
+    current_labels = parent_labels + [node_name]
+    total = 0
+
+    for child in node.get("children", []) or []:
+        child_type = child.get("type")
+        if child_type == "url":
+            url = child.get("url") or ""
+            title = child.get("name") or url
+            if matcher(title, url=url, folder_labels=current_labels):
+                total += 1
+        elif child_type == "folder":
+            total += _count_focus_matches(child, matcher, current_labels, cache)
+
+    cache[node_id] = total
+    return total
+
+
+_EAGLE_STATUS_CACHE = {"timestamp": 0.0, "value": False}
+
+
+def is_eagle_available(force: bool = False) -> bool:
+    now = time.time()
+    if not force and now - _EAGLE_STATUS_CACHE["timestamp"] < 60:
+        return _EAGLE_STATUS_CACHE["value"]
+    try:
+        response = EG.EAGLE_get_library_info()
+        available = response.get("status") == "success"
+    except Exception:
+        available = False
+    _EAGLE_STATUS_CACHE.update({"timestamp": now, "value": available})
+    return available
+
+
+def has_chrome_bookmarks() -> bool:
+    return os.path.isfile(CHROME_BOOKMARK_PATH)
+
+
+def has_db_main() -> bool:
+    return os.path.isdir(DB_route_external)
+
+
+_CACHE_INITIALISED = False
+
+
+def _ensure_cache_setup():
+    global _CACHE_INITIALISED
+    if _CACHE_INITIALISED:
+        return
+    os.makedirs(CACHE_DATA_DIR, exist_ok=True)
+    os.makedirs(THUMBNAIL_CACHE_DIR, exist_ok=True)
+    conn = sqlite3.connect(THUMBNAIL_CACHE_DB)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS media_items (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                original_url TEXT,
+                title TEXT,
+                media_type TEXT,
+                sub_type TEXT,
+                metadata TEXT,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS thumbnails (
+                media_id TEXT PRIMARY KEY REFERENCES media_items(id) ON DELETE CASCADE,
+                local_path TEXT NOT NULL,
+                fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                source TEXT
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_media_items_source ON media_items(source)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_media_items_type ON media_items(media_type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_media_items_url ON media_items(original_url)")
+    finally:
+        conn.commit()
+        conn.close()
+    _CACHE_INITIALISED = True
+
+
+def _get_cache_connection():
+    _ensure_cache_setup()
+    conn = sqlite3.connect(THUMBNAIL_CACHE_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _compute_media_id(source: str, identifier: str) -> str:
+    base = f"{source}|{identifier}".encode("utf-8", "ignore")
+    return hashlib.sha1(base).hexdigest()
+
+
+def _register_media_item(media_id: str, source: str, original_url: str, title: str,
+                         media_type: str, sub_type: Optional[str] = None, extra_metadata: Optional[dict] = None) -> None:
+    metadata_json = json.dumps(extra_metadata, ensure_ascii=False) if extra_metadata else None
+    with _get_cache_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO media_items (id, source, original_url, title, media_type, sub_type, metadata, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+                source=excluded.source,
+                original_url=excluded.original_url,
+                title=excluded.title,
+                media_type=excluded.media_type,
+                sub_type=excluded.sub_type,
+                metadata=excluded.metadata,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (media_id, source, original_url, title, media_type, sub_type, metadata_json)
+        )
+        conn.commit()
+
+
+def _get_media_sub_type(media_id: str) -> Optional[str]:
+    with _get_cache_connection() as conn:
+        cur = conn.execute("SELECT sub_type FROM media_items WHERE id=?", (media_id,))
+        row = cur.fetchone()
+    return row[0] if row and row[0] else None
+
+
+def _get_cached_thumbnail_route(media_id: str) -> Optional[str]:
+    with _get_cache_connection() as conn:
+        cur = conn.execute("SELECT local_path FROM thumbnails WHERE media_id=?", (media_id,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    local_path = row[0]
+    if not local_path or not os.path.isfile(local_path):
+        return None
+    return _build_file_route(local_path, "external")
+
+
+def _infer_extension(content_type: str | None, url: str | None) -> str:
+    if content_type:
+        content_type = content_type.lower()
+        if "jpeg" in content_type or "jpg" in content_type:
+            return "jpg"
+        if "png" in content_type:
+            return "png"
+        if "webp" in content_type:
+            return "webp"
+        if "gif" in content_type:
+            return "gif"
+    if url:
+        path = urlparse(url).path
+        ext = os.path.splitext(path)[1].lower().lstrip(".")
+        if ext in {"jpg", "jpeg", "png", "gif", "webp"}:
+            return "jpg" if ext == "jpeg" else ext
+    return "jpg"
+
+
+def _download_image(url: str) -> Tuple[Optional[bytes], Optional[str]]:
+    if not url:
+        return None, None
+    try:
+        resp = requests.get(
+            url,
+            timeout=8,
+            headers=_DEFAULT_HEADERS,
+            stream=True
+        )
+        if resp.status_code == 200 and resp.content:
+            return resp.content, resp.headers.get("Content-Type")
+    except requests.RequestException:
+        return None, None
+    return None, None
+
+
+def _store_thumbnail_bytes(media_id: str, image_bytes: bytes, content_type: Optional[str],
+                           source_tag: Optional[str], origin_url: Optional[str]) -> str:
+    extension = _infer_extension(content_type, origin_url)
+    filename = f"{media_id}.{extension}"
+    os.makedirs(THUMBNAIL_CACHE_DIR, exist_ok=True)
+    abs_path = os.path.abspath(os.path.join(THUMBNAIL_CACHE_DIR, filename))
+    with open(abs_path, "wb") as fh:
+        fh.write(image_bytes)
+    with _get_cache_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO thumbnails (media_id, local_path, fetched_at, source)
+            VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+            ON CONFLICT(media_id) DO UPDATE SET
+                local_path=excluded.local_path,
+                fetched_at=CURRENT_TIMESTAMP,
+                source=excluded.source
+            """,
+            (media_id, abs_path, source_tag)
+        )
+        conn.commit()
+    return _build_file_route(abs_path, "external")
+
+
+def _cache_thumbnail_for_bookmark(url: str, title: str, folder_info: Optional[dict] = None) -> Tuple[Optional[str], Optional[str]]:
+    identifier = url or title or "bookmark"
+    media_id = _compute_media_id("bookmark", identifier)
+    metadata = folder_info or {}
+    video_id = _extract_youtube_id(url)
+    sub_type = "youtube" if video_id else None
+
+    _register_media_item(
+        media_id,
+        source="bookmark",
+        original_url=url,
+        title=title,
+        media_type="bookmark",
+        sub_type=sub_type,
+        extra_metadata=metadata
+    )
+
+    cached_route = _get_cached_thumbnail_route(media_id)
+    if cached_route:
+        return cached_route, _get_media_sub_type(media_id)
+
+    thumbnail_url = _get_youtube_thumbnail(video_id) if video_id else None
+    if not thumbnail_url:
+        special_thumb = _get_special_site_thumbnail(url)
+        if special_thumb:
+            thumbnail_url = special_thumb
+            sub_type = sub_type or "special"
+
+    if not thumbnail_url:
+        return None, sub_type
+
+    image_bytes, content_type = _download_image(thumbnail_url)
+    if not image_bytes:
+        return None, sub_type
+
+    _register_media_item(
+        media_id,
+        source="bookmark",
+        original_url=url,
+        title=title,
+        media_type="bookmark",
+        sub_type=sub_type,
+        extra_metadata=metadata
+    )
+
+    route = _store_thumbnail_bytes(media_id, image_bytes, content_type, sub_type or "bookmark", thumbnail_url)
+    return route, sub_type
 
 
 def _normalize_source(src):
@@ -219,6 +717,10 @@ def get_all_folders_info(src):
     }
 
     data = _collect_directory_entries(base_dir, "", normalized_src)
+    metadata["folders"] = [{
+        "name": "Root",
+        "url": _build_folder_url("", normalized_src)
+    }]
     return metadata, data
 
 def get_folder_images(folder_path, src=None):
@@ -439,15 +941,23 @@ def get_eagle_images_by_folderid(eagle_folder_id):
     # folder_name = row.iloc[0]["name"]
     folder_links = []
     current_folder, parent_folder = _get_eagle_folder_context(eagle_folder_id)
-    if parent_folder:
-        parent_id = parent_folder.get("id")
-        parent_name = parent_folder.get("name", parent_id)
-        if parent_id:
-            folder_links.append({
-                "id": parent_id,
-                "name": parent_name,
-                "url": f"/EAGLE_folder/{parent_id}/"
-            })
+    if current_folder:
+        path_stack = []
+        node = current_folder
+        parent = parent_folder
+        while parent:
+            parent_id = parent.get("id")
+            if parent_id:
+                path_stack.append({
+                    "id": parent_id,
+                    "name": parent.get("name", parent_id),
+                    "url": f"/EAGLE_folder/{parent_id}/"
+                })
+                grand = _get_eagle_folder_context(parent_id)[1]
+                parent = grand
+            else:
+                break
+        folder_links = list(reversed(path_stack))
 
     folder_name = current_folder.get("name") if current_folder else eagle_folder_id
 
@@ -625,7 +1135,7 @@ def _find_chrome_node(bookmarks_root, path_parts):
     return current, parent, parent_path
 
 
-def get_chrome_bookmarks(folder_path=None):
+def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
     bookmarks = _load_chrome_bookmarks()
     roots = bookmarks.get("roots", {})
     safe_path = (folder_path or "bookmark_bar").strip("/")
@@ -641,67 +1151,181 @@ def get_chrome_bookmarks(folder_path=None):
     if current is None:
         abort(404)
 
-    data = []
-    current_name = current.get("name") or "(未命名資料夾)"
+    focus_config = _get_focus_mode_config()
+    focus_modes: List[Dict[str, object]] = focus_config.get("modes", [])  # type: ignore[assignment]
+    if not focus_modes:
+        focus_modes = _sanitize_focus_config(_DEFAULT_FOCUS_CONFIG)["modes"]  # Fallback safety net
+
+    mode_lookup = {mode["id"]: mode for mode in focus_modes}
+    requested_mode = (focus_mode_id or "").strip().lower()
+    default_mode_id = str(focus_config.get("default_mode") or "all").strip().lower()
+    active_mode = mode_lookup.get(requested_mode) or mode_lookup.get(default_mode_id) or focus_modes[0]
+    active_mode_id = active_mode["id"]
+    matcher = None if active_mode_id == "all" else _build_focus_matcher(active_mode)
+
+    query_suffix = f"?mode={quote_plus(active_mode_id)}" if active_mode_id else ""
+    base_path = f"/chrome/{quote(safe_path, safe='/')}"
+
+    breadcrumb = []
+    breadcrumb_labels: List[str] = []
+    path_cursor: List[str] = []
+
+    root_node = roots.get(parts[0])
+    if root_node is None:
+        abort(404)
+
+    current_node = root_node
+    for idx, part in enumerate(parts):
+        if idx == 0:
+            node_label = root_node.get("name") or ("Bookmarks" if part == "bookmark_bar" else part)
+        else:
+            if current_node.get("type") != "folder":
+                abort(404)
+            next_node = None
+            for child in current_node.get("children", []) or []:
+                if child.get("id") == part:
+                    next_node = child
+                    break
+            if next_node is None:
+                abort(404)
+            current_node = next_node
+            node_label = current_node.get("name") or "(未命名資料夾)"
+
+        path_cursor.append(part)
+        breadcrumb.append({
+            "name": node_label or "(未命名資料夾)",
+            "url": f"/chrome/{quote('/'.join(path_cursor), safe='/')}{query_suffix}"
+        })
+        breadcrumb_labels.append(node_label or "(未命名資料夾)")
+
+    current_name = current.get("name") or (breadcrumb_labels[-1] if breadcrumb_labels else "(未命名資料夾)")
+
     metadata = {
         "name": current_name,
         "category": "chrome",
         "tags": ["chrome", "bookmarks"],
-        "path": f"/chrome/{quote(safe_path, safe='/')}",
+        "path": base_path,
         "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": CHROME_BOOKMARK_PATH
+        "filesystem_path": CHROME_BOOKMARK_PATH,
+        "folders": breadcrumb
     }
 
-    if parent:
-        parent_name = parent.get("name") or "上一層"
-        parent_url = "/chrome/" if not parent_path else f"/chrome/{quote(parent_path, safe='/')}"
-        metadata["folders"] = [{
-            "name": parent_name,
-            "url": parent_url
-        }]
-    else:
-        # 根節點時提供快速切換到其他根資料夾
-        for key in ["bookmark_bar", "other", "synced"]:
-            node = roots.get(key)
-            if not node or key == parts[0]:
-                continue
-            node_name = node.get("name") or key.replace("_", " ").title()
-            data.append({
-                "name": f"📁 {node_name}",
-                "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-                "url": f"/chrome/{quote(key, safe='/')}",
-                "item_path": None,
-                "media_type": "folder",
-                "ext": None
-            })
+    if active_mode_id != "all":
+        metadata["tags"].append(f"focus:{active_mode_id}")
 
-    children = current.get("children", [])
+    children = current.get("children", []) or []
+    data = []
+    match_cache: Dict[str, int] = {}
+
+    parent_labels_for_current = breadcrumb_labels[:-1] if breadcrumb_labels else []
+    total_focus_matches = None
+    if matcher:
+        total_focus_matches = _count_focus_matches(current, matcher, parent_labels_for_current, match_cache)
+
+    direct_bookmark_total = 0
+    direct_bookmark_matches = 0
+
     for child in children:
         child_type = child.get("type")
         if child_type == "folder":
             child_name = child.get("name") or "(未命名資料夾)"
-            child_path = f"{safe_path}/{child.get('id')}"
+            child_id = child.get("id")
+            if not child_id:
+                continue
+            child_path = f"{safe_path}/{child_id}"
+            folder_labels = breadcrumb_labels + [child_name]
+            description = None
+
+            if matcher:
+                focus_count = _count_focus_matches(child, matcher, breadcrumb_labels, match_cache)
+                if focus_count <= 0:
+                    continue
+                description = f"{focus_count} 個專注書籤"
+
             data.append({
                 "name": child_name,
                 "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-                "url": f"/chrome/{quote(child_path, safe='/')}",
+                "url": f"/chrome/{quote(child_path, safe='/')}{query_suffix}",
                 "item_path": None,
                 "media_type": "folder",
-                "ext": None
+                "ext": None,
+                "description": description,
+                "folder_labels": folder_labels,
+                "path_display": " / ".join(folder_labels)
             })
         elif child_type == "url":
-            child_name = child.get("name") or child.get("url")
-            video_id = _extract_youtube_id(child.get("url"))
-            thumbnail = _get_youtube_thumbnail(video_id) or DEFAULT_THUMBNAIL_ROUTE
-            ext = "youtube" if video_id else None
+            url = child.get("url")
+            if not url:
+                continue
+
+            direct_bookmark_total += 1
+
+            child_name = child.get("name") or url
+            folder_labels = list(breadcrumb_labels)
+            path_display = " / ".join(folder_labels)
+
+            matches_focus = True
+            if matcher:
+                matches_focus = matcher(child_name, url=url, folder_labels=folder_labels, description=path_display)
+
+            if not matches_focus:
+                continue
+
+            direct_bookmark_matches += 1
+
+            folder_meta = {"folder_path": path_display}
+            thumbnail, sub_type = _cache_thumbnail_for_bookmark(url, child_name, folder_meta)
+            thumbnail = thumbnail or DEFAULT_THUMBNAIL_ROUTE
+
             data.append({
                 "name": child_name,
                 "thumbnail_route": thumbnail,
-                "url": child.get("url"),
-                "item_path": child.get("url"),
+                "url": url,
+                "item_path": url,
                 "media_type": "bookmark",
-                "ext": ext
+                "ext": sub_type,
+                "description": path_display or None,
+                "folder_labels": folder_labels,
+                "path_display": path_display
             })
+
+    focus_options = []
+    for mode in focus_modes:
+        mode_id = mode["id"]
+        focus_options.append({
+            "id": mode_id,
+            "label": mode.get("label"),
+            "description": mode.get("description"),
+            "is_active": mode_id == active_mode_id,
+            "url": f"{base_path}?mode={quote_plus(mode_id)}"
+        })
+
+    metadata["focus_modes"] = focus_options
+    metadata["focus_mode"] = {
+        "id": active_mode_id,
+        "label": active_mode.get("label"),
+        "description": active_mode.get("description")
+    }
+
+    focus_stats = {
+        "mode_id": active_mode_id,
+        "mode_label": active_mode.get("label"),
+        "total_bookmarks": direct_bookmark_total,
+        "matched_bookmarks": direct_bookmark_matches,
+        "matched_including_subfolders": total_focus_matches,
+        "has_results": any(item.get("media_type") == "bookmark" for item in data)
+    }
+    metadata["focus_stats"] = focus_stats
+
+    if matcher:
+        summary_bits = [
+            f"本層 {direct_bookmark_matches} / {direct_bookmark_total} 筆"
+        ]
+        if total_focus_matches is not None:
+            summary_bits.append(f"含子層 {total_focus_matches} 筆")
+        if not focus_stats["has_results"]:
+            summary_bits.append("目前沒有符合的書籤")
+        metadata["description"] = f"🎯 {active_mode.get('label')} 專注模式｜" + "，".join(summary_bits)
 
     return metadata, data
 
@@ -723,16 +1347,19 @@ def get_chrome_youtube_bookmarks():
             video_id = _extract_youtube_id(url)
             if not video_id:
                 return
-            thumbnail = _get_youtube_thumbnail(video_id) or DEFAULT_THUMBNAIL_ROUTE
             label = node.get("name") or url
+            folder_meta = {"folder_path": " / ".join(filter(None, path_labels))}
+            thumbnail, sub_type = _cache_thumbnail_for_bookmark(url, label, folder_meta)
+            thumbnail = thumbnail or DEFAULT_THUMBNAIL_ROUTE
+            sub_type = sub_type or "youtube"
             results.append({
                 "name": label,
                 "thumbnail_route": thumbnail,
                 "url": url,
                 "item_path": url,
                 "media_type": "bookmark",
-                "ext": "youtube",
-                "description": " / ".join(filter(None, path_labels))
+                "ext": sub_type,
+                "description": folder_meta.get("folder_path")
             })
 
     for key in ["bookmark_bar", "other", "synced", "mobile"]:
