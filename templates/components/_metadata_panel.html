@@ -12,6 +12,44 @@
   </p>
   {% endif %}
 
+  {% if metadata.focus_modes %}
+  <div class="focus-mode-controls" style="margin-top: 1em;">
+    {% if metadata.focus_modes|length > 1 %}
+    <form method="get" action="{{ request.path }}" style="display: flex; align-items: center; gap: 0.6em; flex-wrap: wrap;">
+      <label for="focusModeSelect" style="font-weight: 600;">🎯 專注模式：</label>
+      <select id="focusModeSelect" name="mode" onchange="this.form.submit()" style="padding: 0.4em 0.6em; border-radius: 0.4em; border: 1px solid #d1d5db;">
+        {% for mode in metadata.focus_modes %}
+        <option value="{{ mode.id }}" {% if mode.is_active %}selected{% endif %}>
+          {{ mode.label }}
+        </option>
+        {% endfor %}
+      </select>
+      {% for key, value in request.args.items() if key != 'mode' %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+      {% endfor %}
+    </form>
+    {% elif metadata.focus_mode %}
+    <p>
+      <strong>🎯 專注模式：</strong> {{ metadata.focus_mode.label }}
+    </p>
+    {% endif %}
+    {% if metadata.focus_mode and metadata.focus_mode.description %}
+    <p style="margin-top: 0.4em; color: #6b7280;">
+      {{ metadata.focus_mode.description }}
+    </p>
+    {% endif %}
+    {% if metadata.focus_stats %}
+    <p style="margin-top: 0.4em; color: #6b7280;">
+      {% if metadata.focus_stats.mode_id != 'all' %}
+        本層符合 {{ metadata.focus_stats.matched_bookmarks }} / {{ metadata.focus_stats.total_bookmarks }} 筆{% if metadata.focus_stats.matched_including_subfolders is not none %}，含子層共 {{ metadata.focus_stats.matched_including_subfolders }} 筆{% endif %}{% if not metadata.focus_stats.has_results %}，目前沒有符合的書籤{% endif %}。
+      {% else %}
+        本層共有 {{ metadata.focus_stats.total_bookmarks }} 筆書籤。
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if metadata.tags %}
   <p>
     <strong>🏷️ 標籤：</strong>

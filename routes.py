@@ -253,6 +253,9 @@ def register_routes(app):
         flags = _get_feature_flags()
         if not flags["chrome"]:
             abort(404)
+        focus_mode = request.args.get('mode')
+        if focus_mode:
+            return redirect(url_for('view_chrome_folder', folder_path='bookmark_bar', mode=focus_mode))
         return redirect(url_for('view_chrome_folder', folder_path='bookmark_bar'))
 
     @app.route('/chrome/<path:folder_path>/')
@@ -261,7 +264,8 @@ def register_routes(app):
         flags = _get_feature_flags()
         if not flags["chrome"]:
             abort(404)
-        metadata, data = get_chrome_bookmarks(folder_path)
+        focus_mode = request.args.get('mode')
+        metadata, data = get_chrome_bookmarks(folder_path, focus_mode)
         return render_template('view_both.html', metadata=metadata, data=data)
 
     @app.route('/chrome_youtube/')

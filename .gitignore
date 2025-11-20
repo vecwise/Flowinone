@@ -7,3 +7,4 @@ temp_for_display
 data/
 data/**
 *.db
+config.json

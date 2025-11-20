@@ -136,6 +136,16 @@
     gap: 10px;
   }
 
+  .empty-state {
+    padding: 48px 24px;
+    text-align: center;
+    border: 1px dashed var(--gallery-border);
+    border-radius: 12px;
+    background-color: var(--gallery-card-bg);
+    color: var(--gallery-subtext);
+    margin-bottom: 24px;
+  }
+
   .image-card {
     position: relative;
     overflow: hidden;
@@ -249,6 +259,16 @@
     </div>
 
     <!-- Grid View -->
+    {% if data|length == 0 %}
+    <div class="empty-state">
+      {% if metadata.focus_mode and metadata.focus_mode.label %}
+      🎯 {{ metadata.focus_mode.label }} 模式下沒有符合的書籤。
+      {% else %}
+      目前沒有可顯示的項目。
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div id="gridView" class="gallery-grid is-visible">
         {% for image in data %}
         {% set media_type = image.media_type | default('image') %}
