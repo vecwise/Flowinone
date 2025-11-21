@@ -111,7 +111,11 @@ def _prompt_for_directory(title: str, initial: Optional[str] = None) -> str:
 
 
 def _ensure_db_routes() -> None:
-    """Make sure DB routes exist, prompting the user when necessary."""
+    """Make sure DB routes exist, prompting the user once if needed.
+
+    External/internal default to the same place; users can still edit config.json manually
+    if they want different locations.
+    """
     global DB_route_external, DB_route_internal  # noqa: PLW0603
 
     external = DB_route_external.strip()
@@ -122,19 +126,19 @@ def _ensure_db_routes() -> None:
 
     if os.environ.get("FLOWINONE_HEADLESS", "").lower() in {"1", "true"}:
         raise RuntimeError(
-            "DB_route_external/internal 尚未設定，且目前為 headless 模式。"
+            "DB 路徑尚未完整設定，且目前為 headless 模式。"
             "請直接修改 config.json 或設定環境變數後再啟動。"
         )
 
-    if not _is_valid_directory(external):
-        external = _prompt_for_directory("External Media Library")
-    if not _is_valid_directory(internal):
-        internal = _prompt_for_directory("Internal Media Library")
+    # Prefer whichever side is already valid; otherwise prompt once and share the path.
+    selected = external if _is_valid_directory(external) else internal
+    if not _is_valid_directory(selected):
+        selected = _prompt_for_directory("Media Library")
 
-    DB_route_external = external
-    DB_route_internal = internal
+    DB_route_external = selected
+    DB_route_internal = selected
 
-    _update_config_json(external, internal)
+    _update_config_json(DB_route_external, DB_route_internal)
 
 
 _ensure_db_routes()
