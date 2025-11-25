@@ -3,7 +3,7 @@ import platform
 import random
 import subprocess
 from urllib.parse import unquote
-from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify, g
+from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify, g, send_file
 from file_handler import (
     get_all_folders_info,
     get_folder_images,
@@ -26,6 +26,10 @@ from file_handler import (
 )
 from config import DB_route_internal, DB_route_external
 
+SYSTEM_NAME = platform.system()
+IS_MACOS = SYSTEM_NAME == "Darwin"
+IS_WINDOWS = SYSTEM_NAME == "Windows"
+
 
 def _path_is_within_roots(target_path, roots):
     """Ensure the requested path stays inside one of the configured roots."""
@@ -44,10 +48,9 @@ def _path_is_within_roots(target_path, roots):
 
 def _open_in_file_manager(target_path):
     """Open a folder in the host file manager."""
-    system = platform.system()
-    if system == "Darwin":
+    if IS_MACOS:
         subprocess.Popen(["open", target_path])
-    elif system == "Windows":
+    elif IS_WINDOWS:
         os.startfile(target_path)  # type: ignore[attr-defined]
     else:
         subprocess.Popen(["xdg-open", target_path])
@@ -310,9 +313,15 @@ def register_routes(app):
     @app.route('/serve_image/<path:image_path>')
     def serve_image_by_full_path(image_path):
         """提供靜態圖片服務"""
-        directory, filename = os.path.split(image_path)
-        directory = '/' + directory
-        return send_from_directory(directory, filename)
+        if IS_MACOS:
+            directory, filename = os.path.split(image_path)
+            directory = '/' + directory
+            return send_from_directory(directory, filename)
+
+        abs_path = os.path.abspath(unquote(image_path))
+        if not os.path.isfile(abs_path):
+            abort(404)
+        return send_file(abs_path)
 
     @app.route('/video/<path:video_path>')
     def view_video(video_path):
