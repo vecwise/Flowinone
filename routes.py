@@ -4,7 +4,7 @@ import random
 import subprocess
 from urllib.parse import unquote
 from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify, g, send_file
-from file_handler import (
+from src.file_handler import (
     get_all_folders_info,
     get_folder_images,
     get_image_details,

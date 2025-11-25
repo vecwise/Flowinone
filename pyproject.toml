@@ -24,11 +24,11 @@ Homepage = "https://github.com/your-name/flowinone"
 Documentation = "https://github.com/your-name/flowinone#readme"
 
 [tool.setuptools]
-py-modules = ["config", "file_handler", "routes", "run"]
+py-modules = ["config", "routes", "run"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["eagle_api"]
+include = ["eagle_api", "file_handler"]
 
 [tool.setuptools.package-data]
 "*" = ["templates/*.html", "static/**/*", "data/**/*"]
