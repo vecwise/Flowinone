@@ -7,9 +7,8 @@ import time
 from collections import OrderedDict
 from datetime import datetime
 
-from flask import abort
-
 import src.eagle_api as EG
+from .models import ExternalServiceError, MediaDetail, MediaEntry, MediaNotFound, PageMetadata
 from .paths import (
     DEFAULT_THUMBNAIL_ROUTE,
     DEFAULT_VIDEO_THUMBNAIL_ROUTE,
@@ -44,18 +43,18 @@ def get_eagle_folders():
     """
     response = EG.EAGLE_get_library_info()
     if response.get("status") != "success":
-        abort(500, description=f"Failed to fetch Eagle folders: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to fetch Eagle folders: {response.get('data')}")
 
-    metadata = {
-        "name": "All Eagle Folders",
-        "category": "collections",
-        "tags": ["eagle", "folders"],
-        "path": "/EAGLE_folder",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": EG.EAGLE_get_current_library_path()
-    }
+    metadata = PageMetadata(
+        name="All Eagle Folders",
+        category="collections",
+        tags=["eagle", "folders"],
+        path="/EAGLE_folder",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=EG.EAGLE_get_current_library_path()
+    )
 
-    data = []
+    data: list[MediaEntry] = []
     for folder in response.get("data", {}).get("folders", []):
         folder_id = folder.get("id")
         folder_name = folder.get("name", "Unnamed Folder")
@@ -65,15 +64,14 @@ def get_eagle_folders():
         image_items.sort(key=lambda x: x.get("name", ""))
         thumbnail_path = f"/serve_image/{EG.EAGLE_get_current_library_path()}/images/{image_items[0]['id']}.info/{image_items[0]['name']}.{image_items[0]['ext']}" if image_items else DEFAULT_THUMBNAIL_ROUTE
 
-        data.append({
-            "name": folder_name,
-            "id": folder_id,
-            "url": f"/EAGLE_folder/{folder_id}/",
-            "thumbnail_route": thumbnail_path,
-            "item_path": None,
-            "media_type": "folder",
-            "ext": None
-        })
+        data.append(MediaEntry(
+            name=folder_name,
+            id=folder_id,
+            url=f"/EAGLE_folder/{folder_id}/",
+            thumbnail_route=thumbnail_path,
+            item_path=None,
+            media_type="folder"
+        ))
 
     return metadata, data
 
@@ -84,7 +82,7 @@ def get_eagle_images_by_folderid(eagle_folder_id):
     """
     response = EG.EAGLE_list_items(folders=[eagle_folder_id])
     if response.get("status") != "success":
-        abort(500, description=f"Failed to fetch images from Eagle folder: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to fetch images from Eagle folder: {response.get('data')}")
 
     folder_links = []
     current_folder, parent_folder = _get_eagle_folder_context(eagle_folder_id)
@@ -108,15 +106,15 @@ def get_eagle_images_by_folderid(eagle_folder_id):
 
     folder_name = current_folder.get("name") if current_folder else eagle_folder_id
 
-    metadata = {
-        "name": folder_name,
-        "category": "folder",
-        "tags": [],
-        "path": f"/EAGLE_folder/{eagle_folder_id}",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": None,
-        "folders": folder_links
-    }
+    metadata = PageMetadata(
+        name=folder_name,
+        category="folder",
+        tags=[],
+        path=f"/EAGLE_folder/{eagle_folder_id}",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=None,
+        folders=folder_links
+    )
     image_items = response.get("data", [])
     data = _format_eagle_items(image_items)
     return metadata, data
@@ -128,16 +126,16 @@ def get_eagle_images_by_tag(target_tag):
     """
     response = EG.EAGLE_list_items(tags=[target_tag], orderBy="CREATEDATE")
     if response.get('status') == 'error':
-        abort(500, description=f"Error fetching images with tag '{target_tag}': {response.get('data')}")
+        raise ExternalServiceError(f"Error fetching images with tag '{target_tag}': {response.get('data')}")
 
-    metadata = {
-        "name": f"Images with Tag: {target_tag}",
-        "category": "tag",
-        "tags": [target_tag],
-        "path": f"/EAGLE_tag/{target_tag}",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": None
-    }
+    metadata = PageMetadata(
+        name=f"Images with Tag: {target_tag}",
+        category="tag",
+        tags=[target_tag],
+        path=f"/EAGLE_tag/{target_tag}",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=None
+    )
 
     image_items = response.get("data", [])
     data = _format_eagle_items(image_items)
@@ -150,7 +148,7 @@ def get_eagle_tags():
     """
     response = EG.EAGLE_get_tags()
     if response.get("status") != "success":
-        abort(500, description=f"Failed to fetch Eagle tags: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to fetch Eagle tags: {response.get('data')}")
 
     raw_data = response.get("data", [])
     if isinstance(raw_data, dict):
@@ -187,14 +185,14 @@ def get_eagle_tags():
 
     tags.sort(key=lambda item: item["name"].lower())
 
-    metadata = {
-        "name": "EAGLE Tags",
-        "category": "tag-list",
-        "tags": [],
-        "path": "/EAGLE_tags",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": None
-    }
+    metadata = PageMetadata(
+        name="EAGLE Tags",
+        category="tag-list",
+        tags=[],
+        path="/EAGLE_tags",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=None
+    )
 
     return metadata, tags
 
@@ -203,19 +201,19 @@ def search_eagle_items(keyword, limit=120):
     """透過 Eagle API 搜尋關鍵字並回傳格式化後的列表。"""
     response = EG.EAGLE_list_items(keyword=keyword, limit=limit, orderBy="CREATEDATE")
     if response.get("status") != "success":
-        abort(500, description=f"Failed to search Eagle items: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to search Eagle items: {response.get('data')}")
 
     raw_items = response.get("data", [])
     data = _format_eagle_items(raw_items)
 
-    metadata = {
-        "name": f"Search Results: {keyword}",
-        "category": "search",
-        "tags": [keyword],
-        "path": f"/search?query={keyword}",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": EG.EAGLE_get_current_library_path()
-    }
+    metadata = PageMetadata(
+        name=f"Search Results: {keyword}",
+        category="search",
+        tags=[keyword],
+        path=f"/search?query={keyword}",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=EG.EAGLE_get_current_library_path()
+    )
 
     return metadata, data
 
@@ -227,10 +225,10 @@ def get_eagle_stream_items(offset=0, limit=30):
     try:
         response = EG.EAGLE_list_items(limit=limit, offset=offset, orderBy="CREATEDATE")
     except Exception as exc:
-        abort(500, description=f"Failed to fetch Eagle stream items: {exc}")
+        raise ExternalServiceError(f"Failed to fetch Eagle stream items: {exc}") from exc
 
     if response.get("status") != "success":
-        abort(500, description=f"Failed to fetch Eagle stream items: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to fetch Eagle stream items: {response.get('data')}")
 
     raw_items = response.get("data", []) or []
     return _format_eagle_items(raw_items)
@@ -403,7 +401,7 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
 
     sampled_raw = random.sample(candidate_list, sample_size)
     formatted_candidates = _format_eagle_items(sampled_raw)
-    formatted_map = {item["id"]: item for item in formatted_candidates if item.get("id")}
+    formatted_map = {item.id: item for item in formatted_candidates if getattr(item, "id", None)}
 
     similar_items = []
     for raw in sampled_raw:
@@ -411,16 +409,17 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
         formatted = formatted_map.get(item_id)
         if not formatted:
             continue
-        media_type = formatted.get("media_type")
+        media_type = formatted.media_type
         detail_path = f"/EAGLE_video/{item_id}/" if media_type == "video" else f"/EAGLE_image/{item_id}/"
-        similar_items.append({
-            "id": item_id,
-            "name": formatted.get("name") or "Untitled",
-            "path": detail_path,
-            "thumbnail_route": formatted.get("thumbnail_route") or DEFAULT_THUMBNAIL_ROUTE,
-            "media_type": media_type,
-            "ext": formatted.get("ext")
-        })
+        similar_items.append(MediaEntry(
+            id=item_id,
+            name=formatted.name or "Untitled",
+            url=detail_path,
+            thumbnail_route=formatted.thumbnail_route or DEFAULT_THUMBNAIL_ROUTE,
+            item_path=formatted.item_path,
+            media_type=media_type,
+            ext=formatted.ext
+        ))
 
     return similar_items
 
@@ -431,11 +430,11 @@ def get_eagle_video_details(item_id):
     """
     response = EG.EAGLE_get_item_info(item_id)
     if response.get("status") != "success":
-        abort(500, description=f"Failed to fetch Eagle item info: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to fetch Eagle item info: {response.get('data')}")
 
     item = response.get("data")
     if not item or isinstance(item, list):
-        abort(404, description="Video item not found.")
+        raise MediaNotFound("Video item not found.")
 
     raw_ext = item.get("ext") or ""
     ext = raw_ext.lower().lstrip(".")
@@ -447,7 +446,7 @@ def get_eagle_video_details(item_id):
         ext = inferred_ext.lower().lstrip(".")
 
     if ext not in VIDEO_EXTENSIONS:
-        abort(404, description="Requested Eagle item is not a video.")
+        raise MediaNotFound("Requested Eagle item is not a video.")
 
     base_library_path = EG.EAGLE_get_current_library_path()
     item_dir = os.path.join(base_library_path, "images", f"{item_id}.info")
@@ -475,7 +474,7 @@ def get_eagle_video_details(item_id):
                 break
 
     if video_path is None:
-        abort(404, description="Video file not found on disk.")
+        raise MediaNotFound("Video file not found on disk.")
 
     normalized_abs_path = _normalize_slashes(os.path.abspath(video_path))
     relative_path = _normalize_slashes(os.path.relpath(video_path, base_library_path))
@@ -505,34 +504,34 @@ def get_eagle_video_details(item_id):
     similar_items = _build_eagle_similar_items(item_id, tags, folder_ids)
     resolved_ext = ext or os.path.splitext(video_path)[1].lstrip(".").lower() or None
 
-    metadata = {
-        "name": item.get("name") or os.path.basename(video_path),
-        "category": "eagle-video",
-        "tags": tags,
-        "path": f"/EAGLE_video/{item_id}/",
-        "thumbnail_route": thumbnail_route,
-        "filesystem_path": normalized_abs_path,
-        "description": item.get("annotation") or item.get("note"),
-        "folders": folder_links,
-        "similar": similar_items,
-        "ext": resolved_ext
-    }
+    metadata = PageMetadata(
+        name=item.get("name") or os.path.basename(video_path),
+        category="eagle-video",
+        tags=tags,
+        path=f"/EAGLE_video/{item_id}/",
+        thumbnail_route=thumbnail_route,
+        filesystem_path=normalized_abs_path,
+        description=item.get("annotation") or item.get("note"),
+        folders=folder_links,
+        similar=[entry.to_dict() for entry in similar_items],
+        ext=resolved_ext
+    )
 
-    video_data = {
-        "name": metadata["name"],
-        "relative_path": relative_path,
-        "source_url": stream_route,
-        "original_url": original_url,
-        "thumbnail_route": thumbnail_route,
-        "mime_type": mimetypes.guess_type(video_path)[0] or "video/mp4",
-        "size_bytes": file_size,
-        "size_display": _human_readable_size(file_size),
-        "modified_time": modified_time.strftime("%Y-%m-%d %H:%M"),
-        "parent_url": None,
-        "download_url": stream_route,
-        "folders": folder_links,
-        "ext": resolved_ext
-    }
+    video_data = MediaDetail(
+        name=metadata.name,
+        relative_path=relative_path,
+        source_url=stream_route,
+        original_url=original_url,
+        thumbnail_route=thumbnail_route,
+        mime_type=mimetypes.guess_type(video_path)[0] or "video/mp4",
+        size_bytes=file_size,
+        size_display=_human_readable_size(file_size),
+        modified_time=modified_time.strftime("%Y-%m-%d %H:%M"),
+        parent_url=None,
+        download_url=stream_route,
+        folders=folder_links,
+        ext=resolved_ext
+    )
 
     return metadata, video_data
 
@@ -543,11 +542,11 @@ def get_eagle_image_details(item_id):
     """
     response = EG.EAGLE_get_item_info(item_id)
     if response.get("status") != "success":
-        abort(500, description=f"Failed to fetch Eagle item info: {response.get('data')}")
+        raise ExternalServiceError(f"Failed to fetch Eagle item info: {response.get('data')}")
 
     item = response.get("data")
     if not item or isinstance(item, list):
-        abort(404, description="Image item not found.")
+        raise MediaNotFound("Image item not found.")
 
     raw_ext = item.get("ext") or ""
     ext = raw_ext.lower().lstrip(".")
@@ -585,7 +584,7 @@ def get_eagle_image_details(item_id):
                 break
 
     if image_path is None:
-        abort(404, description="Image file not found on disk.")
+        raise MediaNotFound("Image file not found on disk.")
 
     normalized_abs_path = _normalize_slashes(os.path.abspath(image_path))
     relative_path = _normalize_slashes(os.path.relpath(image_path, base_library_path))
@@ -603,34 +602,34 @@ def get_eagle_image_details(item_id):
     folder_links = _build_eagle_folder_links(folder_ids)
     similar_items = _build_eagle_similar_items(item_id, tags, folder_ids)
 
-    metadata = {
-        "name": item.get("name") or os.path.basename(image_path),
-        "category": "eagle-image",
-        "tags": tags,
-        "path": f"/EAGLE_image/{item_id}/",
-        "thumbnail_route": stream_route,
-        "filesystem_path": normalized_abs_path,
-        "description": item.get("annotation") or item.get("note"),
-        "folders": folder_links,
-        "similar": similar_items,
-        "ext": resolved_ext or None
-    }
+    metadata = PageMetadata(
+        name=item.get("name") or os.path.basename(image_path),
+        category="eagle-image",
+        tags=tags,
+        path=f"/EAGLE_image/{item_id}/",
+        thumbnail_route=stream_route,
+        filesystem_path=normalized_abs_path,
+        description=item.get("annotation") or item.get("note"),
+        folders=folder_links,
+        similar=[entry.to_dict() for entry in similar_items],
+        ext=resolved_ext or None
+    )
 
-    image_data = {
-        "name": metadata["name"],
-        "relative_path": relative_path,
-        "source_url": stream_route,
-        "original_url": original_url,
-        "thumbnail_route": stream_route,
-        "mime_type": mimetypes.guess_type(image_path)[0] or f"image/{resolved_ext or 'jpeg'}",
-        "size_bytes": file_size,
-        "size_display": _human_readable_size(file_size),
-        "modified_time": modified_time.strftime("%Y-%m-%d %H:%M"),
-        "parent_url": None,
-        "download_url": stream_route,
-        "folders": folder_links,
-        "ext": resolved_ext or None
-    }
+    image_data = MediaDetail(
+        name=metadata.name,
+        relative_path=relative_path,
+        source_url=stream_route,
+        original_url=original_url,
+        thumbnail_route=stream_route,
+        mime_type=mimetypes.guess_type(image_path)[0] or f"image/{resolved_ext or 'jpeg'}",
+        size_bytes=file_size,
+        size_display=_human_readable_size(file_size),
+        modified_time=modified_time.strftime("%Y-%m-%d %H:%M"),
+        parent_url=None,
+        download_url=stream_route,
+        folders=folder_links,
+        ext=resolved_ext or None
+    )
 
     return metadata, image_data
 
@@ -640,7 +639,7 @@ def _format_eagle_items(image_items):
     將 Eagle 圖片清單格式化成 EAGLE API 樣式的 data list。
     """
     image_items.sort(key=lambda x: x.get("name", ""))
-    data = []
+    data: list[MediaEntry] = []
 
     base = EG.EAGLE_get_current_library_path()
     for image in image_items:
@@ -656,15 +655,15 @@ def _format_eagle_items(image_items):
         else:
             thumbnail_route = image_path
 
-        data.append({
-            "id": image_id,
-            "name": image_name,
-            "url": image_path,
-            "thumbnail_route": thumbnail_route,
-            "item_path": os.path.abspath(os.path.join(base, "images", f"{image_id}.info", f"{image_name}.{image_ext}")),
-            "media_type": "video" if is_video else "image",
-            "ext": normalized_ext or None
-        })
+        data.append(MediaEntry(
+            id=image_id,
+            name=image_name,
+            url=image_path,
+            thumbnail_route=thumbnail_route,
+            item_path=os.path.abspath(os.path.join(base, "images", f"{image_id}.info", f"{image_name}.{image_ext}")),
+            media_type="video" if is_video else "image",
+            ext=normalized_ext or None
+        ))
 
     return data
 
@@ -698,13 +697,12 @@ def get_subfolders_info(folder_id):
             base = EG.EAGLE_get_current_library_path()
             thumbnail_route = f"/serve_image/{base}/images/{image_id}.info/{image_name}.{image_ext}"
 
-        result.append({
-            "name": f"📁 {sub_name}",
-            "url": path,
-            "thumbnail_route": thumbnail_route,
-            "item_path": None,
-            "media_type": "folder",
-            "ext": None
-        })
+        result.append(MediaEntry(
+            name=f"📁 {sub_name}",
+            url=path,
+            thumbnail_route=thumbnail_route,
+            item_path=None,
+            media_type="folder"
+        ))
 
     return result

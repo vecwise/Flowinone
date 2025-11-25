@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, quote_plus
 
-from flask import abort
-
 from config import CHROME_BOOKMARK_PATH
 from .media_cache import CACHE_DATA_DIR, cache_thumbnail_for_bookmark, extract_youtube_id
+from .models import BookmarkError, BookmarkNotFound, MediaEntry, PageMetadata
 from .paths import DEFAULT_THUMBNAIL_ROUTE
 
 
@@ -225,12 +224,12 @@ def _count_focus_matches(node: dict,
 
 def _load_chrome_bookmarks():
     if not os.path.exists(CHROME_BOOKMARK_PATH):
-        return {}
+        raise BookmarkNotFound(f"Chrome bookmark file missing: {CHROME_BOOKMARK_PATH}")
     try:
         with open(CHROME_BOOKMARK_PATH, "r", encoding="utf-8") as fh:
             return json.load(fh)
-    except (json.JSONDecodeError, OSError):
-        abort(500, description="Failed to read Chrome bookmarks data")
+    except (json.JSONDecodeError, OSError) as exc:
+        raise BookmarkError(f"Failed to read Chrome bookmarks data: {exc}") from exc
 
 
 def _find_chrome_node(bookmarks_root, path_parts):
@@ -241,7 +240,7 @@ def _find_chrome_node(bookmarks_root, path_parts):
     first = path_parts[0]
     current = roots.get(first)
     if current is None:
-        abort(404)
+        raise BookmarkNotFound(f"Root node not found: {first}")
 
     parent = None
     parent_path = ""
@@ -249,14 +248,14 @@ def _find_chrome_node(bookmarks_root, path_parts):
 
     for part in path_parts[1:]:
         if current.get("type") != "folder":
-            abort(404)
+            raise BookmarkNotFound("Parent is not a folder")
         next_node = None
         for child in current.get("children", []):
             if child.get("id") == part:
                 next_node = child
                 break
         if next_node is None:
-            abort(404)
+            raise BookmarkNotFound(f"Folder not found: {part}")
         parent = current
         parent_path = current_path
         current = next_node
@@ -271,15 +270,15 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
     safe_path = (folder_path or "bookmark_bar").strip("/")
 
     if not roots:
-        abort(404)
+        raise BookmarkNotFound("No Chrome bookmark roots found")
 
     parts = [part for part in safe_path.split("/") if part]
     if not parts:
-        abort(404)
+        raise BookmarkNotFound("Invalid bookmark path")
 
     current, parent, parent_path = _find_chrome_node(bookmarks, parts)
     if current is None:
-        abort(404)
+        raise BookmarkNotFound("Bookmark node not found")
 
     focus_config = _get_focus_mode_config()
     focus_modes: List[Dict[str, object]] = focus_config.get("modes", [])  # type: ignore[assignment]
@@ -302,7 +301,7 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
 
     root_node = roots.get(parts[0])
     if root_node is None:
-        abort(404)
+        raise BookmarkNotFound(f"Bookmark root missing: {parts[0]}")
 
     current_node = root_node
     for idx, part in enumerate(parts):
@@ -310,14 +309,14 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
             node_label = root_node.get("name") or ("Bookmarks" if part == "bookmark_bar" else part)
         else:
             if current_node.get("type") != "folder":
-                abort(404)
+                raise BookmarkNotFound("Unexpected non-folder node")
             next_node = None
             for child in current_node.get("children", []) or []:
                 if child.get("id") == part:
                     next_node = child
                     break
             if next_node is None:
-                abort(404)
+                raise BookmarkNotFound(f"Bookmark folder not found: {part}")
             current_node = next_node
             node_label = current_node.get("name") or "(未命名資料夾)"
 
@@ -330,21 +329,21 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
 
     current_name = current.get("name") or (breadcrumb_labels[-1] if breadcrumb_labels else "(未命名資料夾)")
 
-    metadata = {
-        "name": current_name,
-        "category": "chrome",
-        "tags": ["chrome", "bookmarks"],
-        "path": base_path,
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": CHROME_BOOKMARK_PATH,
-        "folders": breadcrumb
-    }
+    metadata = PageMetadata(
+        name=current_name,
+        category="chrome",
+        tags=["chrome", "bookmarks"],
+        path=base_path,
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=CHROME_BOOKMARK_PATH,
+        folders=breadcrumb
+    )
 
     if active_mode_id != "all":
-        metadata["tags"].append(f"focus:{active_mode_id}")
+        metadata.tags.append(f"focus:{active_mode_id}")
 
     children = current.get("children", []) or []
-    data = []
+    data: List[MediaEntry] = []
     match_cache: Dict[str, int] = {}
 
     parent_labels_for_current = breadcrumb_labels[:-1] if breadcrumb_labels else []
@@ -372,17 +371,16 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
                     continue
                 description = f"{focus_count} 個專注書籤"
 
-            data.append({
-                "name": child_name,
-                "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-                "url": f"/chrome/{quote(child_path, safe='/')}{query_suffix}",
-                "item_path": None,
-                "media_type": "folder",
-                "ext": None,
-                "description": description,
-                "folder_labels": folder_labels,
-                "path_display": " / ".join(folder_labels)
-            })
+            data.append(MediaEntry(
+                name=child_name,
+                thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+                url=f"/chrome/{quote(child_path, safe='/')}{query_suffix}",
+                item_path=None,
+                media_type="folder",
+                description=description,
+                folder_labels=folder_labels,
+                path_display=" / ".join(folder_labels)
+            ))
         elif child_type == "url":
             url = child.get("url")
             if not url:
@@ -407,17 +405,17 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
             thumbnail, sub_type = cache_thumbnail_for_bookmark(url, child_name, folder_meta)
             thumbnail = thumbnail or DEFAULT_THUMBNAIL_ROUTE
 
-            data.append({
-                "name": child_name,
-                "thumbnail_route": thumbnail,
-                "url": url,
-                "item_path": url,
-                "media_type": "bookmark",
-                "ext": sub_type,
-                "description": path_display or None,
-                "folder_labels": folder_labels,
-                "path_display": path_display
-            })
+            data.append(MediaEntry(
+                name=child_name,
+                thumbnail_route=thumbnail,
+                url=url,
+                item_path=url,
+                media_type="bookmark",
+                ext=sub_type,
+                description=path_display or None,
+                folder_labels=folder_labels,
+                path_display=path_display
+            ))
 
     focus_options = []
     for mode in focus_modes:
@@ -430,8 +428,8 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
             "url": f"{base_path}?mode={quote_plus(mode_id)}"
         })
 
-    metadata["focus_modes"] = focus_options
-    metadata["focus_mode"] = {
+    metadata.focus_modes = focus_options
+    metadata.focus_mode = {
         "id": active_mode_id,
         "label": active_mode.get("label"),
         "description": active_mode.get("description")
@@ -443,9 +441,12 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
         "total_bookmarks": direct_bookmark_total,
         "matched_bookmarks": direct_bookmark_matches,
         "matched_including_subfolders": total_focus_matches,
-        "has_results": any(item.get("media_type") == "bookmark" for item in data)
+        "has_results": any(
+            (item.media_type if hasattr(item, "media_type") else item.get("media_type")) == "bookmark"
+            for item in data
+        )
     }
-    metadata["focus_stats"] = focus_stats
+    metadata.focus_stats = focus_stats
 
     if matcher:
         summary_bits = [
@@ -455,7 +456,7 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
             summary_bits.append(f"含子層 {total_focus_matches} 筆")
         if not focus_stats["has_results"]:
             summary_bits.append("目前沒有符合的書籤")
-        metadata["description"] = f"🎯 {active_mode.get('label')} 專注模式｜" + "，".join(summary_bits)
+        metadata.description = f"🎯 {active_mode.get('label')} 專注模式｜" + "，".join(summary_bits)
 
     return metadata, data
 
@@ -463,7 +464,7 @@ def get_chrome_bookmarks(folder_path=None, focus_mode_id: Optional[str] = None):
 def get_chrome_youtube_bookmarks():
     bookmarks = _load_chrome_bookmarks()
     roots = bookmarks.get("roots", {})
-    results = []
+    results: List[MediaEntry] = []
 
     def _walk(node, path_labels):
         node_type = node.get("type")
@@ -482,15 +483,15 @@ def get_chrome_youtube_bookmarks():
             thumbnail, sub_type = cache_thumbnail_for_bookmark(url, label, folder_meta)
             thumbnail = thumbnail or DEFAULT_THUMBNAIL_ROUTE
             sub_type = sub_type or "youtube"
-            results.append({
-                "name": label,
-                "thumbnail_route": thumbnail,
-                "url": url,
-                "item_path": url,
-                "media_type": "bookmark",
-                "ext": sub_type,
-                "description": folder_meta.get("folder_path")
-            })
+            results.append(MediaEntry(
+                name=label,
+                thumbnail_route=thumbnail,
+                url=url,
+                item_path=url,
+                media_type="bookmark",
+                ext=sub_type,
+                description=folder_meta.get("folder_path")
+            ))
 
     for key in ["bookmark_bar", "other", "synced", "mobile"]:
         node = roots.get(key)
@@ -499,14 +500,14 @@ def get_chrome_youtube_bookmarks():
         root_label = node.get("name") or key.replace("_", " ").title()
         _walk(node, [root_label])
 
-    metadata = {
-        "name": "YouTube 書籤",
-        "category": "chrome-youtube",
-        "tags": ["chrome", "youtube", "bookmarks"],
-        "path": "/chrome_youtube/",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": CHROME_BOOKMARK_PATH
-    }
+    metadata = PageMetadata(
+        name="YouTube 書籤",
+        category="chrome-youtube",
+        tags=["chrome", "youtube", "bookmarks"],
+        path="/chrome_youtube/",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=CHROME_BOOKMARK_PATH
+    )
 
     return metadata, results
 

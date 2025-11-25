@@ -1,18 +1,30 @@
 """Public API surface for Flowinone file handling."""
 
-from .local_fs import (
+from .fs_media import (
     get_all_folders_info,
     get_folder_images,
     get_video_details,
     get_image_details,
     has_db_main,
 )
-from .chrome import (
+from .models import (
+    AccessDenied,
+    BookmarkError,
+    BookmarkNotFound,
+    ExternalServiceError,
+    FolderNotFound,
+    MediaDetail,
+    MediaEntry,
+    MediaError,
+    MediaNotFound,
+    PageMetadata,
+)
+from .chrome_bookmarks import (
     get_chrome_bookmarks,
     get_chrome_youtube_bookmarks,
     has_chrome_bookmarks,
 )
-from .eagle import (
+from .eagle_integration import (
     is_eagle_available,
     get_eagle_folders,
     get_eagle_images_by_folderid,
@@ -31,6 +43,16 @@ __all__ = [
     "get_video_details",
     "get_image_details",
     "has_db_main",
+    "AccessDenied",
+    "BookmarkError",
+    "BookmarkNotFound",
+    "ExternalServiceError",
+    "FolderNotFound",
+    "MediaDetail",
+    "MediaEntry",
+    "MediaError",
+    "MediaNotFound",
+    "PageMetadata",
     "get_chrome_bookmarks",
     "get_chrome_youtube_bookmarks",
     "has_chrome_bookmarks",

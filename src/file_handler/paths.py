@@ -3,7 +3,7 @@
 import os
 from urllib.parse import quote
 
-from flask import abort
+from .models import AccessDenied, FolderNotFound
 
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -95,12 +95,12 @@ def _collect_directory_entries(base_dir, relative_path, src,
     normalized_src = _normalize_source(src)
     target_dir = os.path.join(base_dir, relative_path) if relative_path else base_dir
     if not os.path.isdir(target_dir):
-        abort(404)
+        raise FolderNotFound(f"Directory not found: {target_dir}")
 
     try:
         entries = sorted(os.listdir(target_dir))
     except FileNotFoundError:
-        abort(404)
+        raise FolderNotFound(f"Directory not found: {target_dir}")
 
     folders, files = [], []
     for entry in entries:
@@ -138,7 +138,7 @@ def _safe_relative_path(path):
         return ""
     normalized = _normalize_slashes(os.path.normpath(path))
     if normalized.startswith("../") or normalized == "..":
-        abort(403)
+        raise AccessDenied(f"Path escapes base directory: {path}")
     if os.path.isabs(path):
-        abort(403)
+        raise AccessDenied(f"Absolute paths are not allowed: {path}")
     return normalized

@@ -6,6 +6,12 @@ from functools import wraps
 from urllib.parse import unquote
 from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify, g, send_file, current_app
 from src.file_handler import (
+    AccessDenied,
+    BookmarkNotFound,
+    BookmarkError,
+    ExternalServiceError,
+    FolderNotFound,
+    MediaNotFound,
     get_all_folders_info,
     get_folder_images,
     get_image_details,
@@ -55,6 +61,21 @@ def _open_in_file_manager(target_path):
         os.startfile(target_path)  # type: ignore[attr-defined]
     else:
         subprocess.Popen(["xdg-open", target_path])
+
+
+def _to_dict(obj):
+    """Convert dataclasses or plain objects to dict for templates."""
+    return obj.to_dict() if hasattr(obj, "to_dict") else obj
+
+
+def _serialize_payload(metadata, data):
+    meta_dict = _to_dict(metadata)
+    items = [_to_dict(item) for item in data]
+    return meta_dict, items
+
+
+def _serialize_detail(detail):
+    return _to_dict(detail)
 
 
 def _compute_feature_flags():
@@ -111,11 +132,19 @@ def _attach_detail_urls(items, current_url):
 
 def _render_media_view(template_name, folder_path, source=None):
     """Shared renderer for folder-based media views."""
-    if source is None:
-        metadata, data = get_folder_images(folder_path)
-    else:
-        metadata, data = get_folder_images(folder_path, source)
-    return render_template(template_name, metadata=metadata, data=data)
+    try:
+        if source is None:
+            metadata, data = get_folder_images(folder_path)
+        else:
+            metadata, data = get_folder_images(folder_path, source)
+    except AccessDenied:
+        abort(403)
+    except (FolderNotFound, MediaNotFound, BookmarkNotFound):
+        abort(404)
+    except ExternalServiceError as exc:
+        abort(500, description=str(exc))
+    metadata_dict, data_list = _serialize_payload(metadata, data)
+    return render_template(template_name, metadata=metadata_dict, data=data_list)
 
 
 def _build_index_context(eagle_enabled):
@@ -135,12 +164,12 @@ def _build_index_context(eagle_enabled):
         return context
 
     try:
-        hero_payload = get_eagle_stream_items(offset=0, limit=10)
+        hero_payload = [_to_dict(item) for item in get_eagle_stream_items(offset=0, limit=10)]
         if hero_payload:
             context["hero_item"] = hero_payload[0]
             context["featured_media"] = hero_payload[1:5]
 
-        image_payload = get_eagle_stream_items(offset=20, limit=40)
+        image_payload = [_to_dict(item) for item in get_eagle_stream_items(offset=20, limit=40)]
         image_only = [item for item in image_payload if item.get("media_type") == "image"]
         video_only = [item for item in image_payload if item.get("media_type") == "video"]
 
@@ -149,7 +178,8 @@ def _build_index_context(eagle_enabled):
         if video_only:
             context["random_videos"] = random.sample(video_only, min(4, len(video_only)))
 
-        _, folder_data = get_eagle_folders()
+        _, folder_data_raw = get_eagle_folders()
+        folder_data = [_to_dict(item) for item in folder_data_raw]
         if folder_data:
             context["random_folders"] = random.sample(folder_data, min(6, len(folder_data)))
 
@@ -284,8 +314,16 @@ def _register_folder_routes(app):
     def view_collections():
         """顯示 DB main 目錄，使用 view_both 版型"""
         source = request.args.get('src', 'external')
-        metadata, data = get_all_folders_info(source)
-        return render_template('view_both.html', metadata=metadata, data=data)
+        try:
+            metadata, data = get_all_folders_info(source)
+        except AccessDenied:
+            abort(403)
+        except (FolderNotFound, MediaNotFound, BookmarkNotFound):
+            abort(404)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
 
 def _register_chrome_routes(app):
@@ -303,15 +341,31 @@ def _register_chrome_routes(app):
     def view_chrome_folder(folder_path):
         """瀏覽 Chrome 書籤資料夾。"""
         focus_mode = request.args.get('mode')
-        metadata, data = get_chrome_bookmarks(folder_path, focus_mode)
-        return render_template('view_both.html', metadata=metadata, data=data)
+        try:
+            metadata, data = get_chrome_bookmarks(folder_path, focus_mode)
+        except BookmarkNotFound:
+            abort(404)
+        except BookmarkError as exc:
+            abort(500, description=str(exc))
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
     @app.route('/chrome_youtube/')
     @require_feature("youtube")
     def view_chrome_youtube():
         """專門顯示 YouTube 書籤"""
-        metadata, data = get_chrome_youtube_bookmarks()
-        return render_template('view_both.html', metadata=metadata, data=data)
+        try:
+            metadata, data = get_chrome_youtube_bookmarks()
+        except BookmarkNotFound:
+            abort(404)
+        except BookmarkError as exc:
+            abort(500, description=str(exc))
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
 
 def _register_eagle_routes(app):
@@ -319,30 +373,42 @@ def _register_eagle_routes(app):
     @require_feature("eagle")
     def list_all_eagle_folder():
         """列出所有 Eagle 資料夾，並符合 EAGLE API 樣式"""
-        metadata, data = get_eagle_folders()
-        return render_template('view_both.html', metadata=metadata, data=data)
+        try:
+            metadata, data = get_eagle_folders()
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
     @app.route('/EAGLE_tags/')
     @require_feature("eagle")
     def list_eagle_tags():
         """列出 Eagle 中的所有標籤並提供連結"""
-        metadata, tags = get_eagle_tags()
-        return render_template("eagle_tags.html", metadata=metadata, tags=tags)
+        try:
+            metadata, tags = get_eagle_tags()
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict = _to_dict(metadata)
+        return render_template("eagle_tags.html", metadata=metadata_dict, tags=tags)
 
     @app.route('/EAGLE_folder/<eagle_folder_id>/')
     @require_feature("eagle")
     def view_eagle_folder(eagle_folder_id):
         """顯示指定 Eagle 資料夾 ID 下的所有圖片"""
-        metadata, data = get_eagle_images_by_folderid(eagle_folder_id)
+        try:
+            metadata, data = get_eagle_images_by_folderid(eagle_folder_id)
+            subfolders = get_subfolders_info(eagle_folder_id)
+            data = subfolders + data
+        except MediaNotFound:
+            abort(404)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
 
-        # 加入子資料夾為類似圖片格式
-        subfolders = get_subfolders_info(eagle_folder_id)
-        data = subfolders + data
-
+        metadata_dict, data_list = _serialize_payload(metadata, data)
         current_url = _normalize_current_url()
-        _attach_detail_urls(data, current_url)
+        _attach_detail_urls(data_list, current_url)
 
-        return render_template('view_both.html', metadata=metadata, data=data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
     @app.route('/EAGLE_tag/<target_tag>/')
     @require_feature("eagle")
@@ -356,12 +422,16 @@ def _register_eagle_routes(app):
         Returns:
             渲染的 HTML 頁面，顯示所有具有該標籤的圖片。
         """
-        metadata, data = get_eagle_images_by_tag(target_tag)
+        try:
+            metadata, data = get_eagle_images_by_tag(target_tag)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
 
         current_url = _normalize_current_url()
-        _attach_detail_urls(data, current_url)
+        _attach_detail_urls(data_list, current_url)
 
-        return render_template('view_both.html', metadata=metadata, data=data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
     @app.route('/search')
     @require_feature("eagle")
@@ -371,12 +441,16 @@ def _register_eagle_routes(app):
         if not keyword:
             return redirect(request.referrer or url_for('index'))
 
-        metadata, data = search_eagle_items(keyword)
+        try:
+            metadata, data = search_eagle_items(keyword)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
 
         current_url = _normalize_current_url()
-        _attach_detail_urls(data, current_url)
+        _attach_detail_urls(data_list, current_url)
 
-        return render_template('view_both.html', metadata=metadata, data=data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
     @app.route('/EAGLE_stream/')
     @require_feature("eagle")
@@ -397,7 +471,11 @@ def _register_eagle_routes(app):
         limit = max(1, min(limit, 60))
         offset = max(0, offset)
 
-        data = get_eagle_stream_items(offset=offset, limit=limit)
+        try:
+            data = get_eagle_stream_items(offset=offset, limit=limit)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        data = [_to_dict(item) for item in data]
         items = []
         for item in data:
             item_id = item.get("id")
@@ -426,25 +504,39 @@ def _register_eagle_routes(app):
     @require_feature("eagle")
     def view_eagle_video(item_id):
         """顯示 Eagle 影片的詳細資訊與播放器頁面"""
-        metadata, video = get_eagle_video_details(item_id)
+        try:
+            metadata, video = get_eagle_video_details(item_id)
+        except MediaNotFound:
+            abort(404)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict = _to_dict(metadata)
+        video_dict = _serialize_detail(video)
         return_to = request.args.get("return_to")
         if return_to:
-            video["parent_url"] = return_to
+            video_dict["parent_url"] = return_to
         else:
-            video["parent_url"] = request.referrer or url_for("index")
-        return render_template('video_player.html', metadata=metadata, video=video)
+            video_dict["parent_url"] = request.referrer or url_for("index")
+        return render_template('video_player.html', metadata=metadata_dict, video=video_dict)
 
     @app.route('/EAGLE_image/<item_id>/')
     @require_feature("eagle")
     def view_eagle_image(item_id):
         """顯示 Eagle 圖片的詳細資訊與展示頁面"""
-        metadata, image = get_eagle_image_details(item_id)
+        try:
+            metadata, image = get_eagle_image_details(item_id)
+        except MediaNotFound:
+            abort(404)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict = _to_dict(metadata)
+        image_dict = _serialize_detail(image)
         return_to = request.args.get("return_to")
         if return_to:
-            image["parent_url"] = return_to
+            image_dict["parent_url"] = return_to
         else:
-            image["parent_url"] = request.referrer or url_for("index")
-        return render_template('image_viewer.html', metadata=metadata, image=image)
+            image_dict["parent_url"] = request.referrer or url_for("index")
+        return render_template('image_viewer.html', metadata=metadata_dict, image=image_dict)
 
 
 def _register_media_routes(app):
@@ -465,12 +557,26 @@ def _register_media_routes(app):
     def view_video(video_path):
         """顯示影片播放頁面"""
         source = request.args.get('src', 'external')
-        metadata, video = get_video_details(video_path, source)
-        return render_template('video_player.html', metadata=metadata, video=video)
+        try:
+            metadata, video = get_video_details(video_path, source)
+        except AccessDenied:
+            abort(403)
+        except (FolderNotFound, MediaNotFound):
+            abort(404)
+        metadata_dict = _to_dict(metadata)
+        video_dict = _serialize_detail(video)
+        return render_template('video_player.html', metadata=metadata_dict, video=video_dict)
 
     @app.route('/image/<path:image_path>')
     def view_image(image_path):
         """顯示圖片展示頁面"""
         source = request.args.get('src', 'external')
-        metadata, image = get_image_details(image_path, source)
-        return render_template('image_viewer.html', metadata=metadata, image=image)
+        try:
+            metadata, image = get_image_details(image_path, source)
+        except AccessDenied:
+            abort(403)
+        except (FolderNotFound, MediaNotFound):
+            abort(404)
+        metadata_dict = _to_dict(metadata)
+        image_dict = _serialize_detail(image)
+        return render_template('image_viewer.html', metadata=metadata_dict, image=image_dict)

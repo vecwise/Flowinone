@@ -5,9 +5,15 @@ import os
 import random
 from datetime import datetime
 
-from flask import abort
-
 from config import DB_route_internal, DB_route_external
+from .models import (
+    AccessDenied,
+    FolderNotFound,
+    MediaDetail,
+    MediaEntry,
+    MediaNotFound,
+    PageMetadata,
+)
 from .paths import (
     DEFAULT_THUMBNAIL_ROUTE,
     _build_file_route,
@@ -27,39 +33,38 @@ from .paths import (
 
 
 def _build_folder_entry(display_name, abs_path, rel_path, src):
-    return {
-        "name": display_name,
-        "thumbnail_route": _find_directory_thumbnail(abs_path, src),
-        "url": _build_folder_url(rel_path, src),
-        "item_path": os.path.abspath(abs_path),
-        "media_type": "folder",
-        "ext": None
-    }
+    return MediaEntry(
+        name=display_name,
+        thumbnail_route=_find_directory_thumbnail(abs_path, src),
+        url=_build_folder_url(rel_path, src),
+        item_path=os.path.abspath(abs_path),
+        media_type="folder",
+    )
 
 
 def _build_image_entry(display_name, abs_path, rel_path, src):
     file_route = _build_file_route(abs_path, src)
     ext = os.path.splitext(display_name)[1].lstrip(".").lower()
-    return {
-        "name": display_name,
-        "thumbnail_route": file_route,
-        "url": _build_image_url(rel_path, src),
-        "item_path": os.path.abspath(abs_path),
-        "media_type": "image",
-        "ext": ext or None
-    }
+    return MediaEntry(
+        name=display_name,
+        thumbnail_route=file_route,
+        url=_build_image_url(rel_path, src),
+        item_path=os.path.abspath(abs_path),
+        media_type="image",
+        ext=ext or None,
+    )
 
 
 def _build_video_entry(display_name, abs_path, rel_path, src):
     ext = os.path.splitext(display_name)[1].lstrip(".").lower()
-    return {
-        "name": display_name,
-        "thumbnail_route": _find_video_thumbnail(abs_path, src),
-        "url": _build_video_url(rel_path, src),
-        "item_path": os.path.abspath(abs_path),
-        "media_type": "video",
-        "ext": ext or None
-    }
+    return MediaEntry(
+        name=display_name,
+        thumbnail_route=_find_video_thumbnail(abs_path, src),
+        url=_build_video_url(rel_path, src),
+        item_path=os.path.abspath(abs_path),
+        media_type="video",
+        ext=ext or None,
+    )
 
 
 def get_all_folders_info(src):
@@ -71,16 +76,16 @@ def get_all_folders_info(src):
     base_dir = DB_route_external if normalized_src == "external" else DB_route_internal
 
     if not os.path.isdir(base_dir):
-        abort(404)
+        raise FolderNotFound(base_dir)
 
-    metadata = {
-        "name": "All Collections",
-        "category": "collections",
-        "tags": ["collection", "group", "Main"],
-        "path": "/" if normalized_src == "external" else "/?src=internal",
-        "thumbnail_route": DEFAULT_THUMBNAIL_ROUTE,
-        "filesystem_path": os.path.abspath(base_dir)
-    }
+    metadata = PageMetadata(
+        name="All Collections",
+        category="collections",
+        tags=["collection", "group", "Main"],
+        path="/" if normalized_src == "external" else "/?src=internal",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=os.path.abspath(base_dir),
+    )
 
     data = _collect_directory_entries(
         base_dir,
@@ -90,7 +95,7 @@ def get_all_folders_info(src):
         image_builder=_build_image_entry,
         video_builder=_build_video_entry
     )
-    metadata["folders"] = [{
+    metadata.folders = [{
         "name": "Root",
         "url": _build_folder_url("", normalized_src)
     }]
@@ -108,16 +113,16 @@ def get_folder_images(folder_path, src=None):
 
     target_dir = os.path.join(base_dir, safe_folder_path) if safe_folder_path else base_dir
     if not os.path.isdir(target_dir):
-        abort(404)
+        raise FolderNotFound(target_dir)
     
-    metadata = {
-        "name": os.path.basename(safe_folder_path.rstrip("/")) if safe_folder_path else os.path.basename(os.path.normpath(base_dir)),
-        "category": "folder",
-        "tags": [],
-        "path": _build_folder_url(safe_folder_path, normalized_src),
-        "thumbnail_route": _find_directory_thumbnail(target_dir, normalized_src),
-        "filesystem_path": os.path.abspath(target_dir)
-    }
+    metadata = PageMetadata(
+        name=os.path.basename(safe_folder_path.rstrip("/")) if safe_folder_path else os.path.basename(os.path.normpath(base_dir)),
+        category="folder",
+        tags=[],
+        path=_build_folder_url(safe_folder_path, normalized_src),
+        thumbnail_route=_find_directory_thumbnail(target_dir, normalized_src),
+        filesystem_path=os.path.abspath(target_dir)
+    )
 
     data = _collect_directory_entries(
         base_dir,
@@ -140,7 +145,7 @@ def get_video_details(video_path, src=None):
     target_path = os.path.join(base_dir, safe_video_path) if safe_video_path else base_dir
 
     if not os.path.isfile(target_path) or not _is_video_file(target_path):
-        abort(404)
+        raise MediaNotFound(target_path)
 
     file_name = os.path.basename(safe_video_path) if safe_video_path else os.path.basename(target_path)
     file_ext = os.path.splitext(file_name)[1].lstrip(".").lower()
@@ -168,33 +173,33 @@ def get_video_details(video_path, src=None):
 
     similar_items = _build_local_similar_items(target_path, base_dir, normalized_src, limit=6)
 
-    metadata = {
-        "name": file_name,
-        "category": "video",
-        "tags": [],
-        "path": _build_video_url(safe_video_path, normalized_src),
-        "thumbnail_route": thumbnail_route,
-        "filesystem_path": os.path.abspath(os.path.dirname(target_path)),
-        "folders": folder_links,
-        "similar": similar_items,
-        "ext": file_ext or None
-    }
+    metadata = PageMetadata(
+        name=file_name,
+        category="video",
+        tags=[],
+        path=_build_video_url(safe_video_path, normalized_src),
+        thumbnail_route=thumbnail_route,
+        filesystem_path=os.path.abspath(os.path.dirname(target_path)),
+        folders=folder_links,
+        similar=[item.to_dict() for item in similar_items],
+        ext=file_ext or None
+    )
 
-    video_data = {
-        "name": file_name,
-        "relative_path": safe_video_path,
-        "source_url": source_url,
-        "thumbnail_route": thumbnail_route,
-        "original_url": None,
-        "mime_type": mime_type,
-        "size_bytes": file_size,
-        "size_display": _human_readable_size(file_size),
-        "modified_time": modified_time.strftime("%Y-%m-%d %H:%M"),
-        "parent_url": parent_url,
-        "download_url": source_url,
-        "folders": folder_links,
-        "ext": file_ext or None
-    }
+    video_data = MediaDetail(
+        name=file_name,
+        relative_path=safe_video_path,
+        source_url=source_url,
+        thumbnail_route=thumbnail_route,
+        original_url=None,
+        mime_type=mime_type,
+        size_bytes=file_size,
+        size_display=_human_readable_size(file_size),
+        modified_time=modified_time.strftime("%Y-%m-%d %H:%M"),
+        parent_url=parent_url,
+        download_url=source_url,
+        folders=folder_links,
+        ext=file_ext or None
+    )
 
     return metadata, video_data
 
@@ -209,7 +214,7 @@ def get_image_details(image_path, src=None):
     target_path = os.path.join(base_dir, safe_image_path) if safe_image_path else base_dir
 
     if not os.path.isfile(target_path) or not _is_image_file(target_path):
-        abort(404)
+        raise MediaNotFound(target_path)
 
     file_name = os.path.basename(safe_image_path) if safe_image_path else os.path.basename(target_path)
     file_ext = os.path.splitext(file_name)[1].lstrip(".").lower()
@@ -236,33 +241,33 @@ def get_image_details(image_path, src=None):
 
     similar_items = _build_local_similar_items(target_path, base_dir, normalized_src, limit=6)
 
-    metadata = {
-        "name": file_name,
-        "category": "image",
-        "tags": [],
-        "path": _build_image_url(safe_image_path, normalized_src),
-        "thumbnail_route": source_url,
-        "filesystem_path": os.path.abspath(target_path),
-        "folders": folder_links,
-        "similar": similar_items,
-        "ext": file_ext or None
-    }
+    metadata = PageMetadata(
+        name=file_name,
+        category="image",
+        tags=[],
+        path=_build_image_url(safe_image_path, normalized_src),
+        thumbnail_route=source_url,
+        filesystem_path=os.path.abspath(target_path),
+        folders=folder_links,
+        similar=[item.to_dict() for item in similar_items],
+        ext=file_ext or None
+    )
 
-    image_data = {
-        "name": file_name,
-        "relative_path": safe_image_path,
-        "source_url": source_url,
-        "thumbnail_route": source_url,
-        "original_url": None,
-        "mime_type": mime_type,
-        "size_bytes": file_size,
-        "size_display": _human_readable_size(file_size),
-        "modified_time": modified_time.strftime("%Y-%m-%d %H:%M"),
-        "parent_url": parent_url,
-        "download_url": source_url,
-        "folders": folder_links,
-        "ext": file_ext or None
-    }
+    image_data = MediaDetail(
+        name=file_name,
+        relative_path=safe_image_path,
+        source_url=source_url,
+        thumbnail_route=source_url,
+        original_url=None,
+        mime_type=mime_type,
+        size_bytes=file_size,
+        size_display=_human_readable_size(file_size),
+        modified_time=modified_time.strftime("%Y-%m-%d %H:%M"),
+        parent_url=parent_url,
+        download_url=source_url,
+        folders=folder_links,
+        ext=file_ext or None
+    )
 
     return metadata, image_data
 
@@ -292,23 +297,25 @@ def _build_local_similar_items(target_path, base_dir, src, limit=6):
         rel_entry = _normalize_slashes(rel_entry)
 
         if _is_image_file(entry):
-            candidates.append({
-                "id": rel_entry,
-                "name": os.path.splitext(entry)[0] or entry,
-                "path": _build_image_url(rel_entry, src),
-                "thumbnail_route": _build_file_route(abs_entry, src),
-                "media_type": "image",
-                "ext": os.path.splitext(entry)[1].lstrip(".").lower() or None
-            })
+            candidates.append(MediaEntry(
+                id=rel_entry,
+                name=os.path.splitext(entry)[0] or entry,
+                url=_build_image_url(rel_entry, src),
+                thumbnail_route=_build_file_route(abs_entry, src),
+                item_path=os.path.abspath(abs_entry),
+                media_type="image",
+                ext=os.path.splitext(entry)[1].lstrip(".").lower() or None
+            ))
         elif _is_video_file(entry):
-            candidates.append({
-                "id": rel_entry,
-                "name": os.path.splitext(entry)[0] or entry,
-                "path": _build_video_url(rel_entry, src),
-                "thumbnail_route": _find_video_thumbnail(abs_entry, src),
-                "media_type": "video",
-                "ext": os.path.splitext(entry)[1].lstrip(".").lower() or None
-            })
+            candidates.append(MediaEntry(
+                id=rel_entry,
+                name=os.path.splitext(entry)[0] or entry,
+                url=_build_video_url(rel_entry, src),
+                thumbnail_route=_find_video_thumbnail(abs_entry, src),
+                item_path=os.path.abspath(abs_entry),
+                media_type="video",
+                ext=os.path.splitext(entry)[1].lstrip(".").lower() or None
+            ))
 
     if not candidates:
         return []
