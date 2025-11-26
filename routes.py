@@ -28,6 +28,7 @@ from src.file_handler import (
     get_eagle_video_details,
     get_subfolders_info,
     is_eagle_available,
+    update_item_database,
     has_chrome_bookmarks,
     has_db_main,
 )
@@ -233,6 +234,7 @@ def register_routes(app):
     _register_index_routes(app)
     _register_filesystem_routes(app)
     _register_folder_routes(app)
+    _register_item_db_routes(app)
     _register_chrome_routes(app)
     _register_eagle_routes(app)
     _register_media_routes(app)
@@ -324,6 +326,30 @@ def _register_folder_routes(app):
             abort(500, description=str(exc))
         metadata_dict, data_list = _serialize_payload(metadata, data)
         return render_template('view_both.html', metadata=metadata_dict, data=data_list)
+
+
+def _register_item_db_routes(app):
+    @app.route('/update_db')
+    @require_feature("db")
+    def update_item_db_route():
+        """Crawl tagged folders and persist items into the central DB."""
+        base_path = request.args.get("base") or DB_route_external
+        try:
+            result = update_item_database(base_path)
+        except FileNotFoundError:
+            abort(404, description="指定的資料夾不存在，請確認 DB_route_external。")
+        except Exception as exc:
+            abort(500, description=f"更新 item DB 失敗: {exc}")
+
+        wants_json = request.args.get("format") == "json" or request.accept_mimetypes.best == "application/json"
+        if wants_json:
+            return jsonify(result)
+
+        return render_template(
+            "update_db_result.html",
+            title="Update Item DB",
+            result=result,
+        )
 
 
 def _register_chrome_routes(app):

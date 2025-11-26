@@ -36,12 +36,18 @@ from .eagle_integration import (
     get_eagle_image_details,
     get_subfolders_info,
 )
+from .item_db import (
+    iter_tagged_items,
+    update_item_database,
+)
 
 __all__ = [
     "get_all_folders_info",
     "get_folder_images",
     "get_video_details",
     "get_image_details",
+    "iter_tagged_items",
+    "update_item_database",
     "has_db_main",
     "AccessDenied",
     "BookmarkError",

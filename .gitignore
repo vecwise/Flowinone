@@ -8,3 +8,4 @@ data/
 data/**
 *.db
 config.json
+codex_plan.md

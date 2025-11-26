@@ -1,0 +1,27 @@
+{% extends "base_template.html" %}
+{% block page_content %}
+<main class="content">
+    <section class="card">
+        <h1>Item DB 更新結果</h1>
+        <p>Base: <code>{{ result.base_dir }}</code></p>
+        <p>DB: <code>{{ result.db_path }}</code></p>
+        <ul>
+            <li>掃描數量: {{ result.seen }}</li>
+            <li>新增: {{ result.inserted }}</li>
+            <li>略過既有項目: {{ result.skipped }}</li>
+        </ul>
+        {% if result.errors %}
+        <div class="errors">
+            <h2>錯誤</h2>
+            <ul>
+                {% for path, message in result.errors %}
+                <li><strong>{{ path }}</strong>: {{ message }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <p>沒有錯誤。</p>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}

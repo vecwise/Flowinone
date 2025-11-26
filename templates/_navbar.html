@@ -4,6 +4,7 @@
         <a href="{{ url_for('index') }}">Home</a>
         {% if feature_flags.db %}
         <a href="{{ url_for('view_collections') }}">DB Main</a>
+        <a href="{{ url_for('update_item_db_route') }}">Update DB</a>
         {% endif %}
         {% if feature_flags.chrome %}
         <a href="{{ url_for('view_chrome_root') }}">Chrome Bookmarks</a>
