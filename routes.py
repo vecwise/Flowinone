@@ -569,15 +569,20 @@ def _register_media_routes(app):
     @app.route('/serve_image/<path:image_path>')
     def serve_image_by_full_path(image_path):
         """提供靜態圖片服務"""
+        # Flask <path> 會吞掉開頭的「/」，補回來避免相對路徑被解讀成專案內路徑。
+        decoded = unquote(image_path)
+        if not decoded.startswith("/"):
+            decoded = "/" + decoded
+        decoded_path = os.path.abspath(decoded)
+
+        if not os.path.isfile(decoded_path):
+            abort(404)
+
         if IS_MACOS:
-            directory, filename = os.path.split(image_path)
-            directory = '/' + directory
+            directory, filename = os.path.split(decoded_path)
             return send_from_directory(directory, filename)
 
-        abs_path = os.path.abspath(unquote(image_path))
-        if not os.path.isfile(abs_path):
-            abort(404)
-        return send_file(abs_path)
+        return send_file(decoded_path)
 
     @app.route('/video/<path:video_path>')
     def view_video(video_path):
