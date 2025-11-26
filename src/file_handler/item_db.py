@@ -191,6 +191,27 @@ def iter_tagged_items(base_dir: str) -> Iterable[ItemRecord]:
             yield _build_item_record(entry, abs_entry, rel_entry, base_dir, tags)
 
 
+def iter_root_items(base_dir: str) -> Iterable[ItemRecord]:
+    """Yield ItemRecord objects for items directly under the base directory."""
+    if not base_dir:
+        raise FileNotFoundError("Base directory is not configured.")
+    base_dir = os.path.abspath(base_dir)
+    if not os.path.isdir(base_dir):
+        raise FileNotFoundError(base_dir)
+
+    try:
+        entries = os.listdir(base_dir)
+    except (FileNotFoundError, PermissionError):
+        return
+
+    for entry in entries:
+        if entry.startswith(".") or entry.startswith("#"):
+            continue
+        abs_entry = os.path.join(base_dir, entry)
+        rel_entry = os.path.relpath(abs_entry, base_dir)
+        yield _build_item_record(entry, abs_entry, rel_entry, base_dir, [])
+
+
 def _serialise_optional_list(values: Optional[List[str]]) -> Optional[str]:
     if not values:
         return None
@@ -284,7 +305,7 @@ def update_item_database(base_dir: Optional[str] = None) -> Dict[str, object]:
     records whose paths no longer exist are cleaned up.
     """
     target_dir = os.path.abspath(base_dir or DB_route_external)
-    records = list(iter_tagged_items(target_dir))
+    records = list(iter_root_items(target_dir)) + list(iter_tagged_items(target_dir))
 
     inserted = 0
     skipped = 0
@@ -490,6 +511,7 @@ __all__ = [
     "ItemRecord",
     "ITEM_DB_PATH",
     "iter_tagged_items",
+    "iter_root_items",
     "update_item_database",
     "update_missing_thumbnails",
     "fetch_items",
