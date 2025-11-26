@@ -280,16 +280,29 @@ def _resolve_thumbnail_route(item_type: str, abs_path: str) -> str:
 def update_item_database(base_dir: Optional[str] = None) -> Dict[str, object]:
     """Crawl tagged folders and persist new items into the central DB.
 
-    Existing entries (matched by library_root + relative_path) are left untouched.
+    Existing entries (matched by library_root + relative_path) are left untouched;
+    records whose paths no longer exist are cleaned up.
     """
-    target_dir = base_dir or DB_route_external
+    target_dir = os.path.abspath(base_dir or DB_route_external)
     records = list(iter_tagged_items(target_dir))
 
     inserted = 0
     skipped = 0
+    removed = 0
     errors: List[Tuple[str, str]] = []
 
     with _get_db_connection() as conn:
+        cur = conn.execute(
+            "SELECT item_id, absolute_path FROM items WHERE library_root = ?",
+            (target_dir,),
+        )
+        missing_ids = [
+            row["item_id"] for row in cur.fetchall() if not os.path.exists(row["absolute_path"])
+        ]
+        if missing_ids:
+            conn.executemany("DELETE FROM items WHERE item_id = ?", ((item_id,) for item_id in missing_ids))
+            removed = len(missing_ids)
+
         for record in records:
             try:
                 cur = conn.execute(
@@ -332,10 +345,11 @@ def update_item_database(base_dir: Optional[str] = None) -> Dict[str, object]:
         conn.commit()
 
     return {
-        "base_dir": os.path.abspath(target_dir),
+        "base_dir": target_dir,
         "seen": len(records),
         "inserted": inserted,
         "skipped": skipped,
+        "removed": removed,
         "errors": errors,
         "db_path": os.path.abspath(ITEM_DB_PATH),
     }

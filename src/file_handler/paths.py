@@ -1,5 +1,6 @@
 """Path, URL, and type helpers for Flowinone file handling."""
 
+import hashlib
 import os
 from urllib.parse import quote
 
@@ -10,6 +11,7 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v"}
 DEFAULT_THUMBNAIL_ROUTE = "/static/default_thumbnail.svg"
 DEFAULT_VIDEO_THUMBNAIL_ROUTE = "/static/default_video_thumbnail.svg"
+GENERATED_THUMBNAIL_DIR = os.path.join("data", "thumbnails", "items")
 
 
 def _normalize_source(src):
@@ -76,6 +78,11 @@ def _find_video_thumbnail(abs_video_path, src):
     for candidate in candidates:
         if os.path.isfile(candidate):
             return _build_file_route(candidate, src)
+
+    hashed_name = hashlib.sha1(os.path.abspath(abs_video_path).encode("utf-8", "ignore")).hexdigest()
+    generated = os.path.abspath(os.path.join(GENERATED_THUMBNAIL_DIR, f"{hashed_name}.jpg"))
+    if os.path.isfile(generated):
+        return _build_file_route(generated, src)
 
     return DEFAULT_VIDEO_THUMBNAIL_ROUTE
 

@@ -9,6 +9,7 @@
             <li>掃描數量: {{ result.seen }}</li>
             <li>新增: {{ result.inserted }}</li>
             <li>略過既有項目: {{ result.skipped }}</li>
+            <li>移除不存在的路徑: {{ result.removed }}</li>
         </ul>
         {% if result.errors %}
         <div class="errors">
