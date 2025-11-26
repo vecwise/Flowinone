@@ -5,14 +5,25 @@ import json
 import mimetypes
 import os
 import sqlite3
+import subprocess
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from config import DB_route_external
-from .paths import _is_image_file, _is_video_file, _normalize_slashes
+from .paths import (
+    DEFAULT_THUMBNAIL_ROUTE,
+    DEFAULT_VIDEO_THUMBNAIL_ROUTE,
+    _build_file_route,
+    _find_directory_thumbnail,
+    _find_video_thumbnail,
+    _is_image_file,
+    _is_video_file,
+    _normalize_slashes,
+)
 
 
 ITEM_DB_PATH = os.path.join("data", "item_db.db")
+THUMBNAIL_DIR = os.path.join("data", "thumbnails", "items")
 
 
 @dataclass
@@ -186,6 +197,86 @@ def _serialise_optional_list(values: Optional[List[str]]) -> Optional[str]:
     return json.dumps(values, ensure_ascii=False)
 
 
+def _parse_json_list(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+
+def _get_video_duration_seconds(abs_video_path: str) -> Optional[float]:
+    """Get video duration using ffprobe if available."""
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        abs_video_path,
+    ]
+    try:
+        output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True).strip()
+        return float(output)
+    except Exception:
+        return None
+
+
+def _generate_video_thumbnail(abs_video_path: str) -> Optional[str]:
+    """Generate a thumbnail for a video using the middle frame."""
+    os.makedirs(THUMBNAIL_DIR, exist_ok=True)
+    duration = _get_video_duration_seconds(abs_video_path)
+    midpoint = max(duration / 2.0, 1.0) if duration else 1.0
+    file_hash = hashlib.sha1(abs_video_path.encode("utf-8", "ignore")).hexdigest()
+    output_path = os.path.abspath(os.path.join(THUMBNAIL_DIR, f"{file_hash}.jpg"))
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-v",
+        "error",
+        "-ss",
+        str(midpoint),
+        "-i",
+        abs_video_path,
+        "-vframes",
+        "1",
+        "-q:v",
+        "2",
+        output_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return _build_file_route(output_path, "external")
+    except Exception:
+        return None
+
+
+def _resolve_thumbnail_route(item_type: str, abs_path: str) -> str:
+    """Determine thumbnail route for the given item path."""
+    if not os.path.exists(abs_path):
+        return DEFAULT_THUMBNAIL_ROUTE
+
+    if item_type == "folder":
+        return _find_directory_thumbnail(abs_path, "external")
+
+    if item_type == "image":
+        return _build_file_route(abs_path, "external")
+
+    if item_type == "video":
+        generated = _generate_video_thumbnail(abs_path)
+        if generated:
+            return generated
+        found = _find_video_thumbnail(abs_path, "external")
+        return found or DEFAULT_VIDEO_THUMBNAIL_ROUTE
+
+    return DEFAULT_THUMBNAIL_ROUTE
+
+
 def update_item_database(base_dir: Optional[str] = None) -> Dict[str, object]:
     """Crawl tagged folders and persist new items into the central DB.
 
@@ -250,4 +341,142 @@ def update_item_database(base_dir: Optional[str] = None) -> Dict[str, object]:
     }
 
 
-__all__ = ["ItemRecord", "ITEM_DB_PATH", "iter_tagged_items", "update_item_database"]
+def update_missing_thumbnails(base_dir: Optional[str] = None, force: bool = False) -> Dict[str, object]:
+    """Populate thumbnail_route for items. Set force=True to rewrite all."""
+    target_dir = os.path.abspath(base_dir or DB_route_external) if (base_dir or DB_route_external) else None
+
+    with _get_db_connection() as conn:
+        if force:
+            sql = "SELECT item_id, item_type, absolute_path, thumbnail_route FROM items"
+            params: Tuple = ()
+            if target_dir:
+                sql += " WHERE library_root = ?"
+                params = (target_dir,)
+            cur = conn.execute(sql, params)
+        else:
+            if target_dir:
+                cur = conn.execute(
+                    "SELECT item_id, item_type, absolute_path, thumbnail_route FROM items WHERE (thumbnail_route IS NULL OR thumbnail_route = '') AND library_root = ?",
+                    (target_dir,),
+                )
+            else:
+                cur = conn.execute(
+                    "SELECT item_id, item_type, absolute_path, thumbnail_route FROM items WHERE thumbnail_route IS NULL OR thumbnail_route = ''"
+                )
+        rows = cur.fetchall()
+
+        updated = 0
+        errors: List[Tuple[str, str]] = []
+
+        for row in rows:
+            try:
+                route = _resolve_thumbnail_route(row["item_type"], row["absolute_path"])
+                conn.execute(
+                    "UPDATE items SET thumbnail_route = ?, updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
+                    (route, row["item_id"]),
+                )
+                updated += 1
+            except Exception as exc:  # pragma: no cover - defensive
+                errors.append((row["absolute_path"], str(exc)))
+
+        conn.commit()
+
+    return {
+        "base_dir": target_dir,
+        "updated": updated,
+        "pending": len(rows) - updated,
+        "errors": errors,
+        "db_path": os.path.abspath(ITEM_DB_PATH),
+    }
+
+
+def fetch_items(limit: int = 500, offset: int = 0) -> Dict[str, object]:
+    """Fetch items from the DB for debugging/inspection."""
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
+    with _get_db_connection() as conn:
+        cur = conn.execute(
+            "SELECT COUNT(*) FROM items"
+        )
+        total = cur.fetchone()[0]
+
+        cur = conn.execute(
+            """
+            SELECT item_id, name, item_type, tags, thumbnail_route,
+                   relative_path, absolute_path, library_root, ext,
+                   mime_type, size_bytes, data_source, is_archived,
+                   region, rating, is_censored, actors, authors, face_ids,
+                   updated_at
+            FROM items
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        rows = cur.fetchall()
+
+    items = []
+    for row in rows:
+        items.append({
+            "item_id": row["item_id"],
+            "name": row["name"],
+            "item_type": row["item_type"],
+            "tags": _parse_json_list(row["tags"]),
+            "thumbnail_route": row["thumbnail_route"],
+            "relative_path": row["relative_path"],
+            "absolute_path": row["absolute_path"],
+            "library_root": row["library_root"],
+            "ext": row["ext"],
+            "mime_type": row["mime_type"],
+            "size_bytes": row["size_bytes"],
+            "data_source": row["data_source"],
+            "is_archived": bool(row["is_archived"]),
+            "region": row["region"],
+            "rating": row["rating"],
+            "is_censored": None if row["is_censored"] is None else bool(row["is_censored"]),
+            "actors": _parse_json_list(row["actors"]),
+            "authors": _parse_json_list(row["authors"]),
+            "face_ids": _parse_json_list(row["face_ids"]),
+            "updated_at": row["updated_at"],
+        })
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": items,
+        "db_path": os.path.abspath(ITEM_DB_PATH),
+    }
+
+
+def clear_thumbnails(base_dir: Optional[str] = None) -> Dict[str, object]:
+    """Clear thumbnail_route for items (optionally scoped to a library root)."""
+    target_dir = os.path.abspath(base_dir) if base_dir else None
+    with _get_db_connection() as conn:
+        if target_dir:
+            cur = conn.execute(
+                "UPDATE items SET thumbnail_route = NULL, updated_at = CURRENT_TIMESTAMP WHERE library_root = ?",
+                (target_dir,),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE items SET thumbnail_route = NULL, updated_at = CURRENT_TIMESTAMP"
+            )
+        affected = cur.rowcount
+        conn.commit()
+
+    return {
+        "base_dir": target_dir,
+        "cleared": affected,
+        "db_path": os.path.abspath(ITEM_DB_PATH),
+    }
+
+
+__all__ = [
+    "ItemRecord",
+    "ITEM_DB_PATH",
+    "iter_tagged_items",
+    "update_item_database",
+    "update_missing_thumbnails",
+    "fetch_items",
+]

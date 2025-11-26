@@ -1,0 +1,40 @@
+{% extends "base_template.html" %}
+{% block page_content %}
+<main class="content">
+    <section class="card">
+        <h1>Item DB 調試</h1>
+        <p>DB: <code>{{ payload.db_path }}</code></p>
+        <p>總數: {{ payload.total }} | 目前顯示: {{ items|length }} (limit={{ payload.limit }}, offset={{ payload.offset }})</p>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Tags</th>
+                    <th>Thumb</th>
+                    <th>Path</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.item_type }}</td>
+                    <td>{{ item.tags | join(', ') }}</td>
+                    <td>
+                        {% if item.thumbnail_route %}
+                        <img src="{{ item.thumbnail_route }}" alt="thumb" style="height:50px; width:auto;">
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td><code>{{ item.relative_path }}</code></td>
+                    <td>{{ item.updated_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</main>
+{% endblock %}

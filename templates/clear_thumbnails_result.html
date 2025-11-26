@@ -1,0 +1,13 @@
+{% extends "base_template.html" %}
+{% block page_content %}
+<main class="content">
+    <section class="card">
+        <h1>清除縮圖</h1>
+        {% if result.base_dir %}
+        <p>Base: <code>{{ result.base_dir }}</code></p>
+        {% endif %}
+        <p>DB: <code>{{ result.db_path }}</code></p>
+        <p>清除筆數: {{ result.cleared }}</p>
+    </section>
+</main>
+{% endblock %}

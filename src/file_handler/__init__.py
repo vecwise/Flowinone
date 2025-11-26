@@ -39,6 +39,9 @@ from .eagle_integration import (
 from .item_db import (
     iter_tagged_items,
     update_item_database,
+    update_missing_thumbnails,
+    fetch_items,
+    clear_thumbnails,
 )
 
 __all__ = [
@@ -48,6 +51,9 @@ __all__ = [
     "get_image_details",
     "iter_tagged_items",
     "update_item_database",
+    "update_missing_thumbnails",
+    "fetch_items",
+    "clear_thumbnails",
     "has_db_main",
     "AccessDenied",
     "BookmarkError",

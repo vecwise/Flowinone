@@ -5,6 +5,10 @@
         {% if feature_flags.db %}
         <a href="{{ url_for('view_collections') }}">DB Main</a>
         <a href="{{ url_for('update_item_db_route') }}">Update DB</a>
+        <a href="{{ url_for('update_thumbnails_route') }}">Update Thumbnails</a>
+        <a href="{{ url_for('update_thumbnails_route', force=1) }}">Rebuild Thumbnails</a>
+        <a href="{{ url_for('clear_thumbnails_route') }}">Clear Thumbnails</a>
+        <a href="{{ url_for('view_item_db') }}">Item DB Debug</a>
         {% endif %}
         {% if feature_flags.chrome %}
         <a href="{{ url_for('view_chrome_root') }}">Chrome Bookmarks</a>

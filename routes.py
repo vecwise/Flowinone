@@ -29,6 +29,9 @@ from src.file_handler import (
     get_subfolders_info,
     is_eagle_available,
     update_item_database,
+    update_missing_thumbnails,
+    clear_thumbnails,
+    fetch_items,
     has_chrome_bookmarks,
     has_db_main,
 )
@@ -235,6 +238,7 @@ def register_routes(app):
     _register_filesystem_routes(app)
     _register_folder_routes(app)
     _register_item_db_routes(app)
+    _register_item_db_debug_routes(app)
     _register_chrome_routes(app)
     _register_eagle_routes(app)
     _register_media_routes(app)
@@ -349,6 +353,78 @@ def _register_item_db_routes(app):
             "update_db_result.html",
             title="Update Item DB",
             result=result,
+        )
+
+    @app.route('/update_thumbnails')
+    @require_feature("db")
+    def update_thumbnails_route():
+        """Populate thumbnails for items missing thumbnail_route."""
+        base_path = request.args.get("base") or DB_route_external
+        force = request.args.get("force", "").lower() in {"1", "true", "yes", "y"}
+        try:
+            result = update_missing_thumbnails(base_path, force=force)
+        except FileNotFoundError:
+            abort(404, description="指定的資料夾不存在，請確認 DB_route_external。")
+        except Exception as exc:
+            abort(500, description=f"更新 thumbnails 失敗: {exc}")
+
+        wants_json = request.args.get("format") == "json" or request.accept_mimetypes.best == "application/json"
+        if wants_json:
+            return jsonify(result)
+
+        return render_template(
+            "update_thumbnails_result.html",
+            title="Update Thumbnails",
+            result=result,
+            forced=force,
+        )
+
+    @app.route('/clear_thumbnails')
+    @require_feature("db")
+    def clear_thumbnails_route():
+        """Clear thumbnail_route for all items (or a specific base)."""
+        base_path = request.args.get("base")
+        try:
+            result = clear_thumbnails(base_path)
+        except Exception as exc:
+            abort(500, description=f"清除 thumbnails 失敗: {exc}")
+
+        wants_json = request.args.get("format") == "json" or request.accept_mimetypes.best == "application/json"
+        if wants_json:
+            return jsonify(result)
+
+        return render_template(
+            "clear_thumbnails_result.html",
+            title="Clear Thumbnails",
+            result=result,
+        )
+
+
+def _register_item_db_debug_routes(app):
+    @app.route('/item_db')
+    @require_feature("db")
+    def view_item_db():
+        """Display current items in the item DB for debugging."""
+        try:
+            limit = int(request.args.get("limit", 200))
+            offset = int(request.args.get("offset", 0))
+        except ValueError:
+            abort(400, description="limit/offset 需為數字")
+
+        try:
+            payload = fetch_items(limit=limit, offset=offset)
+        except Exception as exc:
+            abort(500, description=f"讀取 item DB 失敗: {exc}")
+
+        wants_json = request.args.get("format") == "json" or request.accept_mimetypes.best == "application/json"
+        if wants_json:
+            return jsonify(payload)
+
+        return render_template(
+            "item_db_view.html",
+            title="Item DB",
+            payload=payload,
+            items=payload.get("items", []),
         )
 
 
