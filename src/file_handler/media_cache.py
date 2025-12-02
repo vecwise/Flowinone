@@ -123,7 +123,7 @@ def _get_cached_thumbnail_route(media_id: str) -> Optional[str]:
     return _build_file_route(local_path, "external")
 
 
-def _infer_extension(content_type: str | None, url: str | None) -> str:
+def _infer_extension(content_type: Optional[str], url: Optional[str]) -> str:
     if content_type:
         content_type = content_type.lower()
         if "jpeg" in content_type or "jpg" in content_type:

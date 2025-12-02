@@ -647,9 +647,13 @@ def _register_media_routes(app):
         """提供靜態圖片服務"""
         # Flask <path> 會吞掉開頭的「/」，補回來避免相對路徑被解讀成專案內路徑。
         decoded = unquote(image_path)
-        if not decoded.startswith("/"):
-            decoded = "/" + decoded
-        decoded_path = os.path.abspath(decoded)
+        if IS_WINDOWS:
+            # Windows paths may include drive letters (e.g. C:/...), so don't force a leading slash
+            decoded_path = os.path.abspath(decoded)
+        else:
+            if not decoded.startswith("/"):
+                decoded = "/" + decoded
+            decoded_path = os.path.abspath(decoded)
 
         if not os.path.isfile(decoded_path):
             abort(404)
