@@ -4,6 +4,13 @@ pandas>=1.5.0
 beautifulsoup4>=4.11.0
 Pillow>=10
 pytest>=8
+SQLAlchemy>=2.0
+Alembic>=1.13
+trafilatura>=1.12
+pypdf>=4
+PyMuPDF>=1.24
+markdownify>=0.13
+yt-dlp
 
 blinker
 bs4

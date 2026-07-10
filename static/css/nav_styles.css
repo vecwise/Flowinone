@@ -120,7 +120,7 @@
 
 .search-container input[type="search"] {
     width: min(280px, 22vw);
-    min-height: 42px;
+    min-height: 44px;
     border: 1px solid var(--fo-border);
     border-radius: 4px;
     background: var(--fo-bg);
@@ -135,7 +135,7 @@
 }
 
 .search-container button {
-    min-height: 42px;
+    min-height: 44px;
     border: 1px solid var(--fo-text);
     border-radius: 4px;
     background: var(--fo-text);

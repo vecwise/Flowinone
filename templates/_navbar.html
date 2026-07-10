@@ -20,6 +20,8 @@
         {% if feature_flags.chrome %}
         <a class="{% if request.endpoint in ['view_chrome_root', 'view_chrome_folder'] %}is-active{% endif %}" href="{{ url_for('view_chrome_root') }}" {% if request.endpoint in ['view_chrome_root', 'view_chrome_folder'] %}aria-current="page"{% endif %}>書籤</a>
         {% endif %}
+        <a class="{% if request.endpoint and request.endpoint.startswith('resource_library.resource_') %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}" {% if request.endpoint and request.endpoint.startswith('resource_library.resource_') %}aria-current="page"{% endif %}>資源</a>
+        <a class="{% if request.endpoint and request.endpoint.startswith('resource_library.collection_') %}is-active{% endif %}" href="{{ url_for('resource_library.collection_index') }}" {% if request.endpoint and request.endpoint.startswith('resource_library.collection_') %}aria-current="page"{% endif %}>靈感</a>
         {% if feature_flags.eagle %}
         <a class="{% if request.endpoint in ['list_eagle_tags', 'view_images_by_tag'] %}is-active{% endif %}" href="{{ url_for('list_eagle_tags') }}" {% if request.endpoint in ['list_eagle_tags', 'view_images_by_tag'] %}aria-current="page"{% endif %}>Tags</a>
         {% endif %}
@@ -32,12 +34,19 @@
             <input id="globalSearch" type="search" placeholder="搜尋內容或 tag" name="query">
             <button type="submit">搜尋</button>
         </form>
+        {% else %}
+        <form class="search-container" action="{{ url_for('resource_library.resource_index') }}" method="GET" role="search">
+            <label class="sr-only" for="globalSearch">搜尋 Resource Library</label>
+            <input id="globalSearch" type="search" placeholder="搜尋資源全文" name="q">
+            <button type="submit">搜尋</button>
+        </form>
         {% endif %}
 
         <details class="nav-tools">
             <summary>更多</summary>
             <div class="nav-tools-menu">
                 {% if feature_flags.eagle %}<a href="{{ url_for('eagle_stream') }}">Eagle 串流</a>{% endif %}
+                <a href="{{ url_for('resource_library.note_index') }}">整併筆記</a>
                 {% if feature_flags.youtube %}<a href="{{ url_for('view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
                 {% if feature_flags.db %}
                 <a href="{{ url_for('view_collections') }}">本機資料庫</a>

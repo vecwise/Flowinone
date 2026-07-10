@@ -17,7 +17,14 @@ dependencies = [
     "requests>=2.28.0",
     "pandas>=1.5.0",
     "beautifulsoup4>=4.11.0",
-    "Pillow>=10"
+    "Pillow>=10",
+    "SQLAlchemy>=2.0",
+    "Alembic>=1.13",
+    "trafilatura>=1.12",
+    "pypdf>=4",
+    "PyMuPDF>=1.24",
+    "markdownify>=0.13",
+    "yt-dlp"
 ]
 
 [project.optional-dependencies]
@@ -37,7 +44,7 @@ py-modules = ["config", "routes", "run"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["eagle_api*", "file_handler*"]
+include = ["eagle_api*", "file_handler*", "flowinone*"]
 
 [tool.setuptools.package-data]
 "*" = ["templates/*.html", "static/**/*", "data/**/*"]

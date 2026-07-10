@@ -1,0 +1,10 @@
+{% extends "base_template.html" %}
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
+{% block page_content %}
+<main id="main-content" class="container resource-page">
+  {% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}{% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
+  <header class="resource-hero"><div><p class="eyebrow">Synthesis workspace</p><h1>整併筆記</h1><p>一篇 Draft 可以引用多個 Resource、Eagle 圖片與本機素材，完成後才輸出到 Obsidian。</p></div><a class="action-button" href="{{ url_for('resource_library.collection_index') }}">查看 Collections</a></header>
+  <section class="resource-surface"><h2>建立空白整併筆記</h2><form class="resource-form resource-form-inline" method="post"><div class="resource-form-grow"><label for="note-title">標題</label><input id="note-title" name="title" required></div><input type="hidden" name="note_type" value="synthesis"><button class="action-button primary" type="submit">建立 Draft</button></form></section>
+  <section><div class="resource-section-heading"><h2>全部 Drafts</h2><span>{{ notes|length }} 篇</span></div><div class="collection-grid">{% for note in notes %}<a class="collection-card" href="{{ url_for('resource_library.note_detail', note_id=note.id) }}"><span class="resource-type">{{ note.note_type }}</span><h3>{{ note.title }}</h3><p>{{ note.source_count }} 個來源 · {{ note.status }}</p><strong>{{ note.updated_at }}</strong></a>{% else %}<div class="resource-empty"><h3>還沒有整併筆記</h3><p>從 Collection 建立，或先新增一篇空白 Draft。</p></div>{% endfor %}</div></section>
+</main>
+{% endblock %}

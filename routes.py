@@ -5,6 +5,7 @@ import random
 import subprocess
 from collections import Counter
 from functools import wraps
+from pathlib import Path
 from urllib.parse import unquote
 import click
 from flask import Flask, render_template, abort, send_from_directory, request, redirect, url_for, jsonify, g, send_file, current_app
@@ -241,6 +242,49 @@ def _content_card_from_db_item(item, why=None, lane=None):
     }
 
 
+def _content_card_from_resource(item, why=None, lane=None):
+    """Adapt a durable Resource Library record to the shared homepage card read model."""
+    media_id = item.get("thumbnail_media_id")
+    if item.get("thumbnail_path"):
+        thumbnail_route = url_for(
+            "resource_library.resource_asset",
+            resource_id=item["id"],
+            kind="thumbnail",
+        )
+    elif media_id:
+        thumbnail_route = (
+            url_for("serve_bookmark_thumbnail", media_id=media_id)
+            if get_thumbnail_store().get_thumbnail_path(media_id)
+            else url_for("static", filename="default_thumbnail.svg")
+        )
+    else:
+        thumbnail_route = url_for("static", filename="default_thumbnail.svg")
+    source_type = item.get("source_type") or "resource"
+    meta_bits = ["Resource", source_type]
+    if item.get("domain"):
+        meta_bits.append(item["domain"])
+    return {
+        "id": item.get("id"),
+        "title": item.get("title") or "Untitled",
+        "name": item.get("title") or "Untitled",
+        "url": url_for("resource_library.resource_detail", resource_id=item["id"]),
+        "path": url_for("resource_library.resource_detail", resource_id=item["id"]),
+        "thumbnail_route": thumbnail_route,
+        "media_type": "resource",
+        "type_label": source_type.replace("_", " ").title(),
+        "source_label": "Resource Library",
+        "meta_line": " · ".join(meta_bits),
+        "tags": (item.get("tag_names") or [])[:4],
+        "why": why or item.get("why_this_matters") or item.get("summary_one_line") or "等待整理",
+        "lane": lane or "resource",
+        "status": item.get("reading_state") or "inbox",
+        "target_blank": False,
+        "primary_action": "整理",
+        "is_available": True,
+        "disabled_reason": None,
+    }
+
+
 def _clone_card(card, why=None, lane=None):
     """Copy a card before assigning shelf-specific recommendation context."""
     cloned = dict(card)
@@ -312,6 +356,20 @@ def _build_detail_actions(media_kind, metadata):
     if media_kind == "video":
         actions[1]["label"] = "看相關"
     return actions
+
+
+def _get_inspiration_collections():
+    """Load collection choices without making media browsing depend on the resource DB."""
+    try:
+        from src.flowinone.resource_library.curation import CollectionService
+        from src.flowinone.resource_library.database import get_resource_database
+
+        configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
+        database = get_resource_database(Path(configured)) if configured else get_resource_database()
+        return CollectionService(database).list()
+    except Exception:
+        current_app.logger.exception("Failed to load inspiration collections")
+        return []
 
 
 def _compute_feature_flags():
@@ -421,6 +479,7 @@ def _build_index_context(flags, active_mode="explore"):
     all_cards = []
     eagle_cards = []
     db_cards = []
+    resource_cards = []
     image_cards = []
     video_cards = []
     folder_cards = []
@@ -529,6 +588,46 @@ def _build_index_context(flags, active_mode="explore"):
             "url": url_for("view_chrome_root"),
         })
 
+    try:
+        from src.flowinone.resource_library.database import get_resource_database
+        from src.flowinone.resource_library.service import ResourceService
+
+        configured_resource_db = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
+        resource_service = ResourceService(
+            get_resource_database(Path(configured_resource_db))
+            if configured_resource_db
+            else None
+        )
+        resource_page = resource_service.repository.list(
+            dispositions=("active",),
+            page=1,
+            per_page=48,
+        )
+        resource_cards = [
+            _content_card_from_resource(item, lane="resource")
+            for item in resource_page.items
+        ]
+        all_cards.extend(resource_cards)
+        image_cards.extend(
+            card
+            for card, item in zip(resource_cards, resource_page.items)
+            if item.get("source_type") == "image"
+        )
+        video_cards.extend(
+            card
+            for card, item in zip(resource_cards, resource_page.items)
+            if item.get("source_type") == "video"
+        )
+        context["source_summary"].append({
+            "label": "Resources",
+            "value": resource_page.total,
+            "hint": "可整理資源",
+            "tone": "ready",
+            "url": url_for("resource_library.resource_index"),
+        })
+    except Exception:
+        current_app.logger.exception("Failed to build Resource Library homepage context")
+
     cleanup_items = [
         card for card in db_cards
         if card.get("missing_thumbnail") or card.get("missing_tags")
@@ -572,6 +671,14 @@ def _build_index_context(flags, active_mode="explore"):
                 action_url=url_for("list_all_eagle_folder") if flags.get("eagle") else None,
             ))
     elif active_mode == "process":
+        if resource_cards:
+            shelves.append(_build_shelf(
+                "Resource Inbox",
+                "把未讀素材轉成可搜尋、可整併的個人知識",
+                [_clone_card(card, "等待閱讀或整理", "resource-inbox") for card in resource_cards[:12]],
+                action_label="打開 Resource Flow",
+                action_url=url_for("resource_library.resource_index"),
+            ))
         if db_cards:
             shelves.append(_build_shelf(
                 "待整理 Inbox",
@@ -631,7 +738,7 @@ def _build_index_context(flags, active_mode="explore"):
 
     hero_candidates = all_cards
     if active_mode == "process":
-        hero_candidates = db_cards
+        hero_candidates = resource_cards or db_cards
         if not hero_candidates and context["stale_db_count"]:
             context["fallback_heading"] = "本機索引需要同步"
             context["fallback_message"] = (
@@ -646,7 +753,13 @@ def _build_index_context(flags, active_mode="explore"):
     if hero_candidates:
         context["hero_item"] = _clone_card(hero_candidates[0], "從這裡繼續", "featured")
 
-    actions = []
+    actions = [{
+        "label": "整理 Resource Inbox",
+        "description": "閱讀、標記、建立靈感集合並升級為 Obsidian 筆記。",
+        "url": url_for("resource_library.resource_index"),
+        "enabled": True,
+        "tone": "neutral",
+    }]
     if context["stale_db_count"]:
         actions.append({
             "label": "同步本機索引",
@@ -679,7 +792,6 @@ def _build_index_context(flags, active_mode="explore"):
             "enabled": True,
             "tone": "neutral",
         })
-
     context["home_shelves"] = shelves
     context["action_queue"] = actions[:3]
     context["has_content"] = bool(all_cards or folder_cards or context["tag_cloud"])
@@ -713,6 +825,9 @@ def register_routes(app):
     _register_eagle_routes(app)
     _register_media_routes(app)
     _register_thumbnail_cli(app)
+    from src.flowinone.resource_library.blueprint import register_resource_library
+
+    register_resource_library(app)
 
 
 def _register_context_processors(app):
@@ -1182,6 +1297,14 @@ def _register_eagle_routes(app):
             video=video_dict,
             related_items=related_items,
             recommended_actions=recommended_actions,
+            inspiration_collections=_get_inspiration_collections(),
+            inspiration_item={
+                "source_kind": "eagle",
+                "source_id": item_id,
+                "title": metadata_dict.get("name") or video_dict.get("name"),
+                "url": request.path,
+                "thumbnail": video_dict.get("thumbnail_route"),
+            },
         )
 
     @app.route('/EAGLE_image/<item_id>/')
@@ -1209,6 +1332,14 @@ def _register_eagle_routes(app):
             image=image_dict,
             related_items=related_items,
             recommended_actions=recommended_actions,
+            inspiration_collections=_get_inspiration_collections(),
+            inspiration_item={
+                "source_kind": "eagle",
+                "source_id": item_id,
+                "title": metadata_dict.get("name") or image_dict.get("name"),
+                "url": request.path,
+                "thumbnail": image_dict.get("thumbnail_route") or image_dict.get("source_url"),
+            },
         )
 
 
@@ -1253,6 +1384,14 @@ def _register_media_routes(app):
             video=video_dict,
             related_items=_decorate_related_items(metadata_dict.get("similar"), metadata_dict),
             recommended_actions=_build_detail_actions("video", metadata_dict),
+            inspiration_collections=_get_inspiration_collections(),
+            inspiration_item={
+                "source_kind": "filesystem",
+                "source_id": f"{source}:{video_dict.get('relative_path') or video_path}",
+                "title": metadata_dict.get("name") or video_dict.get("name"),
+                "url": request.path,
+                "thumbnail": video_dict.get("thumbnail_route"),
+            },
         )
 
     @app.route('/image/<path:image_path>')
@@ -1273,4 +1412,12 @@ def _register_media_routes(app):
             image=image_dict,
             related_items=_decorate_related_items(metadata_dict.get("similar"), metadata_dict),
             recommended_actions=_build_detail_actions("image", metadata_dict),
+            inspiration_collections=_get_inspiration_collections(),
+            inspiration_item={
+                "source_kind": "filesystem",
+                "source_id": f"{source}:{image_dict.get('relative_path') or image_path}",
+                "title": metadata_dict.get("name") or image_dict.get("name"),
+                "url": request.path,
+                "thumbnail": image_dict.get("thumbnail_route") or image_dict.get("source_url"),
+            },
         )

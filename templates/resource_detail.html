@@ -1,0 +1,148 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container resource-page">
+  {% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}
+  {% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
+
+  <nav class="resource-breadcrumb" aria-label="麵包屑">
+    <a href="{{ url_for('resource_library.resource_index') }}">Resource Flow</a><span aria-hidden="true">/</span><span>{{ resource.title }}</span>
+  </nav>
+
+  <header class="resource-detail-hero">
+    <div class="resource-detail-cover"><img src="{{ resource.thumbnail_url }}" alt="{{ resource.title }} 的預覽圖" width="640" height="360"></div>
+    <div class="resource-detail-copy">
+      <p class="eyebrow">{{ resource.source_type }} · {{ resource.domain or 'unknown' }}</p>
+      <h1>{{ resource.title }}</h1>
+      <p>{{ resource.summary_one_line or resource.description or '尚未產生摘要。' }}</p>
+      <div class="resource-card-actions">
+        <a class="action-button primary" href="{{ resource.original_url }}" target="_blank" rel="noopener noreferrer">開啟原文</a>
+        <form method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
+          <input type="hidden" name="force" value="1">
+          <button class="action-button" type="submit">重新處理</button>
+        </form>
+        <form method="post" action="{{ url_for('resource_library.resource_promote', resource_id=resource.id) }}">
+          <button class="action-button" type="submit">{{ '開啟筆記' if resource.promoted else '建立 Literature Note' }}</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <div class="resource-detail-layout">
+    <div class="resource-detail-main">
+      <section class="resource-surface">
+        <div class="resource-section-heading"><h2>摘要與價值</h2><span>{{ resource.enrichment_status }}</span></div>
+        <h3>短摘要</h3>
+        <p>{{ resource.summary_short or '處理完成後會在這裡顯示可快速判斷價值的摘要。' }}</p>
+        <h3>為什麼值得注意</h3>
+        <p>{{ resource.why_this_matters or '尚未加入個人脈絡分析。' }}</p>
+        {% if resource.summary_structured_json %}<details><summary>AI 結構化摘要</summary><pre class="resource-code">{{ resource.summary_structured_json }}</pre></details>{% endif %}
+      </section>
+
+      <section class="resource-surface">
+        <h2>抽取內容</h2>
+        {% if resource.extracted_text %}<pre class="resource-reader">{{ resource.extracted_text }}</pre>{% else %}<p>目前沒有可顯示的全文或 transcript。</p>{% endif %}
+      </section>
+
+      <section class="resource-surface">
+        <h2>來源紀錄</h2>
+        {% if resource.origins %}
+        <ul class="resource-timeline">
+          {% for origin in resource.origins %}
+          <li><strong>{{ origin.source }}</strong><span>{{ origin.folder_path or '未分類' }}</span><small>{{ origin.captured_at }}</small></li>
+          {% endfor %}
+        </ul>
+        {% else %}<p>沒有來源 placement。</p>{% endif %}
+      </section>
+
+      {% if similar_resources %}
+      <section class="resource-surface">
+        <h2>相似資源</h2>
+        <div class="resource-related-grid">
+          {% for similar in similar_resources %}
+          <a href="{{ similar.detail_url }}"><strong>{{ similar.title }}</strong><span>{{ similar.source_type }} · {{ similar.domain }}</span></a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </div>
+
+    <aside class="resource-detail-side" aria-label="資源整理工具">
+      <section class="resource-surface">
+        <h2>閱讀流程</h2>
+        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}">
+          <label for="detail-reading-state">閱讀狀態</label>
+          <select id="detail-reading-state" name="reading_state">
+            {% for value, label in [('inbox','Inbox'),('unread','未讀'),('skimmed','略讀'),('reading','閱讀中'),('digested','已消化')] %}
+            <option value="{{ value }}" {% if resource.reading_state == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <label for="detail-priority">優先度 0–5</label>
+          <input id="detail-priority" type="number" min="0" max="5" name="priority" value="{{ resource.priority }}">
+          <button class="action-button primary" type="submit">儲存流程</button>
+        </form>
+        <div class="resource-card-actions">
+          <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="disposition" value="archived"><button class="action-button" type="submit">封存</button></form>
+          <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="disposition" value="rejected"><button class="action-button is-danger" type="submit">拒絕</button></form>
+        </div>
+      </section>
+
+      <section class="resource-surface">
+        <h2>個人筆記</h2>
+        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}">
+          <label for="resource-user-note">你的觀察（AI 不會覆蓋）</label>
+          <textarea id="resource-user-note" name="user_note" rows="8">{{ resource.user_note or '' }}</textarea>
+          <button class="action-button primary" type="submit">儲存筆記</button>
+        </form>
+      </section>
+
+      <section class="resource-surface">
+        <h2>Ask AI</h2>
+        {% if ai_available and resource.extracted_text %}
+        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_ask', resource_id=resource.id) }}">
+          <label for="resource-question">只根據已抽取內容提問</label>
+          <textarea id="resource-question" name="question" rows="3" required></textarea>
+          <button class="action-button" type="submit">詢問</button>
+        </form>
+        {% elif not ai_available %}
+        <p>設定 <code>LLM_BASE_URL</code> 與 <code>LLM_MODEL</code> 後即可使用；未設定不影響其他功能。</p>
+        {% else %}
+        <p>先完成內容抽取，才能避免 AI 在沒有原文的情況下作答。</p>
+        {% endif %}
+        {% set answers = resource.ai_artifacts|selectattr('artifact_type', 'equalto', 'answer')|list %}
+        {% if answers %}<div class="resource-answers">{% for answer in answers %}<article><strong>{{ answer.question }}</strong><p>{{ answer.content_text }}</p><small>{{ answer.model }} · {{ answer.created_at }}</small></article>{% endfor %}</div>{% endif %}
+      </section>
+
+      <section class="resource-surface">
+        <h2>Tags</h2>
+        <div class="resource-tags">{% for tag in resource.tags %}<span>{{ tag.name }} · {{ tag.source }}</span>{% endfor %}</div>
+        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_tags', resource_id=resource.id) }}">
+          <label for="resource-tags">使用者 Tags（逗號分隔）</label>
+          <input id="resource-tags" name="tags" value="{{ resource.tags|selectattr('source', 'equalto', 'user')|map(attribute='name')|join(', ') }}">
+          <button class="action-button" type="submit">更新 Tags</button>
+        </form>
+      </section>
+
+      <section class="resource-surface">
+        <h2>加入靈感 Collection</h2>
+        {% if collections %}
+        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_add_collection', resource_id=resource.id) }}">
+          <label for="resource-collection">Collection</label>
+          <select id="resource-collection" name="collection_id">{% for collection in collections %}<option value="{{ collection.id }}">{{ collection.title }}</option>{% endfor %}</select>
+          <label for="resource-collection-note">這個素材的用途</label>
+          <textarea id="resource-collection-note" name="annotation" rows="2"></textarea>
+          <button class="action-button" type="submit">加入 Collection</button>
+        </form>
+        {% else %}<p>先建立一個 Collection，才能跨來源整理靈感。</p><a class="action-button" href="{{ url_for('resource_library.collection_index') }}">建立 Collection</a>{% endif %}
+      </section>
+
+      <section class="resource-surface">
+        <h2>處理紀錄</h2>
+        <ul class="resource-job-list">{% for job in jobs %}<li><span>{{ job.job_type }}</span><strong>{{ job.status }}</strong>{% if job.error_message %}<small>{{ job.error_message }}</small>{% endif %}</li>{% else %}<li>尚無背景工作</li>{% endfor %}</ul>
+      </section>
+    </aside>
+  </div>
+</main>
+{% endblock %}
