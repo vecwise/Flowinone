@@ -1,0 +1,248 @@
+<!-- templates/view_both.html -->
+{% extends 'base_template.html' %}
+
+{% macro media_label(item) -%}
+  {%- set media_type = item.media_type | default('image') -%}
+  {%- if media_type == 'folder' -%}
+    Collection
+  {%- elif media_type == 'bookmark' -%}
+    Bookmark
+  {%- elif item.ext -%}
+    {{ item.ext | upper }}
+  {%- else -%}
+    {{ media_type | title }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro render_grid_card(item) %}
+{% set media_type = item.media_type | default('image') %}
+{% set is_bookmark = media_type == 'bookmark' %}
+<a class="content-card" href="{{ item.url }}" data-name="{{ item.name|lower }}"{% if is_bookmark and item.id %} data-thumbnail-id="{{ item.id }}" data-thumbnail-status="{{ item.thumbnail_status|default('missing') }}" data-thumbnail-provider="{{ item.thumbnail_provider|default('metadata') }}"{% endif %} {% if is_bookmark %}target="_blank" rel="noopener noreferrer"{% endif %}>
+  <div class="card-media">
+    <img src="{{ item.thumbnail_route }}" alt="{{ item.name }}" loading="lazy" decoding="async"{% if is_bookmark %} data-thumbnail-image{% endif %}>
+    <span class="type-badge">{{ media_label(item) }}</span>
+    {% if is_bookmark and item.thumbnail_status in ['queued', 'fetching', 'retry', 'failed'] %}
+    <span class="thumbnail-state" data-thumbnail-state>
+      {% if item.thumbnail_status == 'fetching' %}更新中{% elif item.thumbnail_status == 'queued' %}排隊中{% elif item.thumbnail_status == 'retry' %}暫用封面{% else %}本機封面{% endif %}
+    </span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <span class="card-title">{{ item.name }}</span>
+    <span class="card-meta">
+      {{ media_type | title }}{% if item.path_display %} · {{ item.path_display }}{% endif %}
+    </span>
+    {% if item.folder_labels %}
+    <span class="tag-row">
+      {% for label in item.folder_labels[:3] %}
+      <span class="tag-chip">{{ label }}</span>
+      {% endfor %}
+    </span>
+    {% endif %}
+    {% if item.description %}
+    <span class="why-line">{{ item.description }}</span>
+    {% else %}
+    <span class="why-line">Browse from this collection</span>
+    {% endif %}
+  </div>
+</a>
+{% endmacro %}
+
+{% block page_content %}
+<main class="container browse-page">
+  <header class="browse-header">
+    <div>
+      <p class="eyebrow">{{ metadata.category }}</p>
+      <h1 class="detail-title">{{ metadata.name }}</h1>
+    </div>
+    <div class="action-row">
+      <a class="action-button" href="{{ url_for('index') }}">Home</a>
+      {% if feature_flags.eagle %}
+      <a class="action-button" href="{{ url_for('list_eagle_tags') }}">Tags</a>
+      {% endif %}
+    </div>
+  </header>
+
+  {% include 'components/_metadata_panel.html' %}
+
+  <section class="browse-toolbar" aria-label="Browse controls">
+    <div class="toolbar-group">
+      <span class="toolbar-label">{{ data|length }} items</span>
+    </div>
+    <div class="toolbar-group">
+      <button id="sortButton" class="view-button" data-direction="asc">Sort A to Z</button>
+      <button id="viewToggleGrid" class="view-button is-active" data-view="grid">Grid</button>
+      <button id="viewToggleSingle" class="view-button" data-view="single">Single</button>
+      <button id="viewToggleLinear" class="view-button" data-view="linear">List</button>
+    </div>
+  </section>
+
+  {% if data|length == 0 %}
+  <section class="empty-state">
+    {% if metadata.focus_mode and metadata.focus_mode.label %}
+    <h2>{{ metadata.focus_mode.label }}</h2>
+    <p>此模式下沒有符合的書籤。</p>
+    {% else %}
+    <h2>目前沒有可顯示的項目</h2>
+    <p>回到首頁或切換其他資料夾。</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section id="gridView" class="browse-grid is-visible" aria-label="Grid view">
+    {% for image in data %}
+      {{ render_grid_card(image) }}
+    {% endfor %}
+  </section>
+
+  <section id="singlePageView" class="browse-single" aria-label="Single item view">
+    {% for image in data %}
+    {% set media_type = image.media_type | default('image') %}
+    {% if media_type != 'folder' %}
+    {% set is_bookmark = media_type == 'bookmark' %}
+    <article class="browse-single-item"{% if is_bookmark and image.id %} data-thumbnail-id="{{ image.id }}" data-thumbnail-status="{{ image.thumbnail_status|default('missing') }}" data-thumbnail-provider="{{ image.thumbnail_provider|default('metadata') }}"{% endif %}>
+      <div class="tag-row">
+        <span class="meta-chip">{{ media_label(image) }}</span>
+        {% if image.path_display %}<span class="meta-chip">{{ image.path_display }}</span>{% endif %}
+      </div>
+      <a href="{{ image.url }}" {% if is_bookmark %}target="_blank" rel="noopener noreferrer"{% endif %}>
+        <img src="{{ image.thumbnail_route }}" alt="{{ image.name }}" loading="lazy" decoding="async"{% if is_bookmark %} data-thumbnail-image{% endif %}>
+      </a>
+    </article>
+    {% endif %}
+    {% endfor %}
+  </section>
+
+  <section id="linearView" class="browse-linear" aria-label="List view">
+    {% for image in data %}
+    {% set media_type = image.media_type | default('image') %}
+    {% set is_bookmark = media_type == 'bookmark' %}
+    <article class="linear-card" data-name="{{ image.name|lower }}"{% if is_bookmark and image.id %} data-thumbnail-id="{{ image.id }}" data-thumbnail-status="{{ image.thumbnail_status|default('missing') }}" data-thumbnail-provider="{{ image.thumbnail_provider|default('metadata') }}"{% endif %}>
+      <a href="{{ image.url }}" {% if is_bookmark %}target="_blank" rel="noopener noreferrer"{% endif %}>
+        <img src="{{ image.thumbnail_route }}" alt="{{ image.name }}" loading="lazy" decoding="async"{% if is_bookmark %} data-thumbnail-image{% endif %}>
+      </a>
+      <div class="linear-card-body">
+        <div class="tag-row">
+          <span class="meta-chip">{{ media_label(image) }}</span>
+          <span class="meta-chip">{{ media_type | title }}</span>
+        </div>
+        <h2 class="linear-card-title">{{ image.name }}</h2>
+        {% if image.description %}
+        <p class="linear-card-description">{{ image.description }}</p>
+        {% endif %}
+        <div class="action-row">
+          <a class="action-button primary" href="{{ image.url }}" {% if is_bookmark %}target="_blank" rel="noopener noreferrer"{% endif %}>Open</a>
+          {% if media_type != 'folder' and media_type != 'bookmark' %}
+          <a class="action-button" href="{{ image.thumbnail_route }}" download>Download thumbnail</a>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+  <p id="thumbnailSyncStatus" class="sr-only" aria-live="polite"></p>
+</main>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const sortButton = document.getElementById('sortButton');
+    const gridView = document.getElementById('gridView');
+    const singleView = document.getElementById('singlePageView');
+    const linearView = document.getElementById('linearView');
+    const gridToggle = document.getElementById('viewToggleGrid');
+    const singleToggle = document.getElementById('viewToggleSingle');
+    const linearToggle = document.getElementById('viewToggleLinear');
+    const thumbnailStatusRegion = document.getElementById('thumbnailSyncStatus');
+
+    function setActiveView(view) {
+      gridView.classList.toggle('is-visible', view === 'grid');
+      singleView.classList.toggle('is-visible', view === 'single');
+      linearView.classList.toggle('is-visible', view === 'linear');
+      gridToggle.classList.toggle('is-active', view === 'grid');
+      singleToggle.classList.toggle('is-active', view === 'single');
+      linearToggle.classList.toggle('is-active', view === 'linear');
+    }
+
+    function sortChildren(parent, direction) {
+      const items = Array.from(parent.children);
+      items.sort((a, b) => {
+        const nameA = a.getAttribute('data-name') || '';
+        const nameB = b.getAttribute('data-name') || '';
+        const comparison = nameA.localeCompare(nameB);
+        return direction === 'asc' ? comparison : -comparison;
+      });
+      items.forEach(item => parent.appendChild(item));
+    }
+
+    function toggleSortDirection() {
+      const direction = sortButton.dataset.direction === 'asc' ? 'desc' : 'asc';
+      sortButton.dataset.direction = direction;
+      sortButton.textContent = direction === 'asc' ? 'Sort A to Z' : 'Sort Z to A';
+      sortChildren(gridView, direction);
+      sortChildren(linearView, direction);
+    }
+
+    sortButton.addEventListener('click', toggleSortDirection);
+    gridToggle.addEventListener('click', () => setActiveView('grid'));
+    singleToggle.addEventListener('click', () => setActiveView('single'));
+    linearToggle.addEventListener('click', () => setActiveView('linear'));
+    setActiveView('grid');
+
+    const pendingStatuses = new Set(['missing', 'queued', 'fetching']);
+    const pendingIds = new Set(
+      Array.from(document.querySelectorAll('[data-thumbnail-id][data-thumbnail-status]'))
+        .filter(element => pendingStatuses.has(element.dataset.thumbnailStatus))
+        .map(element => element.dataset.thumbnailId)
+    );
+
+    function updateThumbnailItem(item) {
+      const containers = document.querySelectorAll(`[data-thumbnail-id="${item.id}"]`);
+      containers.forEach(container => {
+        container.dataset.thumbnailStatus = item.status;
+        container.dataset.thumbnailProvider = item.provider || 'metadata';
+        container.querySelectorAll('[data-thumbnail-image]').forEach(image => {
+          if (item.thumbnail_url && image.getAttribute('src') !== item.thumbnail_url) {
+            image.setAttribute('src', item.thumbnail_url);
+          }
+        });
+        const state = container.querySelector('[data-thumbnail-state]');
+        if (state) {
+          if (item.status === 'ready') {
+            state.remove();
+          } else if (item.status === 'fetching') {
+            state.textContent = '更新中';
+          } else if (item.status === 'queued') {
+            state.textContent = '排隊中';
+          } else {
+            state.textContent = item.thumbnail_url ? '暫用封面' : '本機封面';
+          }
+        }
+      });
+      if (!pendingStatuses.has(item.status)) {
+        pendingIds.delete(item.id);
+      }
+    }
+
+    async function pollPendingThumbnails() {
+      if (!pendingIds.size) {
+        if (thumbnailStatusRegion) thumbnailStatusRegion.textContent = '書籤縮圖已完成更新。';
+        return;
+      }
+      const ids = Array.from(pendingIds).slice(0, 200);
+      try {
+        const response = await fetch(`/api/bookmark-thumbnails/status?ids=${encodeURIComponent(ids.join(','))}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) throw new Error(`Thumbnail status ${response.status}`);
+        const payload = await response.json();
+        (payload.items || []).forEach(updateThumbnailItem);
+      } catch (error) {
+        if (thumbnailStatusRegion) thumbnailStatusRegion.textContent = '目前無法取得縮圖更新狀態。';
+      }
+      if (pendingIds.size) window.setTimeout(pollPendingThumbnails, 3000);
+    }
+
+    if (pendingIds.size) window.setTimeout(pollPendingThumbnails, 3000);
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "base_template.html" %}
+
+{% block page_content %}
+<main id="main-content" class="container browse-page">
+    <header class="browse-header">
+        <div>
+            <p class="eyebrow">Local index</p>
+            <h1 class="detail-title">Inbox</h1>
+            <p class="shelf-kicker">
+                {{ payload.total }} 筆索引 · {{ available_count }} 筆可用 · {{ stale_count }} 筆需同步
+                {% if selected_tag %}· #{{ selected_tag }}{% endif %}
+            </p>
+        </div>
+        <div class="action-row">
+            <a class="action-button" href="{{ url_for('index', mode='process') }}">返回整理台</a>
+            <a class="action-button {% if stale_count %}warning{% endif %}" href="{{ url_for('update_item_db_route') }}">同步索引</a>
+            {% if available_count %}<a class="action-button" href="{{ url_for('update_thumbnails_route') }}">補縮圖</a>{% endif %}
+        </div>
+    </header>
+
+    {% if stale_count %}
+    <section class="health-notice" role="status">
+        <div>
+            <strong>索引與檔案系統不同步</strong>
+            <p>這一頁不再把失效紀錄做成可點擊入口，避免導向 404。同步索引後會移除不存在的來源。</p>
+        </div>
+        <span class="health-count">{{ stale_count }}</span>
+    </section>
+    {% endif %}
+
+    <section class="metadata-panel">
+        <h2>Storage</h2>
+        <div class="metadata-field">
+            <span>DB path</span>
+            <code>{{ payload.db_path }}</code>
+        </div>
+    </section>
+
+    {% if db_rows %}
+    <section class="data-table-wrap" aria-label="Item DB records">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Type</th>
+                    <th>Tags</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in db_rows %}
+                {% set item = row.item %}
+                {% set card = row.card %}
+                <tr class="{% if not card.is_available %}is-stale{% endif %}">
+                    <td>
+                        <div class="table-title-cell">
+                            <img class="thumb-sm" src="{{ card.thumbnail_route }}" alt="{{ item.name }}" loading="lazy">
+                            <div>
+                                <strong>{{ item.name }}</strong>
+                                <code class="path-code">{{ item.relative_path }}</code>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="meta-chip">{{ card.type_label }}</span></td>
+                    <td>
+                        <div class="tag-row">
+                            {% for tag in item.tags[:4] %}
+                            <a class="tag-chip" href="{{ url_for('view_item_db', tag=tag) }}">#{{ tag }}</a>
+                            {% else %}
+                            <span class="meta-chip">缺 tags</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if not card.is_available %}
+                        <span class="status-chip is-warning">來源失效</span>
+                        {% elif item.is_archived %}
+                        <span class="status-chip">已封存</span>
+                        {% elif not item.thumbnail_route %}
+                        <span class="status-chip">缺縮圖</span>
+                        {% else %}
+                        <span class="status-chip is-ready">可用</span>
+                        {% endif %}
+                    </td>
+                    <td class="date-cell">{{ item.updated_at }}</td>
+                    <td>
+                        {% if card.url %}
+                        <a class="action-button" href="{{ card.url }}">開啟</a>
+                        {% else %}
+                        <span class="action-button is-disabled" aria-disabled="true">無法開啟</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% else %}
+    <section class="empty-state">
+        <h2>目前沒有符合的索引項目</h2>
+        <p>同步 DB 或移除目前的 tag 篩選。</p>
+    </section>
+    {% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,53 @@
+<nav class="app-nav" aria-label="主要導覽">
+    <a class="app-brand" href="{{ url_for('index') }}">
+        <span class="app-brand-mark" aria-hidden="true">F</span>
+        <span>
+            <strong>Flowinone</strong>
+            <small>Personal archive</small>
+        </span>
+    </a>
+
+    <div class="nav-links">
+        <a class="{% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>工作台</a>
+        {% if feature_flags.eagle %}
+        <a class="{% if request.endpoint in ['list_all_eagle_folder', 'view_eagle_folder'] %}is-active{% endif %}" href="{{ url_for('list_all_eagle_folder') }}" {% if request.endpoint in ['list_all_eagle_folder', 'view_eagle_folder'] %}aria-current="page"{% endif %}>集合</a>
+        {% elif feature_flags.db %}
+        <a class="{% if request.endpoint in ['view_collections', 'view_both'] %}is-active{% endif %}" href="{{ url_for('view_collections') }}" {% if request.endpoint in ['view_collections', 'view_both'] %}aria-current="page"{% endif %}>集合</a>
+        {% endif %}
+        {% if feature_flags.db %}
+        <a class="{% if request.endpoint == 'view_item_db' %}is-active{% endif %}" href="{{ url_for('view_item_db') }}" {% if request.endpoint == 'view_item_db' %}aria-current="page"{% endif %}>Inbox</a>
+        {% endif %}
+        {% if feature_flags.chrome %}
+        <a class="{% if request.endpoint in ['view_chrome_root', 'view_chrome_folder'] %}is-active{% endif %}" href="{{ url_for('view_chrome_root') }}" {% if request.endpoint in ['view_chrome_root', 'view_chrome_folder'] %}aria-current="page"{% endif %}>書籤</a>
+        {% endif %}
+        {% if feature_flags.eagle %}
+        <a class="{% if request.endpoint in ['list_eagle_tags', 'view_images_by_tag'] %}is-active{% endif %}" href="{{ url_for('list_eagle_tags') }}" {% if request.endpoint in ['list_eagle_tags', 'view_images_by_tag'] %}aria-current="page"{% endif %}>Tags</a>
+        {% endif %}
+    </div>
+
+    <div class="nav-actions">
+        {% if feature_flags.eagle %}
+        <form class="search-container" action="{{ url_for('search_eagle') }}" method="GET" role="search">
+            <label class="sr-only" for="globalSearch">搜尋 Flowinone</label>
+            <input id="globalSearch" type="search" placeholder="搜尋內容或 tag" name="query">
+            <button type="submit">搜尋</button>
+        </form>
+        {% endif %}
+
+        <details class="nav-tools">
+            <summary>更多</summary>
+            <div class="nav-tools-menu">
+                {% if feature_flags.eagle %}<a href="{{ url_for('eagle_stream') }}">Eagle 串流</a>{% endif %}
+                {% if feature_flags.youtube %}<a href="{{ url_for('view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
+                {% if feature_flags.db %}
+                <a href="{{ url_for('view_collections') }}">本機資料庫</a>
+                <span class="nav-menu-label">Maintenance</span>
+                <a href="{{ url_for('update_item_db_route') }}">同步 DB 索引</a>
+                <a href="{{ url_for('update_thumbnails_route') }}">補齊縮圖</a>
+                <a href="{{ url_for('update_thumbnails_route', force=1) }}">重建縮圖</a>
+                <a class="is-danger" href="{{ url_for('clear_thumbnails_route') }}">清除縮圖索引</a>
+                {% endif %}
+            </div>
+        </details>
+    </div>
+</nav>

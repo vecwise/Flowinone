@@ -1,0 +1,29 @@
+{% extends "base_template.html" %}
+{% block page_content %}
+<main class="content">
+    <section class="card">
+        <h1>Thumbnails 更新結果</h1>
+        {% if result.base_dir %}
+        <p>Base: <code>{{ result.base_dir }}</code></p>
+        {% endif %}
+        {% if forced %}<p><strong>已強制重建所有縮圖。</strong></p>{% endif %}
+        <p>DB: <code>{{ result.db_path }}</code></p>
+        <ul>
+            <li>已更新: {{ result.updated }}</li>
+            <li>未更新: {{ result.pending }}</li>
+        </ul>
+        {% if result.errors %}
+        <div class="errors">
+            <h2>錯誤</h2>
+            <ul>
+                {% for path, message in result.errors %}
+                <li><strong>{{ path }}</strong>: {{ message }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <p>沒有錯誤。</p>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}

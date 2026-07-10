@@ -1,0 +1,125 @@
+<!-- templates/components/_metadata_panel.html -->
+{% set compact_metadata = metadata.category in ['chrome', 'chrome-youtube'] %}
+{% if compact_metadata %}
+<details class="metadata-panel metadata-panel--compact" aria-label="Collection context">
+  <summary>
+    <span>內容脈絡</span>
+    <strong>
+      {% if metadata.focus_stats %}{{ metadata.focus_stats.total_bookmarks }} bookmarks{% else %}{{ metadata.category }}{% endif %}
+    </strong>
+  </summary>
+  <div class="metadata-panel-body">
+{% else %}
+<section class="metadata-panel" aria-label="Item metadata">
+  <h2>Metadata Layer</h2>
+{% endif %}
+
+  <div class="metadata-grid">
+    <div class="metadata-field">
+      <span>Name</span>
+      <strong>{{ metadata.name }}</strong>
+    </div>
+
+    <div class="metadata-field">
+      <span>Category</span>
+      <strong>{{ metadata.category }}</strong>
+    </div>
+
+    {% if metadata.ext %}
+    <div class="metadata-field">
+      <span>Format</span>
+      <strong>{{ metadata.ext | upper }}</strong>
+    </div>
+    {% endif %}
+
+    {% if metadata.path %}
+    <div class="metadata-field">
+      <span>Route</span>
+      <code>{{ metadata.path }}</code>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if metadata.description %}
+  <div class="metadata-field">
+    <span>Description</span>
+    <strong>{{ metadata.description }}</strong>
+  </div>
+  {% endif %}
+
+  {% if metadata.focus_modes %}
+  <div class="metadata-field">
+    {% if metadata.focus_modes|length > 1 %}
+    <form class="focus-mode-form" method="get" action="{{ request.path }}">
+      <label for="focusModeSelect">Focus mode</label>
+      <select id="focusModeSelect" name="mode" onchange="this.form.submit()">
+        {% for mode in metadata.focus_modes %}
+        <option value="{{ mode.id }}" {% if mode.is_active %}selected{% endif %}>
+          {{ mode.label }}
+        </option>
+        {% endfor %}
+      </select>
+      {% for key, value in request.args.items() if key != 'mode' %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+      {% endfor %}
+    </form>
+    {% elif metadata.focus_mode %}
+    <span>Focus mode</span>
+    <strong>{{ metadata.focus_mode.label }}</strong>
+    {% endif %}
+
+    {% if metadata.focus_mode and metadata.focus_mode.description %}
+    <p class="small-note">{{ metadata.focus_mode.description }}</p>
+    {% endif %}
+
+    {% if metadata.focus_stats %}
+    <p class="small-note">
+      {% if metadata.focus_stats.mode_id != 'all' %}
+        {{ metadata.focus_stats.matched_bookmarks }} / {{ metadata.focus_stats.total_bookmarks }} bookmarks matched in this level{% if metadata.focus_stats.matched_including_subfolders is not none %}; {{ metadata.focus_stats.matched_including_subfolders }} including subfolders{% endif %}.
+      {% else %}
+        {{ metadata.focus_stats.total_bookmarks }} bookmarks in this level.
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if metadata.tags %}
+  <div>
+    <p class="small-note">Tags are recommendation graph nodes.</p>
+    <div class="tag-row">
+      {% for tag in metadata.tags %}
+      {% if compact_metadata %}
+      <span class="tag-chip">#{{ tag }}</span>
+      {% else %}
+      <a href="{{ url_for('view_images_by_tag', target_tag=tag) }}" class="tag-chip">#{{ tag }}</a>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if metadata.folders %}
+  <div>
+    <p class="small-note">Source collections</p>
+    <div class="tag-row">
+      {% for folder in metadata.folders %}
+      <a href="{{ folder.url }}" class="tag-chip">{{ folder.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if metadata.filesystem_path %}
+  <div class="metadata-field">
+    <span>Filesystem path</span>
+    <code>{{ metadata.filesystem_path }}</code>
+    <a class="action-button" href="{{ url_for('open_filesystem_path') }}?path={{ metadata.filesystem_path | urlencode }}">Open folder</a>
+  </div>
+  {% endif %}
+{% if compact_metadata %}
+  </div>
+</details>
+{% else %}
+</section>
+{% endif %}

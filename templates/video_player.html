@@ -1,0 +1,97 @@
+<!-- templates/video_player.html -->
+{% extends 'base_template.html' %}
+
+{% block page_content %}
+<main class="container detail-page">
+  <header class="detail-header">
+    <div>
+      <p class="eyebrow">影片項目</p>
+      <h1 class="detail-title">{{ metadata.name }}</h1>
+    </div>
+    <div class="action-row">
+      <a href="{{ video.parent_url }}" class="action-button">返回</a>
+      <a href="{{ video.download_url }}" class="action-button" download>下載</a>
+    </div>
+  </header>
+
+  <section class="detail-shell">
+    <div class="reader-surface">
+      <div class="media-stage">
+        <video controls preload="metadata" poster="{{ video.thumbnail_route }}">
+          <source src="{{ video.source_url }}" type="{{ video.mime_type }}">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <div class="detail-meta-strip">
+        {% if metadata.ext %}<span class="meta-chip">{{ metadata.ext | upper }}</span>{% endif %}
+        <span class="meta-chip">{{ video.size_display }}</span>
+        <span class="meta-chip">{{ video.modified_time }}</span>
+        {% if video.original_url %}
+        <a class="meta-chip" href="{{ video.original_url }}" target="_blank" rel="noopener">來源</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <aside class="side-rail" aria-label="Up next">
+      <section id="related">
+        <h2>Up Next</h2>
+        {% if related_items %}
+        <div class="rail-list">
+          {% for item in related_items %}
+          <a class="rail-card" href="{{ item.url }}">
+            <img src="{{ item.thumbnail_route }}" alt="{{ item.title }}">
+            <span>
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.why }}</span>
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="small-note">目前沒有相關項目。</p>
+        {% endif %}
+      </section>
+
+      {% if recommended_actions %}
+      <section>
+        <h2>下一步</h2>
+        <div class="rail-actions">
+          {% for action in recommended_actions %}
+          {% if action.url %}
+          <a class="rail-action" href="{{ action.url }}">
+          {% elif action.id == 'back' %}
+          <a class="rail-action" href="{{ video.parent_url }}">
+          {% elif action.id == 'note' %}
+          <a class="rail-action" href="#notes">
+          {% else %}
+          <a class="rail-action" href="#related">
+          {% endif %}
+            <strong>{{ action.label }}</strong>
+            <span>{{ action.description }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </aside>
+  </section>
+
+  <section class="detail-body-grid">
+    <section id="notes" class="note-surface">
+      <h2>個人筆記</h2>
+      <p>尚未建立個人筆記。之後可連到 Obsidian note 或 project page。</p>
+    </section>
+
+    <section class="note-surface">
+      <h2>AI Metadata</h2>
+      {% if metadata.description %}
+      <p>{{ metadata.description }}</p>
+      {% else %}
+      <p>尚未建立 AI summary。原始內容仍是主資料來源。</p>
+      {% endif %}
+    </section>
+  </section>
+
+  {% include 'components/_metadata_panel.html' %}
+</main>
+{% endblock %}

@@ -1,0 +1,158 @@
+{% extends 'base_template.html' %}
+
+{% macro render_content_card(item, priority=false) %}
+{% if item.url %}
+<a class="content-card" href="{{ item.url }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>
+{% else %}
+<article class="content-card is-unavailable" aria-disabled="true">
+{% endif %}
+  <div class="card-media">
+    <img src="{{ item.thumbnail_route }}" alt="{{ item.title }}" {% if priority %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+    <span class="type-badge">{{ item.type_label }}</span>
+    {% if not item.is_available %}<span class="availability-badge">來源失效</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <span class="card-title">{{ item.title }}</span>
+    <span class="card-meta">{{ item.meta_line }}</span>
+    {% if item.tags %}
+    <span class="tag-row" aria-label="Tags">
+      {% for tag in item.tags %}<span class="tag-chip">#{{ tag }}</span>{% endfor %}
+    </span>
+    {% endif %}
+    <span class="why-line">{{ item.disabled_reason or item.why }}</span>
+  </div>
+{% if item.url %}</a>{% else %}</article>{% endif %}
+{% endmacro %}
+
+{% block page_content %}
+<main id="main-content" class="container flow-page">
+  <header class="workbench-header">
+    <div class="workbench-copy">
+      <div>
+        <p class="eyebrow">Personal Content OS</p>
+        <h1 class="workbench-title">Flowinone</h1>
+        <p class="workbench-subtitle">{{ mode_heading }} · {{ mode_description }}</p>
+      </div>
+
+      <nav class="mode-tabs" aria-label="工作情境">
+        {% for mode in modes %}
+        <a class="mode-pill {% if mode.id == active_mode %}is-active{% endif %}"
+           href="{{ mode.url }}"
+           {% if mode.id == active_mode %}aria-current="page"{% endif %}>{{ mode.label }}</a>
+        {% endfor %}
+      </nav>
+    </div>
+
+    {% if source_summary %}
+    <aside class="source-dock" aria-label="來源狀態">
+      <div class="source-dock-heading">
+        <span>Sources</span>
+        <span class="source-live">Live index</span>
+      </div>
+      <div class="stats-strip">
+        {% for stat in source_summary %}
+        {% if stat.url %}<a class="stat-tile tone-{{ stat.tone }}" href="{{ stat.url }}">{% else %}<div class="stat-tile tone-{{ stat.tone }}">{% endif %}
+          <span class="stat-label">{{ stat.label }}</span>
+          <strong>{{ stat.value }}</strong>
+          <span class="stat-hint">{{ stat.hint }}</span>
+        {% if stat.url %}</a>{% else %}</div>{% endif %}
+        {% endfor %}
+      </div>
+    </aside>
+    {% endif %}
+  </header>
+
+  <section class="decision-grid" aria-label="目前焦點">
+    <div class="hero-preview">
+      <div class="panel-heading">
+        <span class="panel-index">01</span>
+        <div>
+          <h2>從這裡繼續</h2>
+          <p>最近可用的內容入口</p>
+        </div>
+      </div>
+      {% if hero_item %}
+        {{ render_content_card(hero_item, true) }}
+      {% else %}
+      <section class="empty-state">
+        <h2>{{ fallback_heading }}</h2>
+        <p>{{ fallback_message }}</p>
+      </section>
+      {% endif %}
+    </div>
+
+    <aside class="next-actions" aria-label="下一步">
+      <div class="panel-heading">
+        <span class="panel-index">02</span>
+        <div>
+          <h2>下一步</h2>
+          <p>依目前資料狀態排序</p>
+        </div>
+      </div>
+      <div class="queue-panel">
+        {% for action in action_queue %}
+        {% if action.enabled %}
+        <a class="queue-item tone-{{ action.tone }}" href="{{ action.url }}">
+          <span class="queue-order">0{{ loop.index }}</span>
+          <span>
+            <strong>{{ action.label }}</strong>
+            <small>{{ action.description }}</small>
+          </span>
+        </a>
+        {% else %}
+        <div class="queue-item is-disabled" aria-disabled="true">
+          <span class="queue-order">0{{ loop.index }}</span>
+          <span>
+            <strong>{{ action.label }}</strong>
+            <small>{{ action.description }}</small>
+          </span>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </aside>
+  </section>
+
+  {% for shelf in home_shelves %}
+  <section class="shelf" aria-label="{{ shelf['title'] }}">
+    <div class="shelf-header">
+      <div>
+        <h2 class="shelf-title">{{ shelf['title'] }}</h2>
+        <p class="shelf-kicker">{{ shelf['kicker'] }}</p>
+      </div>
+      {% if shelf['action_url'] and shelf['action_label'] %}
+      <a class="action-button" href="{{ shelf['action_url'] }}">{{ shelf['action_label'] }}</a>
+      {% endif %}
+    </div>
+    <div class="{% if shelf['layout'] == 'compact' %}shelf-grid{% else %}shelf-rail{% endif %}">
+      {% for item in shelf['items'] %}{{ render_content_card(item) }}{% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  {% if show_tag_cloud and tag_cloud %}
+  <section class="shelf tag-section" aria-label="Tag 圖譜">
+    <div class="shelf-header">
+      <div>
+        <h2 class="shelf-title">Tag 圖譜</h2>
+        <p class="shelf-kicker">跨越資料夾邊界的主題入口</p>
+      </div>
+    </div>
+    <div class="tag-cloud">
+      {% for tag in tag_cloud %}
+      <a class="tag-chip" href="{{ tag.url }}">
+        #{{ tag.name }}{% if tag.count %}<span>{{ tag.count }}</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if not has_content %}
+  <section class="empty-state">
+    <h2>目前沒有內容來源</h2>
+    <p>設定 Eagle、本機資料庫或 Chrome 書籤後，首頁會建立可探索的內容路徑。</p>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

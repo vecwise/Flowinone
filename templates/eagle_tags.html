@@ -1,0 +1,35 @@
+<!-- templates/eagle_tags.html -->
+{% extends 'base_template.html' %}
+
+{% block page_content %}
+<main class="container browse-page">
+  <header class="browse-header">
+    <div>
+      <p class="eyebrow">Tag Graph</p>
+      <h1 class="detail-title">{{ metadata.name }}</h1>
+      <p class="shelf-kicker">以 tag 進入主題、來源與相鄰素材。</p>
+    </div>
+    <div class="action-row">
+      <a class="action-button" href="{{ url_for('index') }}">Home</a>
+      <a class="action-button" href="{{ url_for('list_all_eagle_folder') }}">Folders</a>
+    </div>
+  </header>
+
+  {% include 'components/_metadata_panel.html' %}
+
+  {% if tags %}
+  <section class="tag-cloud" aria-label="Eagle tags">
+    {% for tag in tags %}
+    <a class="tag-chip" href="{{ url_for('view_images_by_tag', target_tag=tag.name) }}">
+      #{{ tag.name }}{% if tag.count is not none %}<span>&nbsp;{{ tag.count }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </section>
+  {% else %}
+  <section class="empty-state">
+    <h2>找不到任何標籤</h2>
+    <p>當 Eagle item 有 tags 後，這裡會成為主題入口。</p>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

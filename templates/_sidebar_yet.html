@@ -1,0 +1,17 @@
+<div class="sidebar">
+    <ul>
+        {% for dirpath, content in dir_structure.items() %}
+            <li class="folder" onclick="toggleFolder(event)">
+                {{ dirpath }}
+                <ul>
+                    {% for dir in content.dirs %}
+                        <li class="folder" onclick="toggleFolder(event)">{{ dir }}</li>
+                    {% endfor %}
+                    {% for file in content.files %}
+                        <li class="file"><a href="{{ url_for('static', filename=dirpath + '/' + file) }}" target="_blank">{{ file }}</a></li>
+                    {% endfor %}
+                </ul>
+            </li>
+        {% endfor %}
+    </ul>
+</div>

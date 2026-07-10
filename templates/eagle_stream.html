@@ -1,0 +1,115 @@
+<!-- templates/eagle_stream.html -->
+{% extends 'base_template.html' %}
+
+{% block page_content %}
+<main class="container flow-page">
+  <header class="browse-header">
+    <div>
+      <p class="eyebrow">Eagle</p>
+      <h1 class="detail-title">EAGLE Stream</h1>
+      <p class="shelf-kicker">分批瀏覽最新圖片與影片。</p>
+    </div>
+    <div class="action-row">
+      <a class="action-button" href="{{ url_for('index') }}">Home</a>
+      <a class="action-button" href="{{ url_for('list_all_eagle_folder') }}">Folders</a>
+      <a class="action-button" href="{{ url_for('list_eagle_tags') }}">Tags</a>
+    </div>
+  </header>
+
+  <section id="streamGrid" class="shelf-grid" aria-live="polite"></section>
+
+  <p id="streamStatus" class="stream-status">準備載入第一批內容。</p>
+
+  <div class="load-more-row">
+    <button id="loadMoreButton" class="action-button primary" type="button">載入更多</button>
+  </div>
+</main>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const grid = document.getElementById('streamGrid');
+    const status = document.getElementById('streamStatus');
+    const loadMoreButton = document.getElementById('loadMoreButton');
+
+    let offset = 0;
+    const limit = 24;
+    let loading = false;
+    let reachedEnd = false;
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function typeLabel(item) {
+      if (item.media_type === 'folder') return 'Collection';
+      if (item.ext) return item.ext.toUpperCase();
+      return (item.media_type || 'Item').toUpperCase();
+    }
+
+    function renderCard(item) {
+      const card = document.createElement('a');
+      card.className = 'content-card';
+      card.href = item.detail_url;
+      card.innerHTML = `
+        <div class="card-media">
+          <img src="${escapeHtml(item.thumbnail_route)}" alt="${escapeHtml(item.name)}">
+          <span class="type-badge">${escapeHtml(typeLabel(item))}</span>
+        </div>
+        <div class="card-body">
+          <span class="card-title">${escapeHtml(item.name)}</span>
+          <span class="card-meta">Eagle · ${escapeHtml(typeLabel(item))}</span>
+          <span class="why-line">手動載入批次</span>
+        </div>
+      `;
+      return card;
+    }
+
+    async function loadItems() {
+      if (loading || reachedEnd) return;
+      loading = true;
+      loadMoreButton.disabled = true;
+      loadMoreButton.textContent = '載入中';
+      status.textContent = '載入內容中...';
+
+      try {
+        const response = await fetch(`/api/EAGLE_stream/?offset=${offset}&limit=${limit}`);
+        if (!response.ok) {
+          throw new Error(`Failed to load stream items: ${response.statusText}`);
+        }
+
+        const payload = await response.json();
+        const items = payload.items || [];
+        if (!items.length) {
+          reachedEnd = true;
+          status.textContent = '沒有更多內容。';
+          loadMoreButton.hidden = true;
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach(item => fragment.appendChild(renderCard(item)));
+        grid.appendChild(fragment);
+        offset = payload.nextOffset ?? (offset + items.length);
+        status.textContent = `已載入 ${offset} 個項目。`;
+      } catch (error) {
+        console.error(error);
+        status.textContent = '載入失敗，請稍後重試。';
+      } finally {
+        loading = false;
+        if (!reachedEnd) {
+          loadMoreButton.disabled = false;
+          loadMoreButton.textContent = '載入更多';
+        }
+      }
+    }
+
+    loadMoreButton.addEventListener('click', loadItems);
+    loadItems();
+  });
+</script>
+{% endblock %}

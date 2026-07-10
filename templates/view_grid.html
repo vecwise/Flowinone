@@ -1,0 +1,39 @@
+<!-- templates/view_grid.html -->
+{% extends 'base_template.html' %}
+
+{% block custom_style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/grid_styles.css') }}">
+{% endblock %}
+
+{% block page_content %}
+<div class="container">
+    <h1>{{ metadata.name }}</h1>
+    {% if metadata.category == 'collections' %}
+        <!-- 展示資料夾 -->
+        <div class="image-grid">
+            {% for item in data %}
+                <div class="image-item">
+                    <a href="{{ item.url }}">
+                        <img src="{{ item.thumbnail_route }}" alt="Folder Thumbnail">
+                        <div class="image-overlay"><span>{{ item.name }}</span></div>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>        
+    {% elif metadata.category in ['folder', 'tag'] %}
+    <!-- 展示圖片 -->
+    <div class="image-grid">
+      {% for item in data %}
+        <div class="image-item">
+          <a href="{{ item.url }}">
+            <img src="{{ item.thumbnail_route }}" alt="{{ item.name }}">
+            <div class="image-overlay">
+                <span>{{ item.name }}</span>
+            </div>
+          </a>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

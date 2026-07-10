@@ -1,0 +1,21 @@
+.toggle-button {
+    display: inline-block;
+    padding: 12px 30px;  /* 调整按钮的内边距，使其更大更明显 */
+    font-size: 16px;  /* 增大字体 */
+    font-weight: bold;  /* 加粗字体 */
+    color: #fff;  /* 文字颜色为白色 */
+    background: linear-gradient(135deg, #42a5f5, #1e88e5);  /* 添加渐变背景 */
+    border: none;  /* 移除边框 */
+    border-radius: 25px;  /* 圆角 */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);  /* 添加阴影效果 */
+    cursor: pointer;  /* 鼠标悬停时显示手型光标 */
+    transition: all 0.3s ease;  /* 添加过渡效果，使悬停效果更加平滑 */
+    margin: 20px auto;
+    text-align: center;  /* 居中文本 */
+    /* float: right; */
+}
+.toggle-button:hover {
+    background: linear-gradient(135deg, #1e88e5, #1565c0);  /* 悬停时改变背景颜色 */
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);  /* 悬停时增加阴影 */
+    transform: translateY(-2px);  /* 悬停时按钮向上移动 */
+}  

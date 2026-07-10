@@ -1,0 +1,23 @@
+<!-- templates/view_slide.html -->
+{% extends 'base_template.html' %}
+
+{% block custom_style %}
+<style>
+    img {
+        display: block;
+        width: 75%;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+        margin: 0 auto 20px;  /* 上下边距分别是 0 和 20px，左右边距自动居中 */
+    }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="container">
+    <h1>{{ metadata.name }}</h1>
+    {% for image in data %}
+        <img src="{{ image.thumbnail_route }}" alt="Comic Image">
+    {% endfor %}
+</div>
+{% endblock %}

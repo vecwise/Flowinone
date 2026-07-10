@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<!--if else in html; {{title}}: can be substituted by title-->
+	{% if title %}
+	  <title>Flask Blog - {{ title }}</title>
+	{% else %}
+	  <title>Flask Blog</title>
+	{% endif %}
+</head>
+<body>
+	<!--for every sub-list, take its elements-->
+	{% for post in df_to_post %}
+	  <h1>{{ post.title }}</h1>
+	  <p>By {{ post.author }} on {{ post.date_posted }}</p>
+	  <p>{{ post.content }}</p>
+	{% endfor %}
+</body>
+</html>
