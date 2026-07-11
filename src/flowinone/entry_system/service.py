@@ -19,6 +19,14 @@ class EntrySystemError(ValueError):
 
 
 ENTRY_ALLOWED_SCHEMES = {"http", "https", "file", "obsidian", "vscode", "eagle"}
+ENTRY_TRANSITIONS = {
+    "scan": ("learn", "build"),
+    "learn": ("think", "build", "write"),
+    "think": ("build", "write"),
+    "build": ("write",),
+    "recover": (),
+    "write": (),
+}
 _SAFE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 _MAX_JSON_CHARS = 32_000
 
@@ -425,6 +433,53 @@ class EntryService:
         )
         return {"think_entry": thought, "build_entry": build}
 
+    def transition_entry(self, entry_id: str, data: Mapping[str, Any]) -> dict[str, Any]:
+        """Create an explicitly requested next-mode Entry with provenance."""
+        source = self.repository.get_entry(entry_id)
+        target_mode = str(data.get("target_mode") or data.get("mode") or "").strip().lower()
+        if target_mode not in ENTRY_TRANSITIONS.get(source["mode"], ()):
+            raise EntrySystemError(f"不支援 {source['mode'].upper()} → {target_mode.upper() or '?'} 的轉換")
+        next_action = _clean_text(data.get("next_action"), "下一步", limit=4_000)
+        if target_mode == "build" and not next_action:
+            raise EntrySystemError("轉成 BUILD 時必須提供下一步")
+        context = dict(source.get("context") or {})
+        context["transition"] = {
+            "source_entry_id": source["id"],
+            "source_mode": source["mode"],
+            "target_mode": target_mode,
+        }
+        if target_mode == "learn":
+            context["learn"] = {
+                "question": _clean_text(data.get("learning_question"), "學習問題", limit=4_000),
+                "stop_condition": _clean_text(data.get("stop_condition"), "停止條件", limit=2_000),
+                "expected_output": _clean_text(data.get("expected_output"), "預期輸出", limit=2_000),
+            }
+        if data.get("target"):
+            target = data["target"]
+        elif "target_uri" in data or "target_type" in data:
+            target = {"uri": data.get("target_uri"), "type": data.get("target_type")}
+        else:
+            target = source.get("target") or {}
+        created = self.create_entry(
+            {
+                "name": _clean_text(data.get("name"), "名稱", limit=500) or f"{target_mode.upper()}: {source['name']}",
+                "mode": target_mode,
+                "kind": data.get("kind") or source.get("kind") or "task_entry",
+                "status": "active",
+                "intent": data.get("intent") or source.get("intent"),
+                "next_action": next_action,
+                "project_id": data.get("project_id") or source.get("project_id"),
+                "source_entry_id": source["id"],
+                "target": target,
+                "context": context,
+                "state": source.get("state") or {},
+            }
+        )
+        self.repository.add_link(created["id"], "entry", source["id"], "transition", {"from_mode": source["mode"], "to_mode": target_mode})
+        if data.get("complete_source") in (True, 1, "1", "true", "yes", "on"):
+            self.update_entry(source["id"], {"status": "completed", "last_action": f"已轉換為 {target_mode.upper()} Entry"})
+        return {"source_entry": self.repository.get_entry(source["id"]), "target_entry": self.repository.get_entry(created["id"])}
+
     def create_source_entry(self, data: Mapping[str, Any]) -> dict[str, Any]:
         source_kind = _clean_text(data.get("source_kind"), "來源類型", required=True, limit=48)
         source_id = _clean_text(data.get("source_id"), "來源 ID", required=True, limit=1_000)
@@ -444,7 +499,7 @@ class EntryService:
                 "item_limit": 12,
                 "exit_condition": "完成項目上限或找到一個值得深入的來源",
             }
-        return self.create_entry(
+        entry = self.create_entry(
             {
                 "name": f"{mode.upper()}: {title}",
                 "mode": mode,
@@ -458,6 +513,15 @@ class EntryService:
                 "context": context,
             }
         )
+        linked_type = {
+            "resource": "resource", "collection": "collection", "draft_note": "note",
+            "note": "note", "output_asset": "output_asset",
+        }.get(source_kind, "gallery_item")
+        self.repository.add_link(
+            entry["id"], linked_type, source_id, "source",
+            {"source_kind": source_kind, "target_uri": data.get("target_uri")},
+        )
+        return self.repository.get_entry(entry["id"])
 
     def create_snapshot(self, data: Mapping[str, Any]) -> dict[str, Any]:
         target_uri = _safe_target_uri(data.get("target_uri"))
@@ -565,6 +629,7 @@ class EntryService:
 
 __all__ = [
     "ENTRY_ALLOWED_SCHEMES",
+    "ENTRY_TRANSITIONS",
     "EntryNotFound",
     "EntryService",
     "EntrySystemError",

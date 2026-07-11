@@ -325,6 +325,49 @@ def _decorate_related_items(items, metadata=None):
     return decorated
 
 
+def _catalog_related_for_origin(source_kind, source_key, limit=12):
+    """Return explainable cross-source relations for an existing viewer item."""
+    try:
+        from sqlalchemy import text
+        from src.flowinone.catalog.discovery import DiscoveryService
+        from src.flowinone.resource_library.database import get_resource_database
+
+        configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
+        database = get_resource_database(Path(configured) if configured else None)
+        with database.engine.connect() as conn:
+            item_id = conn.execute(
+                text("SELECT catalog_item_id FROM catalog_origins WHERE source_kind=:source AND (source_key=:key OR source_path=:key) AND stale=0 LIMIT 1"),
+                {"source": source_kind, "key": source_key},
+            ).scalar_one_or_none()
+        if not item_id:
+            return []
+        return [
+            {
+                "title": item["title"],
+                "url": item.get("primary_detail_uri") or item.get("original_url") or "#",
+                "thumbnail_route": item.get("thumbnail_ref") or url_for("static", filename="default_thumbnail.svg"),
+                "why": "、".join((item.get("reason") or {}).get("shared") or []) or item.get("relation_type", "相關項目"),
+            }
+            for item in DiscoveryService(database).related_items(item_id, limit=limit)
+        ]
+    except Exception:
+        return []
+
+
+def _merge_related(primary, catalog_items, limit=18):
+    seen = set()
+    output = []
+    for item in [*primary, *catalog_items]:
+        key = item.get("url") or item.get("title")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        output.append(item)
+        if len(output) >= limit:
+            break
+    return output
+
+
 def _build_detail_actions(media_kind, metadata):
     metadata = metadata or {}
     actions = [
@@ -827,13 +870,16 @@ def register_routes(app):
     _register_eagle_routes(app)
     _register_media_routes(app)
     _register_thumbnail_cli(app)
+    _register_sidecar_cli(app)
     from src.flowinone.resource_library.blueprint import register_resource_library
     from src.flowinone.entry_system.blueprint import register_entry_system
     from src.flowinone.gallery.blueprint import register_gallery
+    from src.flowinone.catalog.blueprint import register_catalog
 
     register_resource_library(app)
     register_entry_system(app)
     register_gallery(app)
+    register_catalog(app)
 
 
 def _register_context_processors(app):
@@ -1153,6 +1199,29 @@ def _register_thumbnail_cli(app):
         }, ensure_ascii=False))
 
 
+def _register_sidecar_cli(app):
+    from src.file_handler.sidecars import SidecarService
+
+    @app.cli.command("sidecars-audit")
+    @click.argument("root", type=click.Path(path_type=Path, exists=True, file_okay=False))
+    def sidecars_audit(root: Path):
+        """Validate local .flowinone.json manifests without changing data."""
+        click.echo(json.dumps(SidecarService().audit(root), ensure_ascii=False, indent=2))
+
+    @app.cli.command("sidecars-export")
+    @click.argument("root", type=click.Path(path_type=Path, exists=True, file_okay=False))
+    @click.option("--apply", is_flag=True, help="Write manifests; default is dry-run.")
+    @click.option("--overwrite", is_flag=True, help="Replace a differing existing manifest.")
+    def sidecars_export(root: Path, apply: bool, overwrite: bool):
+        click.echo(json.dumps(SidecarService().export(root, dry_run=not apply, overwrite=overwrite), ensure_ascii=False, indent=2))
+
+    @app.cli.command("sidecars-import")
+    @click.argument("root", type=click.Path(path_type=Path, exists=True, file_okay=False))
+    @click.option("--apply", is_flag=True, help="Update the local index; default is dry-run.")
+    def sidecars_import(root: Path, apply: bool):
+        click.echo(json.dumps(SidecarService().import_(root, dry_run=not apply), ensure_ascii=False, indent=2))
+
+
 def _register_eagle_routes(app):
     @app.route('/EAGLE_folders/')
     @require_feature("eagle")
@@ -1325,7 +1394,10 @@ def _register_eagle_routes(app):
             video_dict["parent_url"] = return_to
         else:
             video_dict["parent_url"] = request.referrer or url_for("index")
-        related_items = _decorate_related_items(metadata_dict.get("similar"), metadata_dict)
+        related_items = _merge_related(
+            _decorate_related_items(metadata_dict.get("similar"), metadata_dict),
+            _catalog_related_for_origin("eagle", item_id),
+        )
         recommended_actions = _build_detail_actions("video", metadata_dict)
         return render_template(
             'video_player.html',
@@ -1360,7 +1432,10 @@ def _register_eagle_routes(app):
             image_dict["parent_url"] = return_to
         else:
             image_dict["parent_url"] = request.referrer or url_for("index")
-        related_items = _decorate_related_items(metadata_dict.get("similar"), metadata_dict)
+        related_items = _merge_related(
+            _decorate_related_items(metadata_dict.get("similar"), metadata_dict),
+            _catalog_related_for_origin("eagle", item_id),
+        )
         recommended_actions = _build_detail_actions("image", metadata_dict)
         return render_template(
             'image_viewer.html',
@@ -1418,7 +1493,10 @@ def _register_media_routes(app):
             'video_player.html',
             metadata=metadata_dict,
             video=video_dict,
-            related_items=_decorate_related_items(metadata_dict.get("similar"), metadata_dict),
+            related_items=_merge_related(
+                _decorate_related_items(metadata_dict.get("similar"), metadata_dict),
+                _catalog_related_for_origin("local", video_dict.get("relative_path") or video_path),
+            ),
             recommended_actions=_build_detail_actions("video", metadata_dict),
             inspiration_collections=_get_inspiration_collections(),
             inspiration_item={
@@ -1446,7 +1524,10 @@ def _register_media_routes(app):
             'image_viewer.html',
             metadata=metadata_dict,
             image=image_dict,
-            related_items=_decorate_related_items(metadata_dict.get("similar"), metadata_dict),
+            related_items=_merge_related(
+                _decorate_related_items(metadata_dict.get("similar"), metadata_dict),
+                _catalog_related_for_origin("local", image_dict.get("relative_path") or image_path),
+            ),
             recommended_actions=_build_detail_actions("image", metadata_dict),
             inspiration_collections=_get_inspiration_collections(),
             inspiration_item={

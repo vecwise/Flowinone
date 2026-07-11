@@ -4,6 +4,10 @@
 
 ```text
 Flowinone
+├── Catalog Projection (rebuildable)
+│   ├── canonical items + multi-source origins
+│   ├── FTS / facets / keyset query
+│   └── relations / events / browse sessions
 ├── Gallery Domain
 │   ├── Local media adapter
 │   ├── Eagle adapter
@@ -17,21 +21,19 @@ Flowinone
     └── Output Asset + provenance
 ```
 
-兩者共享 Flask shell、navigation、design tokens 與 typed reference，但不共享核心 item table，也不互相借用 workflow state。
+Gallery 與 Knowledge OS 不共享 workflow state；兩者可讀同一個可重建 Catalog projection。Catalog 不是來源資料庫：Eagle、filesystem、Chrome 與 Resource DB 仍各自 authoritative。
 
 ## Gallery request flow
 
 ```text
-/gallery/?q=&source=&type=&sort=&seed=&cursor=
+/gallery/?q=&source=&type=&tags=&tag_mode=&sort=&seed=&cursor=
   → GalleryQuery allowlist validation
-  → selected source adapters
-  → flat GalleryItem normalization
-  → combined search/filter/sort
-  → signed cursor page
+  → Catalog FTS / filter / facet
+  → SQLite keyset cursor page
   → Jinja page or JSON response
 ```
 
-Source adapter failure 採部分成功：Eagle 關閉時 Local/Bookmarks 仍可回應。API 不回傳本機 absolute path；folder path 只能成為 bookmark description/tag 或 local relative path 的 server-side detail reference。
+Catalog sync 採部分成功：Eagle 關閉時 Local/Bookmarks/Resources 仍可更新。API 不回傳本機 absolute path；detail 只使用受控 URI。Gallery event、favorite 與 Browse Session 只屬於 Gallery，不污染 Resource 閱讀狀態。
 
 ## Knowledge loop
 
@@ -55,6 +57,8 @@ Decision 是 Project 的人工資料。AI 可以產生建議，但沒有自動�
 - Chrome bookmarks：Chrome JSON 為 authoritative；Resource import 是 durable snapshot/workflow。
 - Resource metadata、Entry、Project、Decision、Output Asset：`flowinone.sqlite3` 為 authoritative。
 - Wiki：Draft 在 SQLite；匯出後 Obsidian Markdown 是人工長期資產，重匯出有衝突保護。
+- Catalog：`flowinone.sqlite3` 內的衍生查詢投影，可從所有來源重建。
+- Local sidecar：`.flowinone.json` 保存可攜、人工 metadata；DB 保存查詢索引與 cache。
 
 ## Why Flask remains
 

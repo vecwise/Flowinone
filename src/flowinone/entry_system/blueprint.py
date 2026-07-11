@@ -13,7 +13,7 @@ from src.flowinone.resource_library.database import get_resource_database, upgra
 
 from .models import ENTRY_MODES, ENTRY_STATUSES, PROJECT_STATUSES
 from .repository import EntryNotFound, ProjectNotFound
-from .service import EntryService, EntrySystemError
+from .service import ENTRY_TRANSITIONS, EntryService, EntrySystemError
 
 
 bp = Blueprint("entry_system", __name__)
@@ -85,6 +85,14 @@ def _entry_form_data() -> dict[str, Any]:
                 "time_budget_minutes": data.get("scan_minutes"),
                 "item_limit": data.get("scan_limit"),
                 "exit_condition": data.get("scan_exit_condition"),
+            }
+        }
+    elif str(data.get("mode") or "").strip().lower() == "learn":
+        data["context"] = {
+            "learn": {
+                "question": data.get("learning_question"),
+                "stop_condition": data.get("stop_condition"),
+                "expected_output": data.get("expected_output"),
             }
         }
     return data
@@ -346,6 +354,7 @@ def entry_detail(entry_id: str):
         entry = decorate_entry(service.repository.get_entry(entry_id, include_events=True), service)
     except EntryNotFound:
         abort(404)
+    entry["links"] = service.repository.list_links(entry_id)
     return render_template(
         "entry_detail.html",
         title=f"{entry['name']} · Flowinone",
@@ -353,6 +362,7 @@ def entry_detail(entry_id: str):
         projects=[decorate_project(project) for project in service.repository.list_projects()],
         modes=ENTRY_MODES,
         statuses=ENTRY_STATUSES,
+        transition_modes=ENTRY_TRANSITIONS.get(entry["mode"], ()),
         notice=request.args.get("notice"),
         error=request.args.get("error"),
     )
@@ -366,6 +376,15 @@ def entry_update(entry_id: str):
     except Exception as exc:
         return _form_error("entry_system.entry_detail", exc, entry_id=entry_id)
     return redirect(url_for("entry_system.entry_detail", entry_id=entry_id, notice="Entry 已更新"))
+
+
+@bp.post("/entries/<entry_id>/transition")
+def entry_transition(entry_id: str):
+    try:
+        result = _service().transition_entry(entry_id, _form_data())
+    except Exception as exc:
+        return _form_error("entry_system.entry_detail", exc, entry_id=entry_id)
+    return redirect(url_for("entry_system.entry_detail", entry_id=result["target_entry"]["id"], notice="已建立下一階段 Entry"))
 
 
 @bp.post("/entries/<entry_id>/enter")
@@ -529,6 +548,41 @@ def api_entry_delete(entry_id: str):
 def api_entry_enter(entry_id: str):
     try:
         return jsonify(_service().enter(entry_id))
+    except Exception as exc:
+        return _api_error(exc)
+
+
+@bp.post("/api/entries/<entry_id>/transition")
+def api_entry_transition(entry_id: str):
+    try:
+        return jsonify(_service().transition_entry(entry_id, request.get_json(silent=True) or {})), 201
+    except Exception as exc:
+        return _api_error(exc)
+
+
+@bp.get("/api/entries/<entry_id>/links")
+def api_entry_links(entry_id: str):
+    try:
+        _service().repository.get_entry(entry_id)
+        return jsonify(_service().repository.list_links(entry_id))
+    except Exception as exc:
+        return _api_error(exc)
+
+
+@bp.post("/api/entries/<entry_id>/links")
+def api_entry_link_create(entry_id: str):
+    payload = request.get_json(silent=True) or {}
+    try:
+        repository = _service().repository
+        repository.add_link(
+            entry_id,
+            str(payload.get("linked_type") or ""),
+            str(payload.get("linked_id") or ""),
+            str(payload.get("relation_type") or "source"),
+            payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+            direction=str(payload.get("direction") or "source"),
+        )
+        return jsonify(repository.list_links(entry_id)), 201
     except Exception as exc:
         return _api_error(exc)
 

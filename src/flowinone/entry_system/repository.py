@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable, Optional
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session, selectinload
 
 from src.flowinone.resource_library.database import ResourceDatabase
-from src.flowinone.resource_library.models import utc_now_text
+from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .models import Entry, EntryEvent, Project
 
@@ -233,6 +233,68 @@ class EntryRepository:
                 .values(source_entry_id=None, updated_at=utc_now_text())
             )
             session.execute(delete(Entry).where(Entry.id == entry_id))
+
+    def add_link(
+        self,
+        entry_id: str,
+        linked_type: str,
+        linked_id: str,
+        relation_type: str = "source",
+        metadata: Optional[dict[str, Any]] = None,
+        *,
+        direction: str = "source",
+    ) -> None:
+        """Persist one typed source/output link owned by an Entry."""
+        linked_type = str(linked_type or "").strip().lower()[:40]
+        linked_id = str(linked_id or "").strip()
+        direction = str(direction or "source").strip().lower()
+        if not linked_type or not linked_id:
+            raise ValueError("Entry link 必須指定 linked_type 與 linked_id")
+        if direction not in {"source", "output"}:
+            raise ValueError("Entry link direction 必須是 source 或 output")
+        with self.database.session() as session:
+            if session.get(Entry, entry_id) is None:
+                raise EntryNotFound(entry_id)
+            if linked_type == "entry" and session.get(Entry, linked_id) is None:
+                raise EntryNotFound(linked_id)
+            session.execute(
+                text(
+                    """
+                    INSERT OR IGNORE INTO entry_links(
+                        id,entry_id,linked_type,linked_id,direction,relation_type,metadata_json,created_at
+                    ) VALUES(:id,:entry,:linked_type,:linked_id,:direction,:relation,:metadata,:created)
+                    """
+                ),
+                {
+                    "id": new_id(),
+                    "entry": entry_id,
+                    "linked_type": linked_type,
+                    "linked_id": linked_id,
+                    "direction": direction,
+                    "relation": relation_type[:32],
+                    "metadata": _dump(metadata or {}),
+                    "created": utc_now_text(),
+                },
+            )
+            self._append_event(session, entry_id, "link_added", {"linked_type": linked_type, "linked_id": linked_id, "direction": direction, "relation_type": relation_type})
+
+    def list_links(self, entry_id: str) -> dict[str, list[dict[str, Any]]]:
+        with self.database.session() as session:
+            incoming = session.execute(
+                text("SELECT linked_id AS entry_id,linked_type,linked_id,direction,relation_type,metadata_json,created_at FROM entry_links WHERE entry_id=:id AND direction='source' ORDER BY created_at"),
+                {"id": entry_id},
+            ).mappings()
+            owned_outputs = session.execute(
+                text("SELECT linked_id AS entry_id,linked_type,linked_id,direction,relation_type,metadata_json,created_at FROM entry_links WHERE entry_id=:id AND direction='output' ORDER BY created_at"),
+                {"id": entry_id},
+            ).mappings()
+            transition_outputs = session.execute(
+                text("SELECT entry_id, 'entry' AS linked_type, entry_id AS linked_id, 'output' AS direction, relation_type, metadata_json, created_at FROM entry_links WHERE linked_type='entry' AND linked_id=:id AND direction='source' ORDER BY created_at"),
+                {"id": entry_id},
+            ).mappings()
+            def rows(values):
+                return [{**dict(row), "metadata": _load_object(row["metadata_json"])} for row in values]
+            return {"outgoing": rows([*owned_outputs, *transition_outputs]), "incoming": rows(incoming)}
 
     def get_project(self, project_id: str, *, include_entries: bool = True) -> dict[str, Any]:
         with self.database.session() as session:

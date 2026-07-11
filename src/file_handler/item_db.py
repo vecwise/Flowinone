@@ -82,6 +82,19 @@ def _ensure_item_db() -> None:
             )
             """
         )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+        for name, definition in (
+            ("portable_uid", "TEXT"),
+            ("content_fingerprint", "TEXT"),
+            ("annotation", "TEXT"),
+            ("source_url", "TEXT"),
+            ("people_labels", "TEXT"),
+            ("sidecar_updated_at", "TEXT"),
+        ):
+            if name not in columns:
+                conn.execute(f"ALTER TABLE items ADD COLUMN {name} {definition}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_portable_uid ON items(portable_uid)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_fingerprint ON items(content_fingerprint)")
         conn.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_items_library_path
@@ -441,7 +454,8 @@ def fetch_items(limit: int = 500, offset: int = 0) -> Dict[str, object]:
                    relative_path, absolute_path, library_root, ext,
                    mime_type, size_bytes, data_source, is_archived,
                    region, rating, is_censored, actors, authors, face_ids,
-                   updated_at
+                   updated_at, portable_uid, content_fingerprint, annotation,
+                   source_url, people_labels, sidecar_updated_at
             FROM items
             ORDER BY updated_at DESC
             LIMIT ? OFFSET ?
@@ -473,6 +487,12 @@ def fetch_items(limit: int = 500, offset: int = 0) -> Dict[str, object]:
             "authors": _parse_json_list(row["authors"]),
             "face_ids": _parse_json_list(row["face_ids"]),
             "updated_at": row["updated_at"],
+            "portable_uid": row["portable_uid"],
+            "content_fingerprint": row["content_fingerprint"],
+            "annotation": row["annotation"],
+            "source_url": row["source_url"],
+            "people_labels": _parse_json_list(row["people_labels"]),
+            "sidecar_updated_at": row["sidecar_updated_at"],
         })
 
     return {

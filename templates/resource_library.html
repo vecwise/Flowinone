@@ -147,9 +147,13 @@
             <a class="action-button primary" href="{{ resource.detail_url }}">整理</a>
             <a class="action-button" href="{{ resource.original_url }}" target="_blank" rel="noopener noreferrer">開原文</a>
             <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}">
+              <input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}">
               <input type="hidden" name="disposition" value="archived">
               <button class="action-button" type="submit">封存</button>
             </form>
+            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="reading_state" value="skimmed"><button class="action-button" type="submit">略讀</button></form>
+            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="reading_state" value="reading"><button class="action-button" type="submit">開始閱讀</button></form>
+            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="reading_state" value="digested"><button class="action-button" type="submit">已消化</button></form>
           </div>
         </div>
       </article>

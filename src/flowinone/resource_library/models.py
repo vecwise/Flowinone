@@ -276,6 +276,12 @@ class Collection(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(24), nullable=False, default="inspiration")
+    membership_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    lifecycle_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    query_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    generation_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    portable_slug: Mapped[Optional[str]] = mapped_column(String(160))
+    last_refreshed_at: Mapped[Optional[str]] = mapped_column(String(40))
     created_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
     updated_at: Mapped[str] = mapped_column(
         String(40), nullable=False, default=utc_now_text, onupdate=utc_now_text
@@ -303,6 +309,12 @@ class CollectionItem(Base):
     url_snapshot: Mapped[Optional[str]] = mapped_column(Text)
     thumbnail_snapshot: Mapped[Optional[str]] = mapped_column(Text)
     annotation: Mapped[Optional[str]] = mapped_column(Text)
+    # Database migration owns the FK. Keep this mapping decoupled from the
+    # Catalog package so Resource Library can still be imported independently.
+    catalog_item_id: Mapped[Optional[str]] = mapped_column(String(32))
+    membership_source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    relation_score: Mapped[Optional[float]] = mapped_column(Float)
+    reason_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     added_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
 

@@ -29,11 +29,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+vision = ["pytesseract>=0.3.13"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 markers = [
     "online: performs public network smoke tests (set FLOWINONE_ONLINE_SMOKE=1)",
+    "performance: synthetic local performance contract",
 ]
 
 [project.urls]

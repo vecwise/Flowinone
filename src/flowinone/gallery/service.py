@@ -20,6 +20,8 @@ from src.file_handler.models import BookmarkError, BookmarkNotFound, ExternalSer
 from src.file_handler.paths import DEFAULT_THUMBNAIL_ROUTE
 
 from .models import GALLERY_SOURCES, GalleryItem, GalleryPage, GalleryQuery
+from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
+from src.flowinone.resource_library.database import ResourceDatabase
 
 
 SourceLoader = Callable[[], Iterable[GalleryItem]]
@@ -255,4 +257,49 @@ class GalleryService:
         )
 
 
-__all__ = ["GalleryService", "InvalidGalleryCursor"]
+class CatalogGalleryService:
+    """Gallery-compatible facade backed by the durable Catalog projection."""
+
+    def __init__(self, database: ResourceDatabase):
+        self.catalog = CatalogService(database)
+        self.sync = CatalogSyncService(database)
+
+    def list_items(self, query: GalleryQuery) -> GalleryPage:
+        if self.catalog.count() == 0:
+            self.sync.sync(("resources", *query.sources))
+        payload = self.catalog.list(
+            CatalogQuery.create(
+                q=query.q, scope="gallery", sources=query.sources,
+                item_type=query.media_type, tags=query.tags, tag_mode=query.tag_mode,
+                favorite=query.favorite, unviewed=query.unviewed,
+                duration_min=query.duration_min, duration_max=query.duration_max,
+                added_from=query.added_from, added_to=query.added_to,
+                sort=query.sort if query.sort != "similar" else "relevance",
+                seed=query.seed, limit=query.limit, cursor=query.cursor,
+            )
+        )
+        items: list[GalleryItem] = []
+        counts = {source: int(payload["facets"]["sources"].get(source, 0)) for source in GALLERY_SOURCES}
+        for row in payload["items"]:
+            origin_sources = row.get("sources") or []
+            source = next((value for value in query.sources if value in origin_sources), origin_sources[0] if origin_sources else "bookmarks")
+            media_type = row.get("item_type")
+            if source == "bookmarks" and media_type not in {"image", "video"}:
+                media_type = "bookmark"
+            items.append(
+                GalleryItem(
+                    id=row["id"], source=source, media_type=media_type,
+                    title=row["title"], thumbnail_url=row.get("thumbnail_ref") or DEFAULT_THUMBNAIL_ROUTE,
+                    tags=row.get("tags") or [], created_at=row.get("captured_at"),
+                    description=row.get("description"), original_url=row.get("original_url"),
+                    detail_uri=row.get("primary_detail_uri"), duration_seconds=row.get("duration_seconds"),
+                    favorite=bool(row.get("favorite")), open_count=int(row.get("open_count") or 0),
+                )
+            )
+        return GalleryPage(
+            items=items, total=int(payload["total_estimate"]), next_cursor=payload.get("next_cursor"),
+            query=query, source_counts=counts, source_errors={},
+        )
+
+
+__all__ = ["CatalogGalleryService", "GalleryService", "InvalidGalleryCursor"]

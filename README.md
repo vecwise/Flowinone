@@ -7,11 +7,15 @@ Flowinone has two explicit product domains:
 
 Gallery never treats folders as browse items and does not carry reading/note state. Knowledge OS may reference a media item only through an explicit Entry or typed source link.
 
+Both domains now read from a rebuildable **Catalog projection** across Local, Eagle, Chrome Bookmarks, and Resources. Each source remains authoritative; canonical URLs are merged for search while every origin is preserved.
+
 ---
 
 ## 🔥 Highlights
 
 - **Single-page Gallery**: `/gallery/` provides checkboxes for Local, Eagle, and Bookmarks; search, type, sort, view, random seed, and cursor remain in the URL.
+- **Cross-source Search**: `/search/` uses SQLite FTS5, facets, tag ANY/ALL, deterministic random order, and keyset cursors.
+- **Durable browsing signals**: favorites, views, bounded browse sessions, and Continue Browsing remain local.
 - **Flat items**: source folder hierarchy may become metadata or tags, but never a Gallery item.
 
 - **Eagle Explorer**: Real-time access to Eagle folders, tags, and items. The home page curates newly-added and trending collections automatically.
@@ -42,6 +46,7 @@ Chrome / URL
 
 - `/resources/` — searchable resource cards, reading states, tags, priority, archive/reject.
 - `/inspiration/` — collections that may mix Resource, Eagle, and filesystem references.
+- Collections support manual membership, query-backed Smart Collections, and review-before-publish Generated Collections.
 - `/notes/` — multi-source Markdown drafts and conflict-safe Obsidian export.
 - Resource metadata/workflow lives in `data/flowinone.sqlite3`.
 - Large/raw content stays under `data/content/`; thumbnails remain filesystem cache.
@@ -63,6 +68,7 @@ BUILD / THINK / LEARN / SCAN / RECOVER / WRITE
 - `/build/` — Continue, New, Think → Build, Current Project, recent work, blocked work.
 - `/write/` — Output Assets with Resource/Note/Decision/Entry provenance.
 - `/entries/` and `/projects/` — manage reusable context and stateful entry points.
+- Entry transitions and typed links preserve multiple Entry, Resource, Collection, Gallery item, Note, or Output Asset sources without auto-completing the source.
 - `/library/` — preserves the former content-discovery workbench as a secondary surface.
 - Resource filters can be saved as entries; Resource, Collection, Draft, Eagle image, and
   local video pages can create LEARN or BUILD entries directly.
@@ -112,6 +118,7 @@ Use `conda run` for commands that must not depend on shell activation:
 conda run -n py3.11 python -m compileall routes.py src
 conda run -n py3.11 python -m pytest
 conda run -n py3.11 flask --app run thumbnails-sync --missing
+conda run -n py3.11 flask --app run catalog-sync --source all
 ```
 
 The thumbnail sync command also accepts `--force`, `--domain`, and `--limit`.
@@ -150,6 +157,11 @@ Maintenance commands:
 conda run -n py3.11 flask --app run resources-rebuild-fts
 conda run -n py3.11 flask --app run resources-retry-failed
 conda run -n py3.11 flask --app run resources-export-mirrors
+conda run -n py3.11 flask --app run catalog-relations-rebuild
+conda run -n py3.11 flask --app run catalog-collections-generate
+conda run -n py3.11 flask --app run sidecars-audit
+conda run -n py3.11 flask --app run sidecars-export
+conda run -n py3.11 flask --app run sidecars-import
 ```
 
 Equivalent standalone scripts are under `scripts/` for bookmark import, FTS rebuilding,
@@ -170,6 +182,7 @@ The public build includes YouTube plus Open Graph, Twitter Card, JSON-LD, and `i
 | Menu item | What you get |
 |-----------|---------------|
 | **GALLERY** | One flat grid with Local / Eagle / Bookmark source checkboxes |
+| **SEARCH** | FTS and facets across Local / Eagle / Bookmark / Resource Catalog items |
 | **BUILD (Home)** | Resume a current project or the next meaningful action without a content feed |
 | **THINK / LEARN / SCAN / RECOVER / WRITE** | Intentional modes; WRITE produces traceable Output Assets |
 | **Entries / Projects** | State-based action starts and their durable work contexts |
@@ -201,9 +214,10 @@ Every browsing page supports:
 - `src/flowinone/entry_system/` — Entry, Project, resume policy, safe target execution,
   Flask UI/API, state snapshots, and Think → Build flow.
 - `src/flowinone/gallery/` — independent flat-item query/read-model domain and Flask UI/API.
+- `src/flowinone/catalog/` — rebuildable cross-source projection, FTS/facets/cursors, events, relations, generated collections, and OCR/person artifact interfaces.
 - `src/flowinone/knowledge_os/` — project/mode retrieval, Decisions, Output Assets, and provenance.
-- `migrations/` — Alembic schema history for the durable Resource DB, FTS projection,
-  and Entry system.
+- `src/file_handler/sidecars.py` — portable local-media metadata import/export/audit with atomic writes and move relinking.
+- `migrations/` — Alembic schema history for Resource, Entry, Catalog, relations, events, and collection modes.
 - `file_handler.py` — core logic:
   - Normalizes all media metadata (local + Eagle).
   - Parses Chrome bookmarks, detects YouTube URLs, and builds recommendations.
@@ -215,10 +229,11 @@ Every browsing page supports:
 
 ## 🛣️ Roadmap & Ideas
 
-- [ ] Publish `requirements.txt` and a Dockerfile for painless deployment.
-- [ ] Feed face-recognition results into Eagle metadata (auto “main character” tags).
-- [ ] Deeper AI clustering (color palettes, subjects, layouts).
-- [ ] Optional auth / remote access (currently optimized for LAN usage).
+- [ ] Benchmark optional local OCR and face providers on real media; add anonymous cluster merge/split UI.
+- [ ] Tune explainable recommendation weights from local events without autoplay or an infinite feed.
+- [ ] Improve full incremental synchronization and progress reporting for large Eagle libraries.
+
+Cross-device sync, automatic Raw → Wiki, Notion/Keep/OneTab/social connectors, and Obsidian two-way sync are intentionally out of scope.
 
 ### Backup and restore
 

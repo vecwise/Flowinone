@@ -45,6 +45,11 @@
       <div><label for="scan-limit">項目上限</label><input id="scan-limit" type="number" min="1" max="100" name="scan_limit" value="12"></div>
       <div class="entry-form-grow"><label for="scan-exit">退出條件</label><input id="scan-exit" name="scan_exit_condition" placeholder="找到一個值得 Learn 的資源即停止"></div>
       {% endif %}
+      {% if mode == 'learn' %}
+      <div class="entry-form-full"><label for="learn-question">學習問題</label><textarea id="learn-question" name="learning_question" rows="2" placeholder="我想回答什麼問題？"></textarea></div>
+      <div class="entry-form-grow"><label for="learn-stop">停止條件</label><input id="learn-stop" name="stop_condition" placeholder="例如：能用自己的話解釋並完成範例"></div>
+      <div class="entry-form-grow"><label for="learn-output">預期輸出</label><input id="learn-output" name="expected_output" placeholder="BUILD Task、Demo、Checklist、WRITE"></div>
+      {% endif %}
       <button class="action-button primary" type="submit">建立 Entry</button>
     </form>
   </section>

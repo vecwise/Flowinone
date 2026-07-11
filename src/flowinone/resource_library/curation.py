@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Optional
 from urllib.parse import urlsplit
 
-from sqlalchemy import delete, func, select
+import json
+import re
+
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
@@ -23,8 +26,10 @@ from .repository import ResourceNotFound, ResourceRepository
 
 
 COLLECTION_KINDS = {"inspiration", "project", "reading_list"}
+COLLECTION_MODES = {"manual", "smart", "generated"}
+COLLECTION_STATUSES = {"draft", "active", "archived"}
 NOTE_TYPES = {"literature", "synthesis"}
-SOURCE_KINDS = {"resource", "eagle", "filesystem", "bookmark", "obsidian"}
+SOURCE_KINDS = {"resource", "eagle", "filesystem", "bookmark", "obsidian", "catalog"}
 
 
 def _safe_snapshot_url(value: str) -> str:
@@ -54,6 +59,12 @@ def serialize_collection(collection: Collection, *, detail: bool = False) -> dic
         "title": collection.title,
         "description": collection.description,
         "kind": collection.kind,
+        "membership_mode": collection.membership_mode,
+        "lifecycle_status": collection.lifecycle_status,
+        "query": json.loads(collection.query_json or "{}"),
+        "generation": json.loads(collection.generation_json or "{}"),
+        "portable_slug": collection.portable_slug,
+        "last_refreshed_at": collection.last_refreshed_at,
         "item_count": len(collection.items),
         "created_at": collection.created_at,
         "updated_at": collection.updated_at,
@@ -68,6 +79,10 @@ def serialize_collection(collection: Collection, *, detail: bool = False) -> dic
                 "url": item.url_snapshot,
                 "thumbnail": item.thumbnail_snapshot,
                 "annotation": item.annotation,
+                "catalog_item_id": item.catalog_item_id,
+                "membership_source": item.membership_source,
+                "relation_score": item.relation_score,
+                "reason": json.loads(item.reason_json or "{}"),
                 "position": item.position,
                 "added_at": item.added_at,
             }
@@ -113,18 +128,39 @@ class CollectionService:
         self.database = database or get_resource_database()
         self.resources = ResourceRepository(self.database)
 
-    def create(self, title: str, description: str = "", kind: str = "inspiration") -> dict:
+    def create(
+        self,
+        title: str,
+        description: str = "",
+        kind: str = "inspiration",
+        *,
+        membership_mode: str = "manual",
+        lifecycle_status: str = "active",
+        query: Optional[dict] = None,
+        generation: Optional[dict] = None,
+        portable_slug: str = "",
+    ) -> dict:
         title = title.strip()
         if not title:
             raise ValueError("Collection 標題不可空白")
         if kind not in COLLECTION_KINDS:
             raise ValueError("無效的 Collection 類型")
+        if membership_mode not in COLLECTION_MODES:
+            raise ValueError("無效的 Collection membership mode")
+        if lifecycle_status not in COLLECTION_STATUSES:
+            raise ValueError("無效的 Collection 狀態")
+        slug = re.sub(r"[^a-z0-9_-]+", "-", (portable_slug or title).casefold()).strip("-")[:160] or new_id()
         with self.database.session() as session:
             collection = Collection(
                 id=new_id(),
                 title=title,
                 description=description.strip() or None,
                 kind=kind,
+                membership_mode=membership_mode,
+                lifecycle_status=lifecycle_status,
+                query_json=json.dumps(query or {}, ensure_ascii=False),
+                generation_json=json.dumps(generation or {}, ensure_ascii=False),
+                portable_slug=slug,
             )
             session.add(collection)
             session.flush()
@@ -151,7 +187,24 @@ class CollectionService:
             )
             if collection is None:
                 raise CollectionNotFound(collection_id)
-            return serialize_collection(collection, detail=True)
+            payload = serialize_collection(collection, detail=True)
+        if payload["membership_mode"] == "smart":
+            from src.flowinone.catalog.service import CatalogQuery, CatalogService
+
+            query = CatalogQuery.create(**payload["query"], limit=100)
+            page = CatalogService(self.database).list(query)
+            payload["items"] = [
+                {
+                    "id": f"smart:{item['id']}", "source_kind": "catalog", "source_id": item["id"],
+                    "catalog_item_id": item["id"], "title": item["title"],
+                    "url": item.get("primary_detail_uri") or item.get("original_url"),
+                    "thumbnail": item.get("thumbnail_ref"), "annotation": "Smart Collection query",
+                    "position": index, "membership_source": "query", "reason": {"query": payload["query"]},
+                }
+                for index, item in enumerate(page["items"])
+            ]
+            payload["item_count"] = page["total_estimate"]
+        return payload
 
     def update(self, collection_id: str, changes: dict) -> dict:
         with self.database.session() as session:
@@ -169,6 +222,18 @@ class CollectionService:
                 if changes["kind"] not in COLLECTION_KINDS:
                     raise ValueError("無效的 Collection 類型")
                 collection.kind = changes["kind"]
+            if "membership_mode" in changes:
+                if changes["membership_mode"] not in COLLECTION_MODES:
+                    raise ValueError("無效的 Collection membership mode")
+                collection.membership_mode = changes["membership_mode"]
+            if "lifecycle_status" in changes:
+                if changes["lifecycle_status"] not in COLLECTION_STATUSES:
+                    raise ValueError("無效的 Collection 狀態")
+                collection.lifecycle_status = changes["lifecycle_status"]
+            if "query" in changes:
+                collection.query_json = json.dumps(changes["query"] or {}, ensure_ascii=False)
+            if "generation" in changes:
+                collection.generation_json = json.dumps(changes["generation"] or {}, ensure_ascii=False)
             collection.updated_at = utc_now_text()
         return self.get(collection_id)
 
@@ -182,6 +247,10 @@ class CollectionService:
         url: str = "",
         thumbnail: str = "",
         annotation: str = "",
+        catalog_item_id: str = "",
+        membership_source: str = "manual",
+        relation_score: Optional[float] = None,
+        reason: Optional[dict] = None,
     ) -> dict:
         if source_kind not in SOURCE_KINDS:
             raise ValueError("無效的來源類型")
@@ -197,6 +266,16 @@ class CollectionService:
             thumbnail = thumbnail or ""
         url = _safe_snapshot_url(url)
         thumbnail = _safe_snapshot_url(thumbnail) if thumbnail else ""
+        if not catalog_item_id:
+            source_alias = {"resource": "resources", "filesystem": "local", "bookmark": "bookmarks"}.get(source_kind, source_kind)
+            with self.database.engine.connect() as conn:
+                catalog_item_id = str(
+                    conn.execute(
+                        text("SELECT catalog_item_id FROM catalog_origins WHERE source_kind=:source AND source_key=:key ORDER BY stale LIMIT 1"),
+                        {"source": source_alias, "key": source_id},
+                    ).scalar_one_or_none()
+                    or ""
+                )
         try:
             with self.database.session() as session:
                 collection = session.get(Collection, collection_id)
@@ -220,6 +299,10 @@ class CollectionService:
                         url_snapshot=url or None,
                         thumbnail_snapshot=thumbnail or None,
                         annotation=annotation.strip() or None,
+                        catalog_item_id=catalog_item_id or None,
+                        membership_source=membership_source,
+                        relation_score=relation_score,
+                        reason_json=json.dumps(reason or {}, ensure_ascii=False),
                         position=position,
                     )
                 )
@@ -457,6 +540,8 @@ class DraftNoteService:
 
 
 __all__ = [
+    "COLLECTION_MODES",
+    "COLLECTION_STATUSES",
     "CollectionNotFound",
     "CollectionService",
     "DraftNoteNotFound",

@@ -8,7 +8,10 @@ from urllib.parse import urlencode
 from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, render_template, request, url_for
 
 from .models import GALLERY_SOURCES, GalleryItem, GalleryQuery
-from .service import GalleryService, InvalidGalleryCursor
+from .service import CatalogGalleryService, GalleryService, InvalidGalleryCursor
+from src.flowinone.resource_library.database import get_resource_database
+from pathlib import Path
+from src.flowinone.catalog.service import CatalogService
 
 
 bp = Blueprint("gallery", __name__)
@@ -17,7 +20,10 @@ _DEFAULT_SERVICE = GalleryService()
 
 def _service() -> GalleryService:
     factory = current_app.config.get("FLOWINONE_GALLERY_SERVICE_FACTORY")
-    return factory() if callable(factory) else _DEFAULT_SERVICE
+    if callable(factory):
+        return factory()
+    configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
+    return CatalogGalleryService(get_resource_database(Path(configured) if configured else None))
 
 
 def _query() -> GalleryQuery:
@@ -26,6 +32,14 @@ def _query() -> GalleryQuery:
         q=request.args.get("q"),
         sources=raw_sources,
         media_type=request.args.get("type"),
+        tags=request.args.getlist("tags") or request.args.get("tags", "").split(","),
+        tag_mode=request.args.get("tag_mode"),
+        favorite=request.args.get("favorite"),
+        unviewed=request.args.get("unviewed"),
+        duration_min=request.args.get("duration_min"),
+        duration_max=request.args.get("duration_max"),
+        added_from=request.args.get("added_from"),
+        added_to=request.args.get("added_to"),
         sort=request.args.get("sort"),
         seed=request.args.get("seed"),
         view=request.args.get("view"),
@@ -41,6 +55,21 @@ def _query_pairs(query: GalleryQuery, *, cursor: str | None = None) -> list[tupl
     pairs.extend(("source", source) for source in query.sources)
     if query.media_type:
         pairs.append(("type", query.media_type))
+    if query.tags:
+        pairs.append(("tags", ",".join(query.tags)))
+        pairs.append(("tag_mode", query.tag_mode))
+    if query.favorite:
+        pairs.append(("favorite", "1"))
+    if query.unviewed:
+        pairs.append(("unviewed", "1"))
+    if query.duration_min is not None:
+        pairs.append(("duration_min", str(query.duration_min)))
+    if query.duration_max is not None:
+        pairs.append(("duration_max", str(query.duration_max)))
+    if query.added_from:
+        pairs.append(("added_from", query.added_from))
+    if query.added_to:
+        pairs.append(("added_to", query.added_to))
     pairs.extend((("sort", query.sort), ("view", query.view), ("limit", str(query.limit))))
     if query.seed:
         pairs.append(("seed", str(query.seed)))
@@ -50,6 +79,8 @@ def _query_pairs(query: GalleryQuery, *, cursor: str | None = None) -> list[tupl
 
 
 def _detail_url(item: GalleryItem, return_to: str) -> str:
+    if item.detail_uri:
+        return item.detail_uri
     if item.source == "eagle":
         item_id = item.id.split(":", 1)[1]
         endpoint = "view_eagle_video" if item.media_type == "video" else "view_eagle_image"
@@ -96,6 +127,20 @@ def gallery_index():
     if page.next_cursor:
         next_url = f"{url_for('gallery.gallery_index')}?{urlencode(_query_pairs(query, cursor=page.next_cursor))}"
     source_labels = {"local": "本機", "eagle": "Eagle", "bookmarks": "書籤"}
+    catalog_database = get_resource_database(Path(current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")) if current_app.config.get("FLOWINONE_RESOURCE_DB_PATH") else None)
+    recent_sessions = CatalogService(catalog_database).recent_sessions(3)
+    for session in recent_sessions:
+        pairs = []
+        for key, value in session["query"].items():
+            if value in (None, "", False, []):
+                continue
+            if key == "sources":
+                pairs.extend(("source", source) for source in value)
+            elif key == "tags":
+                pairs.append(("tags", ",".join(value)))
+            else:
+                pairs.append((key, str(int(value)) if isinstance(value, bool) else str(value)))
+        session["url"] = f"{url_for('gallery.gallery_index')}?{urlencode(pairs)}"
     return render_template(
         "gallery.html",
         title="Gallery · Flowinone",
@@ -115,6 +160,7 @@ def gallery_index():
         random_url=url_for("gallery.gallery_index", source=list(query.sources), sort="random"),
         reset_url=url_for("gallery.gallery_index"),
         canonical_query=canonical_query,
+        recent_sessions=recent_sessions,
     )
 
 

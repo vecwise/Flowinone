@@ -321,9 +321,11 @@ def resource_workflow(resource_id: str):
         service.update_resource(resource_id, changes)
     except Exception as exc:
         return _form_error("resource_library.resource_detail", exc, resource_id=resource_id)
-    return redirect(
-        url_for("resource_library.resource_detail", resource_id=resource_id, notice="狀態已更新")
-    )
+    return_to = request.form.get("return_to", "")
+    if return_to.startswith("/") and not return_to.startswith("//") and "\\" not in return_to:
+        separator = "&" if "?" in return_to else "?"
+        return redirect(f"{return_to}{separator}notice=狀態已更新")
+    return redirect(url_for("resource_library.resource_detail", resource_id=resource_id, notice="狀態已更新"))
 
 
 @bp.post("/resources/<resource_id>/context")
@@ -461,6 +463,17 @@ def collection_create():
             request.form.get("title", ""),
             request.form.get("description", ""),
             request.form.get("kind", "inspiration"),
+            membership_mode=request.form.get("membership_mode", "manual"),
+            lifecycle_status="active" if request.form.get("membership_mode", "manual") != "generated" else "draft",
+            query={
+                "q": request.form.get("query_q", ""),
+                "scope": request.form.get("query_scope", "all"),
+                "sources": request.form.getlist("query_source"),
+                "type": request.form.get("query_type", ""),
+                "tags": request.form.get("query_tags", ""),
+                "tag_mode": request.form.get("query_tag_mode", "any"),
+                "sort": request.form.get("query_sort", "recently_added"),
+            } if request.form.get("membership_mode") == "smart" else {},
         )
     except Exception as exc:
         return _form_error("resource_library.collection_index", exc)
@@ -470,6 +483,7 @@ def collection_create():
 @bp.get("/inspiration/<collection_id>/")
 def collection_detail(collection_id: str):
     service, collections, _, _ = _services()
+    from src.flowinone.catalog.discovery import DiscoveryService
     try:
         collection = decorate_collection(
             collections.get(collection_id),
@@ -481,9 +495,70 @@ def collection_detail(collection_id: str):
         "resource_collection_detail.html",
         title=f"{collection['title']} · Flowinone",
         collection=collection,
+        similar_collections=DiscoveryService(_database()).related_collections(collection_id),
         notice=request.args.get("notice"),
         error=request.args.get("error"),
     )
+
+
+@bp.post("/inspiration/<collection_id>/publish")
+def collection_publish(collection_id: str):
+    _, collections, _, _ = _services()
+    try:
+        collections.update(collection_id, {"lifecycle_status": "active"})
+    except Exception as exc:
+        return _form_error("resource_library.collection_detail", exc, collection_id=collection_id)
+    return redirect(url_for("resource_library.collection_detail", collection_id=collection_id, notice="Generated Collection 已發布"))
+
+
+@bp.get("/api/collections")
+def api_collections_list():
+    _, collections, _, _ = _services()
+    return jsonify({"items": collections.list()})
+
+
+@bp.post("/api/collections")
+def api_collections_create():
+    _, collections, _, _ = _services()
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = collections.create(
+            str(payload.get("title") or ""), str(payload.get("description") or ""),
+            str(payload.get("kind") or "inspiration"),
+            membership_mode=str(payload.get("membership_mode") or "manual"),
+            lifecycle_status=str(payload.get("lifecycle_status") or ("draft" if payload.get("membership_mode") == "generated" else "active")),
+            query=payload.get("query") or {}, generation=payload.get("generation") or {},
+            portable_slug=str(payload.get("portable_slug") or ""),
+        )
+        return jsonify(result), 201
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@bp.get("/api/collections/<collection_id>")
+def api_collection_get(collection_id: str):
+    _, collections, _, _ = _services()
+    try:
+        return jsonify(collections.get(collection_id))
+    except CollectionNotFound:
+        return jsonify({"error": "not_found"}), 404
+
+
+@bp.patch("/api/collections/<collection_id>")
+def api_collection_patch(collection_id: str):
+    _, collections, _, _ = _services()
+    try:
+        return jsonify(collections.update(collection_id, request.get_json(silent=True) or {}))
+    except CollectionNotFound:
+        return jsonify({"error": "not_found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@bp.get("/api/collections/<collection_id>/similar")
+def api_collection_similar(collection_id: str):
+    from src.flowinone.catalog.discovery import DiscoveryService
+    return jsonify({"items": DiscoveryService(_database()).related_collections(collection_id)})
 
 
 @bp.post("/inspiration/<collection_id>/items")

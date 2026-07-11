@@ -1,64 +1,79 @@
-# 外部規格整合與衝突裁決
+# 外部規格整合與完成度裁決
 
-本文件對照：
+本文件重新對照五份外部設計稿與目前程式：
 
-- `from網頁flowinone_gallery_browsing_spec.md`
+- `flowinone_resource_library_plan.md`
+- `flowinone_entrance_system_build_dashboard.md`
 - `from網頁flowinone_knowledge_os_codex_spec.md`
-- 修改前的 Flowinone 程式與 README
+- `from網頁flowinone_gallery_browsing_spec.md`
+- `flowinone_retention_design_patterns.md`
 
-## Gallery：新規格與既有實作
+## 完成度矩陣
 
-| 主題 | 新 Gallery 規格 | 修改前 Flowinone | 採用決策 |
-|---|---|---|---|
-| Domain 邊界 | Gallery 不含筆記／閱讀狀態 | 首頁卡片混合 media、Resource、工作入口 | 新規格優先；Gallery 獨立 package、page、API |
-| 來源切換 | 同一 Query State 的 source filter | Local、Eagle、Chrome 各自路由 | 新規格加上使用者要求：同頁 checkbox 複選 |
-| Item 形態 | image/video item | folder 與 item 混合 | 使用者要求優先：Gallery 永不輸出 folder item |
-| Bookmarks | 原規格主要描述 image/video | 既有 Chrome bookmark wall | 使用者要求優先：bookmark 是第三種扁平 item，不帶 knowledge state |
-| Search/filter/sort | URL 是唯一真實來源 | 多個互不相通頁面 | 新規格優先 |
-| 技術棧 | 建議 FastAPI + React | Flask + Jinja + SQLAlchemy | 既有實作優先；先在同一 Flask app 建立清楚 domain，避免雙棧重寫 |
-| 儲存 | 建議 canonical Gallery schema | Local DB、Eagle、Chrome 各自 authoritative | 目前保留 source adapter；資料量與事件需求出現後再 materialize |
-| 舊 folder UI | 非主要 IA | 已有完整工具 | 保留但降為相容／維護入口，不刪功能 |
+| 規格主題 | 狀態 | 現行實作／裁決 |
+| --- | --- | --- |
+| Gallery 與 Knowledge OS 分離 | 已完成 | `/gallery/` 是扁平瀏覽 domain；不帶 Resource workflow state |
+| Local／Eagle／Bookmark 同頁瀏覽 | 已完成 | 來源可複選；folder 只作 metadata，不是 Gallery item |
+| Gallery Query State | 已完成 | q、source、type、tags ANY/ALL、日期、時長、favorite、unviewed、sort、seed、cursor、view |
+| 跨來源搜尋與 facets | 已完成 | Catalog projection + FTS5；`/search/` 與 `/api/catalog/*` |
+| SQLite keyset cursor | 已完成 | cursor 綁定 query signature；固定 random seed 可重現 |
+| Browse Session／Continue Browsing | 已完成 | 保存 query、seed/cursor、focused item、scroll 與最後活動時間 |
+| Favorite／view events | 已完成 | `item_user_state` 與 `catalog_events` 支援 favorite、hide、open/view、collection action |
+| Resource Library | 已完成基礎 | 匯入、去重、extractor、縮圖、FTS、選配 AI、狀態、Ask AI、Obsidian export |
+| BUILD／THINK／LEARN／SCAN／RECOVER／WRITE | 已完成 | 六種模式、Project、Decision、Output Asset 均使用 shared SQLite |
+| 正式 Entry 轉換 | 已完成 | transition matrix、typed multi-source provenance link/event、選配完成來源；AI 不自動改狀態 |
+| Manual／Smart／Generated Collection | 已完成基礎 | 沿用既有 Collection；Smart 保存 query，Generated 是需確認的固定 draft |
+| Similar Item／Collection | 已完成基礎 | explainable relation graph；先用 tag、title、source、collection、Eagle metadata |
+| Sidecar portable metadata | 已完成基礎 | `.flowinone.json` manifest、原子輸出、dry-run/diff、UID/fingerprint 搬移重連 |
+| OCR artifact | 基礎架構完成 | versioned artifact 與 provider interface；選配 Tesseract，未強制安裝 runtime |
+| 匿名 Person Cluster | 基礎架構完成 | person、item relation、人工命名 API；face provider/embedding benchmark 尚待後續 |
+| 自動 Raw → Wiki | 排除 | 屬於另一個 repo；Flowinone 只保留明確人工 promote/export |
+| 跨裝置同步 | 排除 | local-first、單人資料模型 |
+| OneTab／Keep／Notion／社群 connector | 排除 | 暫不加入來源或雙向同步 |
+| Obsidian Vault 全文索引／雙向同步 | 排除 | 只做 conflict-safe export，Vault 不進 Catalog |
 
-### Gallery 最終判斷
+## 衝突裁決
 
-新 md 在產品邊界、Query State、扁平 item 與 browse loop 上較好；既有程式在來源整合、媒體播放與目前 Flask 部署上較成熟。最佳整合不是二選一，而是「新 md 定義產品 contract，既有 adapter 與 viewer 繼續提供來源能力」。
+| 衝突 | 決策 |
+| --- | --- |
+| FastAPI + React 新堆疊 vs 現有 Flask + Jinja | 不全面重寫；以 package、service、API contract 分離 domain |
+| 建立新的 Gallery 主資料表 vs Local/Eagle/Chrome/Resource authoritative source | Catalog 是可重建 projection；來源仍是 authority，失敗時保留上一版並標 stale |
+| Gallery description/tag 等於知識筆記 | 禁止；Gallery metadata 不冒充 user note，轉成 Entry/Resource 必須明確操作 |
+| Resource 與 Chrome 同 URL 是兩個 item | Catalog 合併 canonical URL，但保留兩個 origin 與來源 provenance |
+| 建立第三套 collection schema | 禁止；擴充既有 `collections`／`collection_items` |
+| AI 自動改人工狀態或覆蓋 tag | 禁止；AI artifact、source tag、user tag 分開保存 |
+| 自動推薦 feed／autoplay | 不採用；使用可解釋 rails、Load More 與有邊界 Browse Session |
+| 第一版強制 CLIP／FAISS | 不採用；relation/provider-neutral interface 先行，再以 benchmark 決定模型 |
 
-## Knowledge OS：新規格與既有實作
+## 合法的 domain 交會
 
-| 新規格概念 | 既有對應 | 差距 | 本次處理 |
-|---|---|---|---|
-| Layer 0 Raw Resource | `resources`、origins、contents | 已存在 | 保留 |
-| Layer 1 Brief Card | summary fields、structured JSON、AIArtifact | 未獨立命名，但資料已存在 | 不建立重複 `resource_briefs`；以欄位 mapping 文件化 |
-| Layer 2 Wiki Note | `draft_notes`、sources、exports | 已存在 | 保留衝突安全 Obsidian export |
-| Layer 3 Output Asset | 無 | 缺失 | 新增 `output_assets`、`asset_sources` 與 WRITE UI/API |
-| Project-linked retrieval | Project 與 Resource 分離 | 缺 Resource↔Project/Mode | 新增 `resource_projects`、`resource_modes` 與 retrieval API |
-| Human decision | `user_note` 有人工內容，無 Decision Log | 缺 Project-level decision | 新增 `decisions` |
-| Modes | 五個 mode | 缺 WRITE | 新增 WRITE constraint、route、UI |
-| AI 不覆蓋人工判斷 | `user_note` 與 user tags 已分離 | 需要明確 contract | 保留並文件化；Decision 只由明確 user/API write 修改 |
-| Hybrid search | FTS5 + explainable similar | 無 embedding | 先保留現有可靠 FTS；embedding 延後 |
+```text
+Local / Eagle / Bookmark / Resource authority
+                   ↓ rebuildable sync
+              Catalog projection
+          ↙          ↓             ↘
+      Gallery      Search       Collections
+          \          |             /
+           explicit Entry transition
+                      ↓
+ BUILD / THINK / LEARN / SCAN / RECOVER / WRITE
+                      ↓ explicit export
+                   Obsidian
+```
 
-### Knowledge OS 最終判斷
+Gallery item 不會自動成為 Resource 或 Note。合法交會是 typed reference、加入 Collection、建立 Entry、建立有 provenance 的 Output Asset，或由使用者明確匯出 Draft Note。
 
-新 md 的四層模型、情境 retrieval、WRITE 與 Decision 較完整；既有 schema 對 Raw/Brief/Wiki 的實作已經更成熟。建立第二套 Resource/Brief/Note 表會造成雙真實來源，因此保留既有表，只有缺失的 context/decision/output 層透過 migration 增補。
+## 下一步仍值得做
 
-## 兩個 Domain 的合法交會點
+1. 在實際媒體樣本上 benchmark OCR 與 face provider，選定 runtime 後才啟用批次 job。
+2. 補人物 cluster 的 merge/split UI；目前已有匿名 cluster、命名與 item link 基礎。
+3. 以真實使用事件調整推薦權重，但維持每筆 reason 與 hidden/favorite 控制。
+4. Eagle 超過目前 adapter 批次上限時做完整增量同步與同步進度 UI。
 
-Gallery item 不會自動成為 Resource 或 Note。合法交會只能是明確的 typed reference／user action：
+## 明確不做
 
-1. 在媒體詳細頁建立 Entry。
-2. 把 Eagle/local item 加入 Inspiration Collection。
-3. 從 Collection 建立 Wiki Draft。
-4. 從 Resource、Note、Decision、Entry 建立有 provenance 的 Output Asset。
-
-禁止把 Gallery 的 description/tags 當成使用者筆記，也禁止把 Resource 的閱讀狀態加入 Gallery filter。
-
-## 本次刻意不做
-
-- FastAPI/React 平行重寫
-- Graph DB 或 Agent swarm
-- embedding、CLIP 與完整推薦模型
-- favorite/event/session schema
-- Notion 雙向同步
-- 把全部 Local/Eagle item 複製成 Knowledge Resource
-
-這些不是遺漏，而是依兩份規格的分階段原則，避免在可靠 browse loop 與 knowledge loop 之前增加第二套基礎設施。
+- 跨裝置同步、自動 Raw → Wiki、Notion/Keep/OneTab/社群 connectors。
+- Obsidian 全文索引或雙向同步。
+- Graph DB、Agent swarm、多人帳號、社交功能。
+- autoplay、強制下一個、無限制 infinite scroll。
+- AI 靜默覆寫 user tags、Decision、Collection 或 sidecar。

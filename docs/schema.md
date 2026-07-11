@@ -54,3 +54,19 @@ GalleryItem
 | AI provenance/confidence | `ai_artifacts` content/provider/model |
 | personal judgement | `user_note`（人工） |
 | project/mode relevance | `resource_projects` / `resource_modes` |
+
+## Migrations 0004–0006
+
+`0004_catalog_workflows` 新增：
+
+- Catalog：`catalog_items`、`catalog_origins`、`catalog_tags`、`catalog_item_tags`、`catalog_fts`、`catalog_sync_state`。
+- Workflow：`entry_links`，並回填既有 `source_entry_id`。
+- Discovery：`item_relations`、`collection_relations`、`item_user_state`、`catalog_events`、`browse_sessions`。
+- Collection：`membership_mode`、lifecycle、query/generation JSON、Catalog item reference 與 relation reason。
+- Vision foundation：`catalog_artifacts`、`people`、`item_people`。
+
+`0005_catalog_performance` 加入 source/item、title、captured time 與 view-signal 複合索引。實際 7k+ Bookmark Gallery 查詢由約 5.8 秒降至約 65 ms。
+
+`0006_typed_entry_links` 把最初只能 Entry→Entry 的關聯升級為 `entry_id + linked_type + linked_id + direction`。同一 Entry 因而可以有多個 Entry、Resource、Collection、Gallery item、Note 或 Output Asset source/output；舊 `source_entry_id` 與 transition provenance 均保留。
+
+Catalog identity：URL 使用 canonical URL hash；Eagle 使用 item ID；Local 優先使用 sidecar fingerprint／portable UID。Catalog 是 projection，不取代 `resources` 或 `item_db.db`。

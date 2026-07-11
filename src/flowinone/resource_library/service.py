@@ -139,6 +139,8 @@ class ResourceService:
             else:
                 state.value = value
                 state.updated_at = utc_now_text()
+        from src.flowinone.catalog.service import CatalogSyncService
+        CatalogSyncService(self.database).sync(("resources",))
         return summary
 
     def import_file_if_changed(
@@ -183,6 +185,8 @@ class ResourceService:
         resource = self.repository.get_by_canonical_url(canonical)
         if saved_reason:
             resource = self.repository.update(resource["id"], {"saved_reason": saved_reason})
+        from src.flowinone.catalog.service import CatalogSyncService
+        CatalogSyncService(self.database).sync_resource(resource["id"])
         return {"resource": resource, "import": summary.to_dict()}
 
     def update_resource(self, resource_id: str, changes: dict) -> dict:
@@ -191,10 +195,16 @@ class ResourceService:
             current = self.repository.get(resource_id)["reading_state"]
             if next_state != current and next_state not in READING_TRANSITIONS.get(current, set()):
                 raise ValueError(f"不允許從 {current} 直接改成 {next_state}")
-        return self.repository.update(resource_id, changes)
+        resource = self.repository.update(resource_id, changes)
+        from src.flowinone.catalog.service import CatalogSyncService
+        CatalogSyncService(self.database).sync_resource(resource_id)
+        return resource
 
     def replace_tags(self, resource_id: str, tags: Iterable[str]) -> dict:
-        return self.repository.replace_user_tags(resource_id, tags)
+        resource = self.repository.replace_user_tags(resource_id, tags)
+        from src.flowinone.catalog.service import CatalogSyncService
+        CatalogSyncService(self.database).sync_resource(resource_id)
+        return resource
 
     def enqueue_enrichment(self, resource_id: str, *, include_ai: bool = False, force: bool = False) -> list[dict]:
         resource = self.repository.get(resource_id)

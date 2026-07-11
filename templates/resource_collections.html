@@ -10,12 +10,16 @@
     <form class="resource-form resource-form-inline" method="post">
       <div><label for="collection-title">標題</label><input id="collection-title" name="title" required></div>
       <div><label for="collection-kind">類型</label><select id="collection-kind" name="kind"><option value="inspiration">靈感</option><option value="project">專案</option><option value="reading_list">閱讀清單</option></select></div>
+      <div><label for="collection-mode">成員模式</label><select id="collection-mode" name="membership_mode"><option value="manual">手動</option><option value="smart">Smart Query</option></select></div>
       <div class="resource-form-grow"><label for="collection-description">說明</label><input id="collection-description" name="description"></div>
+      <div class="resource-form-grow"><label for="collection-query">Smart 搜尋字串</label><input id="collection-query" name="query_q" placeholder="只在 Smart Query 使用"></div>
+      <div class="resource-form-grow"><label for="collection-query-tags">Smart Tags</label><input id="collection-query-tags" name="query_tags" placeholder="逗號分隔"></div>
+      <input type="hidden" name="query_scope" value="all"><input type="hidden" name="query_sort" value="recently_added">
       <button class="action-button primary" type="submit">建立</button>
     </form>
   </section>
   <section><div class="resource-section-heading"><h2>全部 Collections</h2><span>{{ collections|length }} 個</span></div>
-    <div class="collection-grid">{% for collection in collections %}<a class="collection-card" href="{{ url_for('resource_library.collection_detail', collection_id=collection.id) }}"><span class="resource-type">{{ collection.kind }}</span><h3>{{ collection.title }}</h3><p>{{ collection.description or '尚未加入說明。' }}</p><strong>{{ collection.item_count }} 個項目</strong></a>{% else %}<div class="resource-empty"><h3>還沒有 Collection</h3><p>先建立第一個靈感集合，再從資源詳細頁加入素材。</p></div>{% endfor %}</div>
+    <div class="collection-grid">{% for collection in collections %}<a class="collection-card" href="{{ url_for('resource_library.collection_detail', collection_id=collection.id) }}"><span class="resource-type">{{ collection.kind }} · {{ collection.membership_mode }} · {{ collection.lifecycle_status }}</span><h3>{{ collection.title }}</h3><p>{{ collection.description or '尚未加入說明。' }}</p><strong>{{ collection.item_count }} 個項目</strong></a>{% else %}<div class="resource-empty"><h3>還沒有 Collection</h3><p>先建立第一個靈感集合，再從資源詳細頁加入素材。</p></div>{% endfor %}</div>
   </section>
 </main>
 {% endblock %}

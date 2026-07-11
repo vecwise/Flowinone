@@ -8,7 +8,10 @@ from typing import Any, Iterable
 
 GALLERY_SOURCES = ("local", "eagle", "bookmarks")
 GALLERY_MEDIA_TYPES = ("image", "video", "bookmark")
-GALLERY_SORTS = ("newest", "recently_added", "relevance", "title", "random")
+GALLERY_SORTS = (
+    "newest", "recently_added", "relevance", "title", "random",
+    "most_viewed", "recently_viewed", "favorites", "similar",
+)
 GALLERY_VIEWS = ("grid", "compact")
 
 
@@ -29,6 +32,14 @@ class GalleryQuery:
     q: str = ""
     sources: tuple[str, ...] = GALLERY_SOURCES
     media_type: str = ""
+    tags: tuple[str, ...] = ()
+    tag_mode: str = "any"
+    favorite: bool = False
+    unviewed: bool = False
+    duration_min: float | None = None
+    duration_max: float | None = None
+    added_from: str = ""
+    added_to: str = ""
     sort: str = "recently_added"
     seed: int = 0
     view: str = "grid"
@@ -42,6 +53,14 @@ class GalleryQuery:
         q: Any = "",
         sources: Iterable[str] = (),
         media_type: Any = "",
+        tags: Iterable[str] = (),
+        tag_mode: Any = "any",
+        favorite: Any = False,
+        unviewed: Any = False,
+        duration_min: Any = None,
+        duration_max: Any = None,
+        added_from: Any = "",
+        added_to: Any = "",
         sort: Any = "recently_added",
         seed: Any = 0,
         view: Any = "grid",
@@ -66,10 +85,31 @@ class GalleryQuery:
             normalized_limit = max(1, min(int(limit or 48), 96))
         except (TypeError, ValueError):
             normalized_limit = 48
+        normalized_tags = tuple(
+            dict.fromkeys(
+                value.strip().casefold()
+                for raw in tags
+                for value in str(raw).split(",")
+                if value.strip()
+            )
+        )
+        def optional_number(value):
+            try:
+                return float(value) if value not in (None, "") else None
+            except (TypeError, ValueError):
+                return None
         return cls(
             q=str(q or "").strip()[:300],
             sources=normalized_sources,
             media_type=normalized_type,
+            tags=normalized_tags,
+            tag_mode="all" if str(tag_mode).lower() == "all" else "any",
+            favorite=favorite in (True, 1, "1", "true", "yes"),
+            unviewed=unviewed in (True, 1, "1", "true", "yes"),
+            duration_min=optional_number(duration_min),
+            duration_max=optional_number(duration_max),
+            added_from=str(added_from or "")[:40],
+            added_to=str(added_to or "")[:40],
             sort=normalized_sort,
             seed=normalized_seed,
             view=normalized_view,
@@ -82,6 +122,14 @@ class GalleryQuery:
             "q": self.q,
             "sources": list(self.sources),
             "type": self.media_type or None,
+            "tags": list(self.tags),
+            "tag_mode": self.tag_mode,
+            "favorite": self.favorite,
+            "unviewed": self.unviewed,
+            "duration_min": self.duration_min,
+            "duration_max": self.duration_max,
+            "added_from": self.added_from or None,
+            "added_to": self.added_to or None,
             "sort": self.sort,
             "seed": self.seed or None,
             "view": self.view,
@@ -105,6 +153,10 @@ class GalleryItem:
     description: str | None = None
     relative_path: str | None = None
     original_url: str | None = None
+    detail_uri: str | None = None
+    duration_seconds: float | None = None
+    favorite: bool = False
+    open_count: int = 0
     is_available: bool = True
     sequence: int = 0
     relevance: float = 0.0

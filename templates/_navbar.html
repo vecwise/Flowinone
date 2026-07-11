@@ -9,6 +9,7 @@
 
     <div class="nav-links">
         <a class="{% if request.blueprint == 'gallery' %}is-active{% endif %}" href="{{ url_for('gallery.gallery_index') }}" {% if request.blueprint == 'gallery' %}aria-current="page"{% endif %}>GALLERY</a>
+        <a class="{% if request.blueprint == 'catalog' %}is-active{% endif %}" href="{{ url_for('catalog.search_page') }}" {% if request.blueprint == 'catalog' %}aria-current="page"{% endif %}>SEARCH</a>
         <a class="{% if request.endpoint == 'entry_system.build_dashboard' %}is-active{% endif %}" href="{{ url_for('entry_system.build_dashboard') }}" {% if request.endpoint == 'entry_system.build_dashboard' %}aria-current="page"{% endif %}>BUILD</a>
         <a class="{% if request.endpoint == 'entry_system.think_page' %}is-active{% endif %}" href="{{ url_for('entry_system.think_page') }}" {% if request.endpoint == 'entry_system.think_page' %}aria-current="page"{% endif %}>THINK</a>
         <a class="{% if request.endpoint == 'entry_system.learn_page' %}is-active{% endif %}" href="{{ url_for('entry_system.learn_page') }}" {% if request.endpoint == 'entry_system.learn_page' %}aria-current="page"{% endif %}>LEARN</a>
@@ -27,16 +28,10 @@
             {% for source in request.args.getlist('source') %}<input type="hidden" name="source" value="{{ source }}">{% endfor %}
             <button type="submit">搜尋</button>
         </form>
-        {% elif feature_flags.eagle %}
-        <form class="search-container" action="{{ url_for('search_eagle') }}" method="GET" role="search">
-            <label class="sr-only" for="globalSearch">搜尋 Flowinone</label>
-            <input id="globalSearch" type="search" placeholder="搜尋內容或 tag" name="query">
-            <button type="submit">搜尋</button>
-        </form>
         {% else %}
-        <form class="search-container" action="{{ url_for('resource_library.resource_index') }}" method="GET" role="search">
-            <label class="sr-only" for="globalSearch">搜尋 Resource Library</label>
-            <input id="globalSearch" type="search" placeholder="搜尋資源全文" name="q">
+        <form class="search-container" action="{{ url_for('catalog.search_page') }}" method="GET" role="search">
+            <label class="sr-only" for="globalSearch">搜尋 Flowinone</label>
+            <input id="globalSearch" type="search" placeholder="跨來源搜尋" name="q">
             <button type="submit">搜尋</button>
         </form>
         {% endif %}
