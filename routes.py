@@ -24,6 +24,8 @@ from src.file_handler import (
     get_eagle_images_by_folderid,
     get_eagle_images_by_tag,
     get_eagle_tags,
+    get_eagle_smart_folders,
+    get_eagle_images_by_smart_folder_id,
     search_eagle_items,
     get_eagle_stream_items,
     get_chrome_bookmarks,
@@ -1162,6 +1164,29 @@ def _register_eagle_routes(app):
             abort(500, description=str(exc))
         metadata_dict = _to_dict(metadata)
         return render_template("eagle_tags.html", metadata=metadata_dict, tags=tags)
+
+    @app.route('/EAGLE_smart_folders/')
+    @require_feature("eagle")
+    def list_eagle_smart_folders():
+        """List Eagle v2 smart folders as dynamic collections."""
+        try:
+            metadata, data = get_eagle_smart_folders()
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
+
+    @app.route('/EAGLE_smart_folder/<smart_folder_id>/')
+    @require_feature("eagle")
+    def view_eagle_smart_folder(smart_folder_id):
+        """Browse items matched by an Eagle v2 smart folder."""
+        try:
+            metadata, data = get_eagle_images_by_smart_folder_id(smart_folder_id)
+        except ExternalServiceError as exc:
+            abort(500, description=str(exc))
+        metadata_dict, data_list = _serialize_payload(metadata, data)
+        _attach_detail_urls(data_list, _normalize_current_url())
+        return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
     @app.route('/EAGLE_folder/<eagle_folder_id>/')
     @require_feature("eagle")

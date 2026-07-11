@@ -147,7 +147,7 @@ The public build includes YouTube plus Open Graph, Twitter Card, JSON-LD, and `i
 | **DB Main** | Local/external media folders with Grid / Single / Linear views |
 | **Chrome Bookmarks** | Full Chrome bookmark hierarchy |
 | **YouTube Bookmarks** | Every YouTube link rendered with thumbnails |
-| **EAGLE Folders / Tags / Stream** | Browse Eagle folders, tags, and real-time item streams |
+| **EAGLE Folders / Tags / Smart Folders / Stream** | Browse Eagle folders, dynamic smart folders, tags, and real-time item streams |
 | **Resource Flow** | Process unread web resources, search extracted content, and promote notes |
 | **Inspiration** | Curate mixed Eagle/local/resource references into collections |
 | **Synthesis Notes** | Merge multiple sources and export Markdown to Obsidian |
@@ -163,6 +163,9 @@ Every browsing page supports:
 
 - `run.py` — bootstraps the Flask app and registers all routes.
 - `routes.py` — routing layer combining Eagle, file-system, and Chrome bookmark endpoints.
+- `src/eagle_api/` — isolated Eagle Web API v2 client and compatibility facade. Local Eagle
+  uses `http://localhost:41595/api/v2` by default; set `EAGLE_API_URL` and
+  `EAGLE_API_TOKEN` when connecting to Eagle over LAN.
 - `src/flowinone/resource_library/` — Resource domain, repository/services, extractors,
   leased jobs, curation, Obsidian bridge, Flask blueprint, and worker.
 - `migrations/` — Alembic schema history for the durable Resource DB and FTS projection.

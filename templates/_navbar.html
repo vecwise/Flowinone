@@ -46,6 +46,7 @@
             <summary>更多</summary>
             <div class="nav-tools-menu">
                 {% if feature_flags.eagle %}<a href="{{ url_for('eagle_stream') }}">Eagle 串流</a>{% endif %}
+                {% if feature_flags.eagle %}<a href="{{ url_for('list_eagle_smart_folders') }}">Eagle Smart Folders</a>{% endif %}
                 <a href="{{ url_for('resource_library.note_index') }}">整併筆記</a>
                 {% if feature_flags.youtube %}<a href="{{ url_for('view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
                 {% if feature_flags.db %}

@@ -198,8 +198,8 @@ def get_eagle_tags():
 
 
 def search_eagle_items(keyword, limit=120):
-    """透過 Eagle API 搜尋關鍵字並回傳格式化後的列表。"""
-    response = EG.EAGLE_list_items(keyword=keyword, limit=limit, orderBy="CREATEDATE")
+    """Use Eagle v2 full-text search, including AND/OR/NOT query syntax."""
+    response = EG.EAGLE_query_items(keyword, limit=limit)
     if response.get("status") != "success":
         raise ExternalServiceError(f"Failed to search Eagle items: {response.get('data')}")
 
@@ -216,6 +216,57 @@ def search_eagle_items(keyword, limit=120):
     )
 
     return metadata, data
+
+
+def get_eagle_smart_folders():
+    """Return Eagle v2 smart folders as browsable Flowinone collections."""
+    response = EG.EAGLE_get_smart_folders()
+    if response.get("status") != "success":
+        raise ExternalServiceError(f"Failed to fetch Eagle smart folders: {response.get('data')}")
+
+    metadata = PageMetadata(
+        name="Eagle Smart Folders",
+        category="smart-collections",
+        tags=["eagle", "smart-folders"],
+        path="/EAGLE_smart_folders/",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=EG.EAGLE_get_current_library_path(),
+    )
+    data: list[MediaEntry] = []
+    for folder in response.get("data") or []:
+        folder_id = folder.get("id")
+        if not folder_id:
+            continue
+        items_response = EG.EAGLE_get_smart_folder_items(folder_id, fields=["id", "name", "ext"])
+        items = items_response.get("data") or [] if items_response.get("status") == "success" else []
+        thumbnail = _format_eagle_items(items[:1])[0].thumbnail_route if items else DEFAULT_THUMBNAIL_ROUTE
+        data.append(MediaEntry(
+            id=folder_id,
+            name=folder.get("name") or "Unnamed Smart Folder",
+            url=f"/EAGLE_smart_folder/{folder_id}/",
+            thumbnail_route=thumbnail,
+            item_path=None,
+            media_type="folder",
+            description=folder.get("description") or f"{folder.get('imageCount', 0)} items",
+        ))
+    return metadata, data
+
+
+def get_eagle_images_by_smart_folder_id(smart_folder_id):
+    response = EG.EAGLE_get_smart_folder_items(smart_folder_id)
+    if response.get("status") != "success":
+        raise ExternalServiceError(f"Failed to fetch Eagle smart folder: {response.get('data')}")
+    folders_response = EG.EAGLE_get_smart_folders()
+    folder = next((entry for entry in folders_response.get("data") or [] if entry.get("id") == smart_folder_id), None)
+    metadata = PageMetadata(
+        name=(folder or {}).get("name") or smart_folder_id,
+        category="smart-folder",
+        tags=[],
+        path=f"/EAGLE_smart_folder/{smart_folder_id}/",
+        thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
+        filesystem_path=None,
+    )
+    return metadata, _format_eagle_items(response.get("data") or [])
 
 
 def get_eagle_stream_items(offset=0, limit=30):
@@ -358,6 +409,20 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
     根據標籤或資料夾推薦相似項目。
     """
     candidate_map = OrderedDict()
+    used_ai = False
+
+    # Prefer v2 AI visual similarity when the optional Eagle plugin is ready.
+    try:
+        if EG.EAGLE_ai_is_ready():
+            ai_response = EG.EAGLE_ai_search_similar(current_item_id, limit=limit + 1)
+            if ai_response.get("status") == "success":
+                for result in ai_response.get("data") or []:
+                    raw = result.get("item") if isinstance(result, dict) else None
+                    if raw and raw.get("id") != current_item_id:
+                        candidate_map.setdefault(raw["id"], raw)
+                        used_ai = True
+    except Exception:
+        pass
 
     def _accumulate_from_response(response):
         if response.get("status") != "success":
@@ -399,7 +464,9 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
     if sample_size == 0:
         return []
 
-    sampled_raw = random.sample(candidate_list, sample_size)
+    # AI responses are score-sorted. Keep that order; legacy tag/folder fallback
+    # remains sampled so the detail page does not become repetitive.
+    sampled_raw = candidate_list[:sample_size] if used_ai else random.sample(candidate_list, sample_size)
     formatted_candidates = _format_eagle_items(sampled_raw)
     formatted_map = {item.id: item for item in formatted_candidates if getattr(item, "id", None)}
 
