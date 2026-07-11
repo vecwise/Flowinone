@@ -12,7 +12,7 @@
 
 | 規格主題 | 狀態 | 現行實作／裁決 |
 | --- | --- | --- |
-| Gallery 與 Knowledge OS 分離 | 已完成 | `/gallery/` 是扁平瀏覽 domain；不帶 Resource workflow state |
+| Gallery 與 Knowledge OS 分離 | 已完成 | `/gallery/` 是扁平瀏覽 domain；不帶 Resource workflow state，也不會因 canonical merge 自動跳入 Resource |
 | Local／Eagle／Bookmark 同頁瀏覽 | 已完成 | 來源可複選；folder 只作 metadata，不是 Gallery item |
 | Gallery Query State | 已完成 | q、source、type、tags ANY/ALL、日期、時長、favorite、unviewed、sort、seed、cursor、view |
 | 跨來源搜尋與 facets | 已完成 | Catalog projection + FTS5；`/search/` 與 `/api/catalog/*` |
@@ -31,6 +31,8 @@
 | 跨裝置同步 | 排除 | local-first、單人資料模型 |
 | OneTab／Keep／Notion／社群 connector | 排除 | 暫不加入來源或雙向同步 |
 | Obsidian Vault 全文索引／雙向同步 | 排除 | 只做 conflict-safe export，Vault 不進 Catalog |
+
+Gallery 的 canonical item 只用於搜尋與去重；開啟時必須依使用者目前選取的 origin：Bookmark 開原始 URL、Local／Eagle 開來源 viewer、Resource 才開 Resource detail。Gallery 瀏覽、相似項目與 favorite 不會自動建立 Inspiration／Collection。
 
 ## 衝突裁決
 

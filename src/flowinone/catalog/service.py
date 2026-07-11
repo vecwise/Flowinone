@@ -17,6 +17,7 @@ from sqlalchemy import text
 from src.file_handler.chrome_bookmarks import iter_chrome_bookmark_records
 from src.file_handler.eagle_integration import get_eagle_stream_items
 from src.file_handler.item_db import fetch_items
+from src.file_handler.media_cache import lookup_thumbnail_for_bookmark
 from src.flowinone.resource_library.canonical import normalize_resource_url
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import new_id, utc_now_text
@@ -383,11 +384,12 @@ class CatalogSyncService:
                 continue
             folder = str(record.get("folder_path") or "")
             tags = [(part, "folder") for part in re.split(r"\s*/\s*|\s+\/\s+", folder) if part]
+            thumbnail = lookup_thumbnail_for_bookmark(url, str(record.get("title") or canonical), {"folder_path": folder})
             self._upsert(
                 conn, identity_key=identity, source_kind="bookmarks", source_key=url,
                 item_type="bookmark", title=str(record.get("title") or canonical),
-                description=folder, original_url=canonical, detail_uri=canonical,
-                tags=tags, captured_at=str(record.get("date_added") or ""), metadata={"folder_path": folder},
+                description=folder, thumbnail_ref=str(thumbnail.route or ""), original_url=canonical, detail_uri=canonical,
+                tags=tags, captured_at=str(record.get("date_added") or ""), metadata={"folder_path": folder, "thumbnail_ref": thumbnail.route or "", "thumbnail_sub_type": thumbnail.sub_type},
             )
             count += 1
         return count
@@ -447,6 +449,8 @@ class CatalogSyncService:
         loaders = {"resources": self._sync_resources, "bookmarks": self._sync_bookmarks, "local": self._sync_local, "eagle": self._sync_eagle}
         for source in selected:
             now = utc_now_text()
+            with self.database.engine.connect() as conn:
+                previous_count = int(conn.execute(text("SELECT item_count FROM catalog_sync_state WHERE source_kind=:source"), {"source": source}).scalar() or 0)
             try:
                 with self.database.engine.begin() as conn:
                     conn.execute(text("UPDATE catalog_origins SET stale=1 WHERE source_kind=:source"), {"source": source})
@@ -459,8 +463,8 @@ class CatalogSyncService:
             except Exception as exc:
                 with self.database.engine.begin() as conn:
                     conn.execute(
-                        text("INSERT INTO catalog_sync_state(source_kind,status,item_count,error_message,synced_at) VALUES(:source,'failed',0,:error,:now) ON CONFLICT(source_kind) DO UPDATE SET status='failed',error_message=:error,synced_at=:now"),
-                        {"source": source, "error": str(exc)[:2000], "now": now},
+                        text("INSERT INTO catalog_sync_state(source_kind,status,item_count,error_message,synced_at) VALUES(:source,'failed',:count,:error,:now) ON CONFLICT(source_kind) DO UPDATE SET status='failed',item_count=:count,error_message=:error,synced_at=:now"),
+                        {"source": source, "count": previous_count, "error": str(exc)[:2000], "now": now},
                     )
                 result[source] = {"status": "failed", "error": str(exc)}
         return result
@@ -639,6 +643,27 @@ class CatalogService:
             result["origins"] = [dict(origin) for origin in conn.execute(text("SELECT source_kind,source_key,detail_uri,original_url,metadata_json,stale FROM catalog_origins WHERE catalog_item_id=:id"), {"id": item_id}).mappings()]
             result["tags"] = list(conn.execute(text("SELECT DISTINCT t.name FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id WHERE it.catalog_item_id=:id ORDER BY t.name"), {"id": item_id}).scalars())
             return result
+
+    def get_origin(self, item_id: str, source_kind: str, *, include_stale: bool = False) -> dict[str, Any] | None:
+        """Return the source-owned launch metadata for one canonical item.
+
+        A canonical Catalog item can have several origins. Callers that render a
+        source-specific surface must use this method instead of the item-level
+        primary URI, otherwise a Bookmark can accidentally open its Resource
+        workflow page.
+        """
+        stale_clause = "" if include_stale else "AND stale=0"
+        with self.database.engine.connect() as conn:
+            row = conn.execute(
+                text(f"SELECT * FROM catalog_origins WHERE catalog_item_id=:item AND source_kind=:source {stale_clause} ORDER BY last_seen_at DESC LIMIT 1"),
+                {"item": item_id, "source": source_kind},
+            ).mappings().first()
+        if row is None:
+            return None
+        result = dict(row)
+        result["metadata"] = _json(result.pop("metadata_json", "{}"), {})
+        result["stale"] = bool(result.get("stale"))
+        return result
 
     def record_event(self, item_id: str, event_type: str, *, value: float | None = None, session_id: str | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         if event_type not in {"open", "view", "favorite", "unfavorite", "hide", "unhide", "add_to_collection"}:

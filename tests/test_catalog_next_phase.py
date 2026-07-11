@@ -15,6 +15,8 @@ from src.file_handler.sidecars import SidecarService
 from src.flowinone.catalog.discovery import DiscoveryService
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.entry_system.service import EntryService
+from src.flowinone.gallery.models import GalleryQuery
+from src.flowinone.gallery.service import CatalogGalleryService
 from src.flowinone.resource_library.curation import CollectionService
 from src.flowinone.resource_library.database import get_resource_database
 
@@ -96,6 +98,23 @@ def test_generated_and_smart_collections_use_catalog_items(tmp_path):
     assert generated[0]["lifecycle_status"] == "draft"
 
 
+def test_gallery_uses_selected_origin_and_hides_unavailable_eagle(monkeypatch, tmp_path):
+    database, first, second, _ = _catalog(tmp_path)
+    gallery = CatalogGalleryService(database)
+
+    bookmark_page = gallery.list_items(GalleryQuery.create(sources=["bookmarks"], limit=10))
+    selected = next(item for item in bookmark_page.items if item.id == first)
+    assert selected.source == "bookmarks"
+    assert selected.detail_uri == "https://example.com/one"
+    assert selected.original_url == "https://example.com/one"
+
+    monkeypatch.setattr("src.flowinone.gallery.service.is_eagle_available", lambda: False)
+    eagle_page = gallery.list_items(GalleryQuery.create(sources=["eagle"], limit=10))
+    assert eagle_page.items == []
+    assert "eagle" in eagle_page.source_errors
+    assert second
+
+
 def test_entry_transition_is_explicit_and_linked(tmp_path):
     database = get_resource_database(tmp_path / "entries.db")
     service = EntryService(database)
@@ -158,12 +177,17 @@ def test_new_catalog_routes_render(tmp_path):
     sync = CatalogSyncService(database)
     with database.engine.begin() as conn:
         sync._upsert(conn, identity_key="local:web", source_kind="local", source_key="web", item_type="image", title="Web item", detail_uri="/image/web.jpg")
+        sync._upsert(conn, identity_key="url:web", source_kind="bookmarks", source_key="https://example.com/web", item_type="bookmark", title="Web bookmark", detail_uri="https://example.com/web", original_url="https://example.com/web")
+        sync._upsert(conn, identity_key="url:web", source_kind="resources", source_key="resource-web", item_type="article", title="Web resource", detail_uri="/resources/resource-web/", original_url="https://example.com/web", prefer=True)
     app = Flask("catalog-next", template_folder=str(Path(__file__).parents[1] / "templates"), static_folder=str(Path(__file__).parents[1] / "static"))
     app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(tmp_path / "web.db"), FLOWINONE_RESOURCE_LINK_THUMBNAILS=False)
     register_routes(app)
     client = app.test_client()
     assert client.get("/search/").status_code == 200
     assert client.get("/api/catalog/items").status_code == 200
+    bookmark_search = client.get("/search/?source=bookmarks")
+    assert b"https://example.com/web" in bookmark_search.data
+    assert b"/resources/resource-web/" not in bookmark_search.data
 
 
 def test_catalog_100k_keyset_query_contract(tmp_path):

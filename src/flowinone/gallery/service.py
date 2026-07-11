@@ -16,6 +16,7 @@ from src.file_handler.chrome_bookmarks import iter_chrome_bookmark_records
 from src.file_handler.eagle_integration import get_eagle_stream_items
 from src.file_handler.item_db import fetch_items
 from src.file_handler.media_cache import lookup_thumbnail_for_bookmark
+from src.file_handler.eagle_integration import is_eagle_available
 from src.file_handler.models import BookmarkError, BookmarkNotFound, ExternalServiceError
 from src.file_handler.paths import DEFAULT_THUMBNAIL_ROUTE
 
@@ -265,11 +266,19 @@ class CatalogGalleryService:
         self.sync = CatalogSyncService(database)
 
     def list_items(self, query: GalleryQuery) -> GalleryPage:
+        eagle_available = is_eagle_available() if "eagle" in query.sources else True
+        active_sources = tuple(source for source in query.sources if source != "eagle" or eagle_available)
+        source_errors = {} if eagle_available else {"eagle": "Eagle 目前未連線；已保留索引，但暫不顯示不可開啟的項目。"}
+        if not active_sources:
+            return GalleryPage(
+                items=[], total=0, next_cursor=None, query=query,
+                source_counts={source: 0 for source in GALLERY_SOURCES}, source_errors=source_errors,
+            )
         if self.catalog.count() == 0:
-            self.sync.sync(("resources", *query.sources))
+            self.sync.sync(("resources", *active_sources))
         payload = self.catalog.list(
             CatalogQuery.create(
-                q=query.q, scope="gallery", sources=query.sources,
+                q=query.q, scope="gallery", sources=active_sources,
                 item_type=query.media_type, tags=query.tags, tag_mode=query.tag_mode,
                 favorite=query.favorite, unviewed=query.unviewed,
                 duration_min=query.duration_min, duration_max=query.duration_max,
@@ -280,25 +289,29 @@ class CatalogGalleryService:
         )
         items: list[GalleryItem] = []
         counts = {source: int(payload["facets"]["sources"].get(source, 0)) for source in GALLERY_SOURCES}
+        if not eagle_available:
+            counts["eagle"] = 0
         for row in payload["items"]:
             origin_sources = row.get("sources") or []
-            source = next((value for value in query.sources if value in origin_sources), origin_sources[0] if origin_sources else "bookmarks")
+            source = next((value for value in active_sources if value in origin_sources), origin_sources[0] if origin_sources else "bookmarks")
+            origin = self.catalog.get_origin(row["id"], source) or {}
+            origin_metadata = origin.get("metadata") or {}
             media_type = row.get("item_type")
             if source == "bookmarks" and media_type not in {"image", "video"}:
                 media_type = "bookmark"
             items.append(
                 GalleryItem(
                     id=row["id"], source=source, media_type=media_type,
-                    title=row["title"], thumbnail_url=row.get("thumbnail_ref") or DEFAULT_THUMBNAIL_ROUTE,
+                    title=row["title"], thumbnail_url=origin_metadata.get("thumbnail_ref") or row.get("thumbnail_ref") or DEFAULT_THUMBNAIL_ROUTE,
                     tags=row.get("tags") or [], created_at=row.get("captured_at"),
-                    description=row.get("description"), original_url=row.get("original_url"),
-                    detail_uri=row.get("primary_detail_uri"), duration_seconds=row.get("duration_seconds"),
+                    description=row.get("description"), original_url=origin.get("original_url") or row.get("original_url"),
+                    detail_uri=(origin.get("original_url") or origin.get("detail_uri")) if source == "bookmarks" else origin.get("detail_uri"), duration_seconds=row.get("duration_seconds"),
                     favorite=bool(row.get("favorite")), open_count=int(row.get("open_count") or 0),
                 )
             )
         return GalleryPage(
             items=items, total=int(payload["total_estimate"]), next_cursor=payload.get("next_cursor"),
-            query=query, source_counts=counts, source_errors={},
+            query=query, source_counts=counts, source_errors=source_errors,
         )
 
 

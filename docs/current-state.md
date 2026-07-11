@@ -65,4 +65,4 @@ Flowinone 現在有兩個明確的一級產品面：
 
 ## 驗證基準
 
-`conda run -n py3.11 pytest -q`：68 passed、1 skipped（包含 100k synthetic Catalog contract；online smoke test 預設跳過）。
+`conda run -n py3.11 pytest -q`：69 passed、1 skipped（包含 100k synthetic Catalog contract 與 origin-aware link contract；online smoke test 預設跳過）。

@@ -22,14 +22,15 @@ Flowinone 的兩個問題層次不同、但互相需要：
 
 ```mermaid
 flowchart LR
-    A[Chrome bookmarks / Eagle / 本機媒體] --> B[Resource Library]
+    A[Chrome bookmarks / Eagle / 本機媒體] --> G[Gallery]
+    A --> B[Resource Library]
     B --> C[SCAN 或 LEARN Entry]
     C --> D[THINK]
     D --> E[BUILD Entry / Project]
-    B --> F[靈感 Collection]
-    F --> G[整併 Draft Note]
-    G --> H[Obsidian]
-    E --> I[Continue / BUILD Dashboard]
+    B --> F[明確建立 Collection]
+    F --> H[整併 Draft Note]
+    H --> I[Obsidian]
+    E --> J[Continue / BUILD Dashboard]
 ```
 
 ## 產品原則

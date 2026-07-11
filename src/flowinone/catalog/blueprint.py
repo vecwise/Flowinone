@@ -10,6 +10,7 @@ import click
 from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, render_template, request, url_for
 
 from src.flowinone.resource_library.database import get_resource_database
+from src.file_handler.eagle_integration import is_eagle_available
 
 from .service import CATALOG_SOURCES, CatalogQuery, CatalogService, CatalogSyncService
 from .discovery import DiscoveryService
@@ -50,12 +51,40 @@ def search_page():
         payload = service.list(query)
     except ValueError as exc:
         abort(400, description=str(exc))
+    eagle_available = is_eagle_available() if "eagle" in query.sources else True
+    visible_items = []
+    for item in payload["items"]:
+        origins = []
+        for source in query.sources:
+            origin = service.get_origin(item["id"], source)
+            if origin:
+                origins.append(origin)
+        if not origins:
+            for source in item.get("sources") or []:
+                origin = service.get_origin(item["id"], source)
+                if origin:
+                    origins.append(origin)
+        chosen = next((origin for origin in origins if origin["source_kind"] != "eagle" or eagle_available), None)
+        if chosen:
+            metadata = chosen.get("metadata") or {}
+            item["launch_source"] = chosen["source_kind"]
+            item["launch_uri"] = (chosen.get("original_url") or chosen.get("detail_uri")) if chosen["source_kind"] == "bookmarks" else chosen.get("detail_uri")
+            item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
+        else:
+            # Do not render a dead link for an Eagle-only item while Eagle is
+            # offline. Mixed-origin items remain visible through their other
+            # origin.
+            continue
+        visible_items.append(item)
+    payload["items"] = visible_items
+    if not payload["next_cursor"]:
+        payload["total_estimate"] = len(visible_items)
     next_url = None
     if payload["next_cursor"]:
         args = request.args.to_dict(flat=False)
         args["cursor"] = [payload["next_cursor"]]
         next_url = f"{url_for('catalog.search_page')}?{urlencode(args, doseq=True)}"
-    return render_template("catalog_search.html", title="Search · Flowinone", payload=payload, query=query, sources=CATALOG_SOURCES, next_url=next_url)
+    return render_template("catalog_search.html", title="Search · Flowinone", payload=payload, query=query, sources=CATALOG_SOURCES, next_url=next_url, eagle_available=eagle_available)
 
 
 @bp.get("/api/catalog/items")
