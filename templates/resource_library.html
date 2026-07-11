@@ -100,6 +100,20 @@
     <a class="action-button" href="{{ url_for('resource_library.resource_index') }}">清除</a>
   </form>
 
+  <details class="resource-panel resource-snapshot-panel">
+    <summary>將目前篩選儲存為狀態化 Entry</summary>
+    <form class="resource-form resource-form-inline" method="post" action="{{ url_for('entry_system.entry_create_snapshot') }}">
+      <input type="hidden" name="target_uri" value="{{ snapshot_target_uri }}">
+      <input type="hidden" name="state" value="{{ snapshot_state_json }}">
+      <input type="hidden" name="context" value="{{ snapshot_context_json }}">
+      <input type="hidden" name="return_to" value="{{ snapshot_target_uri }}">
+      <div class="resource-form-grow"><label for="snapshot-name">Entry 名稱</label><input id="snapshot-name" name="name" required placeholder="例如：待閱讀的 RISC-V 資源"></div>
+      <div><label for="snapshot-mode">進入模式</label><select id="snapshot-mode" name="mode"><option value="learn">LEARN</option><option value="scan">SCAN</option><option value="build">BUILD</option></select></div>
+      <div class="resource-form-grow"><label for="snapshot-next-action">下一步（選填）</label><input id="snapshot-next-action" name="next_action" placeholder="進去後先做什麼？"></div>
+      <button class="action-button" type="submit">儲存 Entry</button>
+    </form>
+  </details>
+
   <section aria-labelledby="resource-results-heading">
     <div class="resource-section-heading">
       <div>

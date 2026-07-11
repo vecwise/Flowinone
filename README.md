@@ -46,6 +46,28 @@ Chrome / URL
 - Eagle and local files remain authoritative in Eagle/filesystem. Collections store typed references and display snapshots only.
 - AI is optional. Import, browsing, FTS, workflow, collections, and Obsidian export work without it.
 
+### Entry System + BUILD Dashboard
+
+The default `/` route now opens `/build/`: a deliberate resume surface rather than a
+content feed. It uses Entry + Project records in the same local SQLite database:
+
+```text
+BUILD / THINK / LEARN / SCAN / RECOVER
+    → Entry (target + context + state snapshot + next action)
+    → Project context
+    → Resource / Eagle / local-media / Collection / Draft target
+```
+
+- `/build/` — Continue, New, Think → Build, Current Project, recent work, blocked work.
+- `/entries/` and `/projects/` — manage reusable context and stateful entry points.
+- `/library/` — preserves the former content-discovery workbench as a secondary surface.
+- Resource filters can be saved as entries; Resource, Collection, Draft, Eagle image, and
+  local video pages can create LEARN or BUILD entries directly.
+- Targets are validated local paths or allowed URI schemes; Flowinone never executes an
+  arbitrary shell command from Entry metadata.
+
+Read the combined product specification in [docs/flowinone_knowledge_flow_system.md](docs/flowinone_knowledge_flow_system.md).
+
 ---
 
 ## ⚙️ Getting Started
@@ -108,6 +130,7 @@ Apply migrations and import the current Chrome profile:
 
 ```bash
 conda run -n py3.11 flask --app run resources-db-upgrade
+conda run -n py3.11 flask --app run entries-db-upgrade
 conda run -n py3.11 flask --app run resources-sync --no-enqueue
 ```
 
@@ -143,7 +166,10 @@ The public build includes YouTube plus Open Graph, Twitter Card, JSON-LD, and `i
 
 | Menu item | What you get |
 |-----------|---------------|
-| **Home** | Eagle-powered discovery feed (random inspiration, video highlights, hot tags, similar clusters) |
+| **BUILD (Home)** | Resume a current project or the next meaningful action without a content feed |
+| **THINK / LEARN / SCAN / RECOVER** | Enter an intentional mode with its own lightweight Entry list |
+| **Entries / Projects** | State-based action starts and their durable work contexts |
+| **Explore Library** | The former Eagle-powered discovery workbench, now secondary to BUILD |
 | **DB Main** | Local/external media folders with Grid / Single / Linear views |
 | **Chrome Bookmarks** | Full Chrome bookmark hierarchy |
 | **YouTube Bookmarks** | Every YouTube link rendered with thumbnails |
@@ -168,7 +194,10 @@ Every browsing page supports:
   `EAGLE_API_TOKEN` when connecting to Eagle over LAN.
 - `src/flowinone/resource_library/` — Resource domain, repository/services, extractors,
   leased jobs, curation, Obsidian bridge, Flask blueprint, and worker.
-- `migrations/` — Alembic schema history for the durable Resource DB and FTS projection.
+- `src/flowinone/entry_system/` — Entry, Project, resume policy, safe target execution,
+  Flask UI/API, state snapshots, and Think → Build flow.
+- `migrations/` — Alembic schema history for the durable Resource DB, FTS projection,
+  and Entry system.
 - `file_handler.py` — core logic:
   - Normalizes all media metadata (local + Eagle).
   - Parses Chrome bookmarks, detects YouTube URLs, and builds recommendations.

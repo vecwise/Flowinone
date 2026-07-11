@@ -828,8 +828,10 @@ def register_routes(app):
     _register_media_routes(app)
     _register_thumbnail_cli(app)
     from src.flowinone.resource_library.blueprint import register_resource_library
+    from src.flowinone.entry_system.blueprint import register_entry_system
 
     register_resource_library(app)
+    register_entry_system(app)
 
 
 def _register_context_processors(app):
@@ -841,7 +843,14 @@ def _register_context_processors(app):
 def _register_index_routes(app):
     @app.route('/')
     def index():
-        """Flowinone personal content operating system homepage."""
+        """Default to BUILD; preserve old query-mode links as the content library."""
+        if request.args.get("mode"):
+            return redirect(url_for("content_library", mode=request.args.get("mode")))
+        return redirect(url_for("entry_system.build_dashboard"))
+
+    @app.route('/library/')
+    def content_library():
+        """Legacy content workbench, retained as a secondary discovery surface."""
         flags = _get_feature_flags()
         active_mode = request.args.get("mode", "explore").strip().lower()
         context = _build_index_context(flags, active_mode=active_mode)

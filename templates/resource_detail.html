@@ -139,6 +139,19 @@
       </section>
 
       <section class="resource-surface">
+        <h2>轉成工作入口</h2>
+        <p class="resource-helper">把這筆素材帶入明確模式，而不是只留在收藏庫。</p>
+        <div class="resource-card-actions">
+          <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}">
+            <input type="hidden" name="source_kind" value="resource"><input type="hidden" name="source_id" value="{{ resource.id }}"><input type="hidden" name="title" value="{{ resource.title }}"><input type="hidden" name="target_uri" value="{{ resource.detail_url }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="return_to" value="{{ resource.detail_url }}"><input type="hidden" name="mode" value="learn"><button class="action-button primary" type="submit">建立 LEARN Entry</button>
+          </form>
+          <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}">
+            <input type="hidden" name="source_kind" value="resource"><input type="hidden" name="source_id" value="{{ resource.id }}"><input type="hidden" name="title" value="{{ resource.title }}"><input type="hidden" name="target_uri" value="{{ resource.detail_url }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="return_to" value="{{ resource.detail_url }}"><input type="hidden" name="mode" value="build"><button class="action-button" type="submit">建立 BUILD Entry</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="resource-surface">
         <h2>處理紀錄</h2>
         <ul class="resource-job-list">{% for job in jobs %}<li><span>{{ job.job_type }}</span><strong>{{ job.status }}</strong>{% if job.error_message %}<small>{{ job.error_message }}</small>{% endif %}</li>{% else %}<li>尚無背景工作</li>{% endfor %}</ul>
       </section>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import tempfile
 from pathlib import Path
@@ -150,6 +151,37 @@ def resource_index():
     params = _list_params()
     page = service.repository.list(**params)
     items = [decorate_resource(item) for item in page.items]
+    snapshot_filters = []
+    for field, value in (
+        ("reading_state", next(iter(params["reading_states"]), "")),
+        ("disposition", next(iter(params["dispositions"]), "active")),
+        ("source_type", next(iter(params["source_types"]), "")),
+        ("tag", params["tag"]),
+        ("domain", params["domain"]),
+        ("min_priority", params["min_priority"]),
+    ):
+        if value not in (None, "", "active"):
+            snapshot_filters.append({"field": field, "op": "eq", "value": value})
+    snapshot_query = {
+        "q": params["query"],
+        "reading_state": next(iter(params["reading_states"]), ""),
+        "source_type": next(iter(params["source_types"]), ""),
+        "disposition": next(iter(params["dispositions"]), "active"),
+        "tag": params["tag"],
+        "domain": params["domain"],
+    }
+    snapshot_target = url_for(
+        "resource_library.resource_index",
+        **{key: value for key, value in snapshot_query.items() if value not in (None, "")},
+    )
+    snapshot_state = {
+        "scope": {"sources": ["resource_library"]},
+        "query": {"text": params["query"]},
+        "filters": snapshot_filters,
+        "sort": [{"field": "priority", "order": "desc"}, {"field": "captured_at", "order": "desc"}],
+        "layout": {"mode": "grid", "density": "comfortable", "inspector_open": False},
+        "focus": {"item_id": None},
+    }
     return render_template(
         "resource_library.html",
         title="Resource Flow · Flowinone",
@@ -158,6 +190,13 @@ def resource_index():
         page_count=max(1, math.ceil(page.total / page.per_page)),
         stats=service.repository.stats(),
         filters=params,
+        snapshot_target_uri=snapshot_target,
+        snapshot_state_json=json.dumps(snapshot_state, ensure_ascii=False, separators=(",", ":")),
+        snapshot_context_json=json.dumps(
+            {"source": {"kind": "resource_view", "id": snapshot_target}},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
         notice=request.args.get("notice"),
         error=request.args.get("error"),
     )

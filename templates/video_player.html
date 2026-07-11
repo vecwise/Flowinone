@@ -102,6 +102,17 @@
       {% endif %}
     </section>
 
+    <section class="note-surface">
+      <h2>轉成工作入口</h2>
+      {% if inspiration_item %}
+      <p>把影片放進 LEARN 或 BUILD 的明確脈絡，而不只是繼續瀏覽。</p>
+      <div class="resource-card-actions">
+        <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}"><input type="hidden" name="source_kind" value="{{ inspiration_item.source_kind }}"><input type="hidden" name="source_id" value="{{ inspiration_item.source_id }}"><input type="hidden" name="title" value="{{ inspiration_item.title }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="target_uri" value="{{ inspiration_item.url }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="mode" value="learn"><button class="action-button primary" type="submit">建立 LEARN Entry</button></form>
+        <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}"><input type="hidden" name="source_kind" value="{{ inspiration_item.source_kind }}"><input type="hidden" name="source_id" value="{{ inspiration_item.source_id }}"><input type="hidden" name="title" value="{{ inspiration_item.title }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="target_uri" value="{{ inspiration_item.url }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="mode" value="build"><button class="action-button" type="submit">建立 BUILD Entry</button></form>
+      </div>
+      {% else %}<p>目前來源沒有可儲存的安全入口。</p>{% endif %}
+    </section>
+
     <section id="notes" class="note-surface">
       <h2>個人筆記</h2>
       <p>尚未建立個人筆記。之後可連到 Obsidian note 或 project page。</p>

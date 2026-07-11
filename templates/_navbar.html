@@ -1,30 +1,19 @@
 <nav class="app-nav" aria-label="主要導覽">
-    <a class="app-brand" href="{{ url_for('index') }}">
+    <a class="app-brand" href="{{ url_for('entry_system.build_dashboard') }}">
         <span class="app-brand-mark" aria-hidden="true">F</span>
         <span>
             <strong>Flowinone</strong>
-            <small>Personal archive</small>
+            <small>Entry system</small>
         </span>
     </a>
 
     <div class="nav-links">
-        <a class="{% if request.endpoint == 'index' %}is-active{% endif %}" href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>工作台</a>
-        {% if feature_flags.eagle %}
-        <a class="{% if request.endpoint in ['list_all_eagle_folder', 'view_eagle_folder'] %}is-active{% endif %}" href="{{ url_for('list_all_eagle_folder') }}" {% if request.endpoint in ['list_all_eagle_folder', 'view_eagle_folder'] %}aria-current="page"{% endif %}>集合</a>
-        {% elif feature_flags.db %}
-        <a class="{% if request.endpoint in ['view_collections', 'view_both'] %}is-active{% endif %}" href="{{ url_for('view_collections') }}" {% if request.endpoint in ['view_collections', 'view_both'] %}aria-current="page"{% endif %}>集合</a>
-        {% endif %}
-        {% if feature_flags.db %}
-        <a class="{% if request.endpoint == 'view_item_db' %}is-active{% endif %}" href="{{ url_for('view_item_db') }}" {% if request.endpoint == 'view_item_db' %}aria-current="page"{% endif %}>Inbox</a>
-        {% endif %}
-        {% if feature_flags.chrome %}
-        <a class="{% if request.endpoint in ['view_chrome_root', 'view_chrome_folder'] %}is-active{% endif %}" href="{{ url_for('view_chrome_root') }}" {% if request.endpoint in ['view_chrome_root', 'view_chrome_folder'] %}aria-current="page"{% endif %}>書籤</a>
-        {% endif %}
+        <a class="{% if request.endpoint == 'entry_system.build_dashboard' %}is-active{% endif %}" href="{{ url_for('entry_system.build_dashboard') }}" {% if request.endpoint == 'entry_system.build_dashboard' %}aria-current="page"{% endif %}>BUILD</a>
+        <a class="{% if request.endpoint == 'entry_system.think_page' %}is-active{% endif %}" href="{{ url_for('entry_system.think_page') }}" {% if request.endpoint == 'entry_system.think_page' %}aria-current="page"{% endif %}>THINK</a>
+        <a class="{% if request.endpoint == 'entry_system.learn_page' %}is-active{% endif %}" href="{{ url_for('entry_system.learn_page') }}" {% if request.endpoint == 'entry_system.learn_page' %}aria-current="page"{% endif %}>LEARN</a>
+        <a class="{% if request.endpoint == 'entry_system.scan_page' %}is-active{% endif %}" href="{{ url_for('entry_system.scan_page') }}" {% if request.endpoint == 'entry_system.scan_page' %}aria-current="page"{% endif %}>SCAN</a>
         <a class="{% if request.endpoint and request.endpoint.startswith('resource_library.resource_') %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}" {% if request.endpoint and request.endpoint.startswith('resource_library.resource_') %}aria-current="page"{% endif %}>資源</a>
         <a class="{% if request.endpoint and request.endpoint.startswith('resource_library.collection_') %}is-active{% endif %}" href="{{ url_for('resource_library.collection_index') }}" {% if request.endpoint and request.endpoint.startswith('resource_library.collection_') %}aria-current="page"{% endif %}>靈感</a>
-        {% if feature_flags.eagle %}
-        <a class="{% if request.endpoint in ['list_eagle_tags', 'view_images_by_tag'] %}is-active{% endif %}" href="{{ url_for('list_eagle_tags') }}" {% if request.endpoint in ['list_eagle_tags', 'view_images_by_tag'] %}aria-current="page"{% endif %}>Tags</a>
-        {% endif %}
     </div>
 
     <div class="nav-actions">
@@ -47,7 +36,15 @@
             <div class="nav-tools-menu">
                 {% if feature_flags.eagle %}<a href="{{ url_for('eagle_stream') }}">Eagle 串流</a>{% endif %}
                 {% if feature_flags.eagle %}<a href="{{ url_for('list_eagle_smart_folders') }}">Eagle Smart Folders</a>{% endif %}
+                <a href="{{ url_for('entry_system.recover_page') }}">RECOVER</a>
+                <a href="{{ url_for('entry_system.entry_index') }}">全部 Entries</a>
+                <a href="{{ url_for('entry_system.project_index') }}">Projects</a>
+                <a href="{{ url_for('content_library') }}">探索 Library</a>
                 <a href="{{ url_for('resource_library.note_index') }}">整併筆記</a>
+                {% if feature_flags.eagle %}<a href="{{ url_for('list_all_eagle_folder') }}">Eagle 集合</a>{% elif feature_flags.db %}<a href="{{ url_for('view_collections') }}">本機集合</a>{% endif %}
+                {% if feature_flags.db %}<a href="{{ url_for('view_item_db') }}">本機 Inbox</a>{% endif %}
+                {% if feature_flags.chrome %}<a href="{{ url_for('view_chrome_root') }}">Chrome 書籤</a>{% endif %}
+                {% if feature_flags.eagle %}<a href="{{ url_for('list_eagle_tags') }}">Eagle Tags</a>{% endif %}
                 {% if feature_flags.youtube %}<a href="{{ url_for('view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
                 {% if feature_flags.db %}
                 <a href="{{ url_for('view_collections') }}">本機資料庫</a>

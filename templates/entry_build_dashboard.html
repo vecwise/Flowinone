@@ -1,0 +1,116 @@
+{% extends "base_template.html" %}
+{% import "_entry_macros.html" as entry_macros %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/entry_system.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container entry-page entry-build-page">
+  {% if notice %}<div class="entry-alert is-success" role="status">{{ notice }}</div>{% endif %}
+  {% if error %}<div class="entry-alert is-error" role="alert">{{ error }}</div>{% endif %}
+
+  <header class="entry-dashboard-hero">
+    <div>
+      <p class="eyebrow">01 / BUILD</p>
+      <h1>回到下一個有意義的行動</h1>
+      <p>這裡只保留可繼續的工作、清楚的下一步和阻塞事項；不把收藏、推薦或內容 feed 放進來。</p>
+    </div>
+    <div class="entry-hero-metrics" aria-label="BUILD 狀態">
+      <div><strong>{{ dashboard.active_count }}</strong><span>進行中 Entry</span></div>
+      <div><strong>{{ dashboard.project_count }}</strong><span>進行中 Project</span></div>
+    </div>
+  </header>
+
+  <section class="build-action-strip" aria-label="開始工作">
+    <details class="entry-disclosure" {% if not dashboard.continue_entry %}open{% endif %}>
+      <summary>New · 建立可以立刻開始的 BUILD 單位</summary>
+      <form class="entry-form entry-form-grid" method="post" action="{{ url_for('entry_system.entry_new_build') }}">
+        <div>
+          <label for="build-template">模板</label>
+          <select id="build-template" name="template">
+            <option value="project">Project</option>
+            <option value="coding_task">Coding Task</option>
+            <option value="experiment">Experiment</option>
+            <option value="note">Note</option>
+            <option value="draft">Draft</option>
+            <option value="blank">Blank Build Entry</option>
+          </select>
+        </div>
+        <div class="entry-form-grow">
+          <label for="build-name">名稱</label>
+          <input id="build-name" name="name" required placeholder="例如：完成 Flowinone Dashboard">
+        </div>
+        <div class="entry-form-grow">
+          <label for="build-next-action">下一步行動</label>
+          <input id="build-next-action" name="next_action" required placeholder="例如：建立 Entry schema migration">
+        </div>
+        <div>
+          <label for="build-project">既有 Project（選填）</label>
+          <select id="build-project" name="project_id">
+            <option value="">不指定</option>
+            {% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="build-target-type">目標類型（選填）</label>
+          <select id="build-target-type" name="target_type"><option value="flowinone_view">Flowinone 頁面</option><option value="repository">Repository</option><option value="external">網址／外部 App</option><option value="note">筆記</option></select>
+        </div>
+        <div class="entry-form-grow">
+          <label for="build-target-uri">Target URI（選填）</label>
+          <input id="build-target-uri" name="target_uri" placeholder="/resources/?reading_state=unread 或 https://…">
+        </div>
+        <div class="entry-form-full"><label for="build-intent">目標／原因（選填）</label><textarea id="build-intent" name="intent" rows="2" placeholder="這個產出想改變什麼？"></textarea></div>
+        <button class="action-button primary" type="submit">建立並進入</button>
+      </form>
+    </details>
+
+    <details class="entry-disclosure">
+      <summary>Think → Build · 先把問題轉成下一步</summary>
+      <form class="entry-form entry-form-grid" method="post" action="{{ url_for('entry_system.entry_think_to_build') }}">
+        <div class="entry-form-full"><label for="think-problem">Problem</label><textarea id="think-problem" name="problem" rows="2" required placeholder="我真正要解決什麼？"></textarea></div>
+        <div class="entry-form-full"><label for="think-hypothesis">Hypothesis（選填）</label><textarea id="think-hypothesis" name="hypothesis" rows="2" placeholder="目前最合理的假設是什麼？"></textarea></div>
+        <div class="entry-form-grow"><label for="think-build-name">BUILD 名稱（選填）</label><input id="think-build-name" name="name" placeholder="未填時使用下一步行動"></div>
+        <div class="entry-form-grow"><label for="think-next-action">Next Action</label><input id="think-next-action" name="next_action" required placeholder="可在 5 分鐘內開始的具體動作"></div>
+        <div><label for="think-project">Project（選填）</label><select id="think-project" name="project_id"><option value="">不指定</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select></div>
+        <div><label for="think-target-type">Target 類型</label><select id="think-target-type" name="target_type"><option value="flowinone_view">Flowinone 頁面</option><option value="repository">Repository</option><option value="external">網址／外部 App</option></select></div>
+        <div class="entry-form-grow"><label for="think-target-uri">Target URI（選填）</label><input id="think-target-uri" name="target_uri" placeholder="/projects/... 或 vscode://…"></div>
+        <button class="action-button primary" type="submit">建立 THINK 與 BUILD</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="build-priority-grid" aria-label="目前 BUILD 焦點">
+    <article class="continue-panel">
+      <div class="entry-section-heading"><div><p class="eyebrow">Continue</p><h2>不要再選一次</h2></div><span>最多一步進入</span></div>
+      {% if dashboard.continue_entry %}
+        {{ entry_macros.entry_card(dashboard.continue_entry) }}
+      {% else %}
+        <div class="entry-empty"><h3>目前沒有可繼續的 BUILD Entry</h3><p>建立一個具體的下一步，下一次回來就能直接開始。</p></div>
+      {% endif %}
+    </article>
+
+    <article class="current-project-panel">
+      <div class="entry-section-heading"><div><p class="eyebrow">Current Project</p><h2>目前脈絡</h2></div>{% if dashboard.current_project %}<a class="text-link" href="{{ dashboard.current_project.detail_url }}">查看 Project</a>{% endif %}</div>
+      {% if dashboard.current_project %}
+      <div class="project-context-card">
+        <h3>{{ dashboard.current_project.name }}</h3>
+        {% if dashboard.current_project.goal %}<p>{{ dashboard.current_project.goal }}</p>{% endif %}
+        {% if dashboard.current_project.next_action %}<div class="entry-next-action"><span>Project 下一步</span><strong>{{ dashboard.current_project.next_action }}</strong></div>{% endif %}
+        <span class="entry-muted">{{ dashboard.current_project.entry_count }} 個 Entry · {{ dashboard.current_project.status }}</span>
+      </div>
+      {% else %}
+      <div class="entry-empty"><h3>尚未設定目前 Project</h3><p>建立 Project 模板，或把任一 BUILD Entry 指派給現有 Project。</p></div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="entry-section" aria-labelledby="recent-build-heading">
+    <div class="entry-section-heading"><div><p class="eyebrow">Recent Build Entries</p><h2 id="recent-build-heading">最近可恢復的工作</h2></div><a class="text-link" href="{{ url_for('entry_system.entry_index', mode='build') }}">所有 BUILD Entries</a></div>
+    <div class="entry-card-grid">{% for entry in dashboard.recent_entries %}{{ entry_macros.entry_card(entry, true) }}{% else %}<div class="entry-empty"><h3>尚無 BUILD Entry</h3></div>{% endfor %}</div>
+  </section>
+
+  <section class="entry-section entry-section--blocked" aria-labelledby="blocked-build-heading">
+    <div class="entry-section-heading"><div><p class="eyebrow">Blocked / Waiting</p><h2 id="blocked-build-heading">需要釐清或等待的事情</h2></div><span>{{ dashboard.blocked_entries|length }} 個</span></div>
+    <div class="entry-card-grid">{% for entry in dashboard.blocked_entries %}{{ entry_macros.entry_card(entry, true) }}{% else %}<div class="entry-empty"><h3>沒有阻塞事項</h3><p>保持這個區塊小而明確。</p></div>{% endfor %}</div>
+  </section>
+</main>
+{% endblock %}

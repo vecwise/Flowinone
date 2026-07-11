@@ -1,0 +1,13 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/entry_system.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container entry-page">
+  {% if notice %}<div class="entry-alert is-success" role="status">{{ notice }}</div>{% endif %}
+  {% if error %}<div class="entry-alert is-error" role="alert">{{ error }}</div>{% endif %}
+  <header class="entry-mode-hero"><p class="eyebrow">PROJECTS</p><h1>把多個 Entry 收斂成工作脈絡</h1><p>Project 保留目標、目前 Entry、下一步與常用的 repository、note、view 連結。</p></header>
+  <section class="entry-surface"><h2>建立 Project</h2><form class="entry-form entry-form-grid" method="post" action="{{ url_for('entry_system.project_create') }}"><div class="entry-form-grow"><label for="project-name">名稱</label><input id="project-name" name="name" required></div><div><label for="project-status">狀態</label><select id="project-status" name="status">{% for status in project_statuses %}<option value="{{ status }}">{{ {'active':'進行中','paused':'暫停','completed':'已完成','archived':'封存'}.get(status, status) }}</option>{% endfor %}</select></div><div class="entry-form-full"><label for="project-goal">Goal</label><textarea id="project-goal" name="goal" rows="2"></textarea></div><div class="entry-form-grow"><label for="project-next-action">Next Action</label><input id="project-next-action" name="next_action"></div><button class="action-button primary" type="submit">建立 Project</button></form></section>
+  <section class="entry-section"><div class="entry-section-heading"><div><p class="eyebrow">Project Registry</p><h2>{{ projects|length }} 個 Project</h2></div></div><div class="project-card-grid">{% for project in projects %}<article class="project-card"><div class="entry-card-topline"><span class="entry-mode-label">PROJECT</span><span class="entry-status entry-status--{{ 'active' if project.status == 'active' else 'archived' }}">{{ {'active':'進行中','paused':'暫停','completed':'已完成','archived':'封存'}.get(project.status, project.status) }}</span></div><h3><a href="{{ project.detail_url }}">{{ project.name }}</a></h3>{% if project.goal %}<p>{{ project.goal }}</p>{% endif %}{% if project.next_action %}<div class="entry-next-action"><span>下一步</span><strong>{{ project.next_action }}</strong></div>{% endif %}<span class="entry-muted">{{ project.entry_count }} 個 Entry</span><a class="action-button" href="{{ project.detail_url }}">開啟 Project</a></article>{% else %}<div class="entry-empty"><h3>尚未有 Project</h3><p>Project 不是資料夾，而是一個可恢復的工作脈絡。</p></div>{% endfor %}</div></section>
+</main>
+{% endblock %}

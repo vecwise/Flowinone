@@ -8,6 +8,7 @@ data/
 data/**
 *.db
 config.json
+docs/
 
 # Machine-local Flowinone extensions. Never include these in source or builds.
 .flowinone_local/
