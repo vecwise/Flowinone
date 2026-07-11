@@ -114,6 +114,12 @@ class Resource(Base):
     ai_artifacts: Mapped[List["AIArtifact"]] = relationship(
         back_populates="resource", cascade="all, delete-orphan"
     )
+    project_links: Mapped[List["ResourceProject"]] = relationship(
+        back_populates="resource", cascade="all, delete-orphan"
+    )
+    mode_links: Mapped[List["ResourceMode"]] = relationship(
+        back_populates="resource", cascade="all, delete-orphan"
+    )
 
 
 class ResourceOrigin(Base):
@@ -392,20 +398,138 @@ class AppState(Base):
     )
 
 
+class ResourceProject(Base):
+    """Manual/AI relevance between a raw Resource and a durable Project context."""
+
+    __tablename__ = "resource_projects"
+    __table_args__ = (
+        CheckConstraint("source IN ('user','ai','system')", name="ck_resource_projects_source"),
+        Index("idx_resource_projects_lookup", "project_id", "relevance"),
+    )
+
+    resource_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    relevance: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
+
+    resource: Mapped[Resource] = relationship(back_populates="project_links")
+
+
+class ResourceMode(Base):
+    """Retrieval relevance between a Resource and one cognitive mode."""
+
+    __tablename__ = "resource_modes"
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('build','think','learn','scan','recover','write')",
+            name="ck_resource_modes_mode",
+        ),
+        CheckConstraint("source IN ('user','ai','system')", name="ck_resource_modes_source"),
+        Index("idx_resource_modes_lookup", "mode", "relevance"),
+    )
+
+    resource_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    mode: Mapped[str] = mapped_column(String(20), primary_key=True)
+    relevance: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
+
+    resource: Mapped[Resource] = relationship(back_populates="mode_links")
+
+
+class OutputAsset(Base):
+    """Layer-3 deliverable with explicit provenance."""
+
+    __tablename__ = "output_assets"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','ready','exported','archived')",
+            name="ck_output_assets_status",
+        ),
+        Index("idx_output_assets_project_status", "project_id", "status", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    asset_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    export_path: Mapped[Optional[str]] = mapped_column(Text)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
+    updated_at: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=utc_now_text, onupdate=utc_now_text
+    )
+
+    sources: Mapped[List["AssetSource"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+
+
+class AssetSource(Base):
+    """Polymorphic provenance link for an Output Asset."""
+
+    __tablename__ = "asset_sources"
+    __table_args__ = (Index("idx_asset_sources_reverse", "source_type", "source_id"),)
+
+    asset_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("output_assets.id", ondelete="CASCADE"), primary_key=True
+    )
+    source_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    source_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    citation_label: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
+
+    asset: Mapped[OutputAsset] = relationship(back_populates="sources")
+
+
+class Decision(Base):
+    """Human-owned project decision; AI may assist but must not overwrite it."""
+
+    __tablename__ = "decisions"
+    __table_args__ = (Index("idx_decisions_project_created", "project_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[Optional[str]] = mapped_column(Text)
+    alternatives_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False, default=utc_now_text)
+
+
 __all__ = [
     "AIArtifact",
     "AppState",
+    "AssetSource",
     "Base",
     "Collection",
     "CollectionItem",
     "DraftNote",
     "DraftNoteSource",
+    "Decision",
     "NoteExport",
     "ProcessingJob",
+    "OutputAsset",
     "Resource",
     "ResourceContent",
     "ResourceNoteLink",
     "ResourceOrigin",
+    "ResourceMode",
+    "ResourceProject",
     "ResourceTag",
     "Tag",
     "new_id",

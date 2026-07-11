@@ -829,9 +829,11 @@ def register_routes(app):
     _register_thumbnail_cli(app)
     from src.flowinone.resource_library.blueprint import register_resource_library
     from src.flowinone.entry_system.blueprint import register_entry_system
+    from src.flowinone.gallery.blueprint import register_gallery
 
     register_resource_library(app)
     register_entry_system(app)
+    register_gallery(app)
 
 
 def _register_context_processors(app):

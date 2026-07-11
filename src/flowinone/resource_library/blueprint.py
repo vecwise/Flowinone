@@ -24,6 +24,9 @@ from flask import (
 
 from config import CHROME_BOOKMARK_PATH
 from src.file_handler.thumbnails.store import get_thumbnail_store
+from src.flowinone.entry_system.models import ENTRY_MODES
+from src.flowinone.entry_system.service import EntryService
+from src.flowinone.knowledge_os.service import KnowledgeOSService
 
 from .canonical import ensure_within
 from .curation import (
@@ -64,6 +67,10 @@ def _services():
         DraftNoteService(database),
         ObsidianExporter(database),
     )
+
+
+def _knowledge() -> KnowledgeOSService:
+    return KnowledgeOSService(_database())
 
 
 def _list_params(payload=None) -> dict:
@@ -293,6 +300,9 @@ def resource_detail(resource_id: str):
         jobs=service.jobs.list_for_resource(resource_id),
         collections=collections.list(),
         similar_resources=similar,
+        resource_context=_knowledge().resource_context(resource_id),
+        context_modes=ENTRY_MODES,
+        projects=EntryService(_database()).repository.list_projects(statuses=("active",)),
         ai_available=EnrichmentService(_database()).ai.available,
         notice=request.args.get("notice"),
         error=request.args.get("error"),
@@ -313,6 +323,27 @@ def resource_workflow(resource_id: str):
         return _form_error("resource_library.resource_detail", exc, resource_id=resource_id)
     return redirect(
         url_for("resource_library.resource_detail", resource_id=resource_id, notice="狀態已更新")
+    )
+
+
+@bp.post("/resources/<resource_id>/context")
+def resource_context_update(resource_id: str):
+    try:
+        _knowledge().link_resource(
+            resource_id,
+            project_id=(request.form.get("project_id") or "").strip() or None,
+            modes=request.form.getlist("mode"),
+            relevance=request.form.get("relevance", 1.0),
+            source="user",
+        )
+    except Exception as exc:
+        return _form_error("resource_library.resource_detail", exc, resource_id=resource_id)
+    return redirect(
+        url_for(
+            "resource_library.resource_detail",
+            resource_id=resource_id,
+            notice="Project / Mode 提取脈絡已更新",
+        )
     )
 
 
@@ -795,6 +826,32 @@ def api_resource_ask(resource_id: str):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(answer)
+
+
+@bp.get("/api/resources/<resource_id>/context")
+def api_resource_context_get(resource_id: str):
+    try:
+        return jsonify(_knowledge().resource_context(resource_id))
+    except ResourceNotFound:
+        return jsonify({"error": "not_found"}), 404
+
+
+@bp.post("/api/resources/<resource_id>/context")
+def api_resource_context_update(resource_id: str):
+    payload = request.get_json(silent=True) or {}
+    try:
+        context = _knowledge().link_resource(
+            resource_id,
+            project_id=str(payload.get("project_id") or "").strip() or None,
+            modes=payload.get("modes") or [],
+            relevance=payload.get("relevance", 1.0),
+            source=str(payload.get("source") or "user"),
+        )
+    except ResourceNotFound:
+        return jsonify({"error": "not_found"}), 404
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(context)
 
 
 @bp.post("/api/search")

@@ -1,0 +1,64 @@
+{% extends "base_template.html" %}
+{% import "_entry_macros.html" as entry_macros %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/entry_system.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container entry-page entry-mode-page entry-mode-page--write">
+  {% if notice %}<div class="entry-alert is-success" role="status">{{ notice }}</div>{% endif %}
+  {% if error %}<div class="entry-alert is-error" role="alert">{{ error }}</div>{% endif %}
+
+  <header class="entry-mode-hero">
+    <p class="eyebrow">{{ mode_copy.eyebrow }}</p>
+    <h1>{{ mode_copy.title }}</h1>
+    <p>{{ mode_copy.description }}</p>
+  </header>
+
+  <section class="build-action-strip" aria-label="WRITE 建立工具">
+    <details class="entry-disclosure" open>
+      <summary>建立可追溯的 Output Asset</summary>
+      <form class="entry-form entry-form-grid" method="post" action="{{ url_for('entry_system.output_asset_create') }}">
+        <div class="entry-form-grow"><label for="asset-title">標題</label><input id="asset-title" name="title" required placeholder="例如：Flowinone Gallery Architecture Spec"></div>
+        <div><label for="asset-type">類型</label><select id="asset-type" name="asset_type"><option value="spec">Spec</option><option value="article">Article</option><option value="technical_note">Technical Note</option><option value="prompt">Prompt</option><option value="sop">SOP</option><option value="adr">ADR</option><option value="readme">README</option><option value="code">Code</option><option value="checklist">Checklist</option><option value="agent_skill">Agent Skill</option></select></div>
+        <div><label for="asset-project">Project</label><select id="asset-project" name="project_id"><option value="">不指定</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select></div>
+        <div><label for="asset-source-type">來源類型（選填）</label><select id="asset-source-type" name="source_type"><option value="">無</option><option value="resource">Resource</option><option value="note">Wiki Draft</option><option value="decision">Decision</option><option value="entry">Entry</option></select></div>
+        <div class="entry-form-grow"><label for="asset-source-id">來源 ID（選填）</label><input id="asset-source-id" name="source_id" placeholder="保留 provenance 的來源 ID"></div>
+        <div><label for="asset-version">版本</label><input id="asset-version" name="version" value="0.1"></div>
+        <div class="entry-form-full"><label for="asset-body">初稿</label><textarea id="asset-body" name="body" rows="6" placeholder="先保留可編輯草稿；來源與人工判斷不會被 AI 覆蓋。"></textarea></div>
+        <button class="action-button primary" type="submit">建立 Output Asset</button>
+      </form>
+    </details>
+
+    <details class="entry-disclosure">
+      <summary>建立 WRITE Entry</summary>
+      <form class="entry-form entry-form-grid" method="post" action="{{ url_for('entry_system.entry_create') }}">
+        <input type="hidden" name="mode" value="write"><input type="hidden" name="kind" value="output_task"><input type="hidden" name="status" value="active">
+        <div class="entry-form-grow"><label for="write-entry-name">名稱</label><input id="write-entry-name" name="name" required></div>
+        <div><label for="write-entry-project">Project</label><select id="write-entry-project" name="project_id"><option value="">不指定</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}</select></div>
+        <div class="entry-form-grow"><label for="write-entry-next">下一步</label><input id="write-entry-next" name="next_action" required placeholder="例如：完成 Spec 的驗收條件"></div>
+        <div class="entry-form-full"><label for="write-entry-intent">輸出目的</label><textarea id="write-entry-intent" name="intent" rows="3"></textarea></div>
+        <button class="action-button primary" type="submit">建立 WRITE Entry</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="entry-section" aria-labelledby="output-assets-heading">
+    <div class="entry-section-heading"><div><p class="eyebrow">Layer 3</p><h2 id="output-assets-heading">Output Assets</h2></div><span>{{ assets|length }} 個</span></div>
+    <div class="knowledge-card-grid">
+      {% for asset in assets %}
+      <article class="knowledge-card">
+        <div class="entry-card-topline"><span class="entry-mode-badge">{{ asset.asset_type }}</span><span class="entry-status-badge status-{{ asset.status }}">{{ asset.status }}</span></div>
+        <h3>{{ asset.title }}</h3>
+        {% if asset.body %}<p>{{ asset.body|truncate(180) }}</p>{% else %}<p class="entry-muted">尚未撰寫內容。</p>{% endif %}
+        <div class="knowledge-card-meta"><span>v{{ asset.version }}</span><span>{{ asset.sources|length }} 個來源</span><span>{{ asset.updated_at }}</span></div>
+      </article>
+      {% else %}<div class="entry-empty"><h3>尚無 Output Asset</h3><p>從 Resource、Wiki Draft、Decision 或 Entry 建立第一個可交付資產。</p></div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="entry-section" aria-labelledby="write-entries-heading">
+    <div class="entry-section-heading"><div><p class="eyebrow">WRITE Entries</p><h2 id="write-entries-heading">輸出工作入口</h2></div></div>
+    <div class="entry-card-grid">{% for entry in entries %}{{ entry_macros.entry_card(entry) }}{% else %}<div class="entry-empty"><h3>尚無 WRITE Entry</h3></div>{% endfor %}</div>
+  </section>
+</main>
+{% endblock %}

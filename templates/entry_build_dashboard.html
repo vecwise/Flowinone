@@ -108,6 +108,19 @@
     <div class="entry-card-grid">{% for entry in dashboard.recent_entries %}{{ entry_macros.entry_card(entry, true) }}{% else %}<div class="entry-empty"><h3>尚無 BUILD Entry</h3></div>{% endfor %}</div>
   </section>
 
+  {% if dashboard.current_project %}
+  <section class="build-context-grid" aria-label="Project-linked Knowledge OS 脈絡">
+    <article class="entry-surface">
+      <div class="entry-section-heading"><div><p class="eyebrow">Related Resources</p><h2>目前工作可用的 Brief</h2></div><a class="text-link" href="{{ url_for('resource_library.resource_index') }}">資源庫</a></div>
+      <div class="knowledge-list">{% for resource in dashboard.related_resources %}<a href="{{ resource.detail_url }}"><strong>{{ resource.title }}</strong><span>{{ resource.summary_one_line or resource.source_type }}</span></a>{% else %}<div class="entry-empty"><h3>尚未連結 Resource</h3><p>在 Resource 詳細頁指定這個 Project 與 BUILD mode。</p></div>{% endfor %}</div>
+    </article>
+    <article class="entry-surface">
+      <div class="entry-section-heading"><div><p class="eyebrow">Decisions</p><h2>已確認的判斷</h2></div><a class="text-link" href="{{ dashboard.current_project.detail_url }}">記錄 Decision</a></div>
+      <div class="knowledge-list">{% for decision in dashboard.related_decisions %}<div><strong>{{ decision.decision }}</strong><span>{{ decision.question }}</span></div>{% else %}<div class="entry-empty"><h3>尚無 Decision</h3><p>人工確認的判斷會留在 Project，不被 AI 覆蓋。</p></div>{% endfor %}</div>
+    </article>
+  </section>
+  {% endif %}
+
   <section class="entry-section entry-section--blocked" aria-labelledby="blocked-build-heading">
     <div class="entry-section-heading"><div><p class="eyebrow">Blocked / Waiting</p><h2 id="blocked-build-heading">需要釐清或等待的事情</h2></div><span>{{ dashboard.blocked_entries|length }} 個</span></div>
     <div class="entry-card-grid">{% for entry in dashboard.blocked_entries %}{{ entry_macros.entry_card(entry, true) }}{% else %}<div class="entry-empty"><h3>沒有阻塞事項</h3><p>保持這個區塊小而明確。</p></div>{% endfor %}</div>

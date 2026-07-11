@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.flowinone.resource_library.models import Base, new_id, utc_now_text
 
 
-ENTRY_MODES = ("build", "think", "learn", "scan", "recover")
+ENTRY_MODES = ("build", "think", "learn", "scan", "recover", "write")
 ENTRY_STATUSES = ("active", "blocked", "completed", "archived")
 PROJECT_STATUSES = ("active", "paused", "completed", "archived")
 
@@ -53,7 +53,7 @@ class Entry(Base):
     __tablename__ = "entries"
     __table_args__ = (
         CheckConstraint(
-            "mode IN ('build','think','learn','scan','recover')",
+            "mode IN ('build','think','learn','scan','recover','write')",
             name="ck_entries_mode",
         ),
         CheckConstraint(

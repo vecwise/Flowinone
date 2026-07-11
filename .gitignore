@@ -9,6 +9,14 @@ data/**
 *.db
 config.json
 docs/
+!docs/
+docs/*
+!docs/current-state.md
+!docs/spec-integration.md
+!docs/architecture.md
+!docs/schema.md
+!docs/workflows.md
+!docs/migration-plan.md
 
 # Machine-local Flowinone extensions. Never include these in source or builds.
 .flowinone_local/

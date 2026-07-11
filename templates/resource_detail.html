@@ -148,7 +148,23 @@
           <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}">
             <input type="hidden" name="source_kind" value="resource"><input type="hidden" name="source_id" value="{{ resource.id }}"><input type="hidden" name="title" value="{{ resource.title }}"><input type="hidden" name="target_uri" value="{{ resource.detail_url }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="return_to" value="{{ resource.detail_url }}"><input type="hidden" name="mode" value="build"><button class="action-button" type="submit">建立 BUILD Entry</button>
           </form>
+          <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}">
+            <input type="hidden" name="source_kind" value="resource"><input type="hidden" name="source_id" value="{{ resource.id }}"><input type="hidden" name="title" value="{{ resource.title }}"><input type="hidden" name="target_uri" value="{{ resource.detail_url }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="return_to" value="{{ resource.detail_url }}"><input type="hidden" name="mode" value="write"><button class="action-button" type="submit">建立 WRITE Entry</button>
+          </form>
         </div>
+      </section>
+
+      <section class="resource-surface">
+        <h2>Project / Mode 提取脈絡</h2>
+        <p class="resource-helper">這裡描述未來在什麼情境需要它，不改變 Resource 的原始來源。</p>
+        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_context_update', resource_id=resource.id) }}">
+          <label for="resource-project-context">Project</label>
+          <select id="resource-project-context" name="project_id"><option value="">不指定</option>{% for project in projects %}<option value="{{ project.id }}" {% if project.id in resource_context.projects|map(attribute='project_id')|list %}selected{% endif %}>{{ project.name }}</option>{% endfor %}</select>
+          <fieldset class="resource-mode-checks"><legend>Modes</legend>{% for mode in context_modes %}<label><input type="checkbox" name="mode" value="{{ mode }}" {% if mode in resource_context.modes|map(attribute='mode')|list %}checked{% endif %}> {{ mode|upper }}</label>{% endfor %}</fieldset>
+          <label for="resource-context-relevance">人工相關度 0–1</label>
+          <input id="resource-context-relevance" type="number" name="relevance" min="0" max="1" step="0.1" value="1">
+          <button class="action-button" type="submit">儲存提取脈絡</button>
+        </form>
       </section>
 
       <section class="resource-surface">

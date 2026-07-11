@@ -630,3 +630,27 @@
         flex: 1 1 auto;
     }
 }
+.resource-mode-checks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+    border: 1px solid var(--fo-border);
+    border-radius: 7px;
+    padding: 10px;
+}
+
+.resource-mode-checks legend {
+    color: var(--fo-muted-text);
+    font-size: .83rem;
+    font-weight: 800;
+    padding: 0 4px;
+}
+
+.resource-mode-checks label {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}

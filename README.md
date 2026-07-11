@@ -1,16 +1,18 @@
-# Flowinone — Unified Visual Knowledge Hub
+# Flowinone — Gallery + Knowledge OS
 
-Flowinone brings every visual collection you care about into a single, elegant interface:
+Flowinone has two explicit product domains:
 
-- **Local media libraries** (NAS, external drives, internal assets)
-- **Eagle App** folders, tags, and items via its API
-- **Chrome bookmarks**, including auto-generated thumbnail walls for YouTube links
+- **Gallery** — flat item browsing across local media, Eagle, and bookmarks.
+- **Knowledge OS** — Resource → Brief → Wiki Draft → Entry/Project → Output Asset.
 
-Add an AI-style discovery homepage, three browsing modes (grid / single / vertical strip), a built-in video player, and one-click Finder/Explorer shortcuts, and you get far more than bookmark management—it’s a full visual knowledge hub.
+Gallery never treats folders as browse items and does not carry reading/note state. Knowledge OS may reference a media item only through an explicit Entry or typed source link.
 
 ---
 
 ## 🔥 Highlights
+
+- **Single-page Gallery**: `/gallery/` provides checkboxes for Local, Eagle, and Bookmarks; search, type, sort, view, random seed, and cursor remain in the URL.
+- **Flat items**: source folder hierarchy may become metadata or tags, but never a Gallery item.
 
 - **Eagle Explorer**: Real-time access to Eagle folders, tags, and items. The home page curates newly-added and trending collections automatically.
 - **Multi-source browsing**: Local disks, Eagle, Chrome bookmarks, and YouTube videos all surface in the same UI with quick view switching (Grid / Single / Linear).
@@ -52,13 +54,14 @@ The default `/` route now opens `/build/`: a deliberate resume surface rather th
 content feed. It uses Entry + Project records in the same local SQLite database:
 
 ```text
-BUILD / THINK / LEARN / SCAN / RECOVER
+BUILD / THINK / LEARN / SCAN / RECOVER / WRITE
     → Entry (target + context + state snapshot + next action)
     → Project context
     → Resource / Eagle / local-media / Collection / Draft target
 ```
 
 - `/build/` — Continue, New, Think → Build, Current Project, recent work, blocked work.
+- `/write/` — Output Assets with Resource/Note/Decision/Entry provenance.
 - `/entries/` and `/projects/` — manage reusable context and stateful entry points.
 - `/library/` — preserves the former content-discovery workbench as a secondary surface.
 - Resource filters can be saved as entries; Resource, Collection, Draft, Eagle image, and
@@ -66,7 +69,7 @@ BUILD / THINK / LEARN / SCAN / RECOVER
 - Targets are validated local paths or allowed URI schemes; Flowinone never executes an
   arbitrary shell command from Entry metadata.
 
-Read the combined product specification in [docs/flowinone_knowledge_flow_system.md](docs/flowinone_knowledge_flow_system.md).
+Read [the spec integration decision](docs/spec-integration.md), [architecture](docs/architecture.md), [schema](docs/schema.md), and [workflows](docs/workflows.md).
 
 ---
 
@@ -166,8 +169,9 @@ The public build includes YouTube plus Open Graph, Twitter Card, JSON-LD, and `i
 
 | Menu item | What you get |
 |-----------|---------------|
+| **GALLERY** | One flat grid with Local / Eagle / Bookmark source checkboxes |
 | **BUILD (Home)** | Resume a current project or the next meaningful action without a content feed |
-| **THINK / LEARN / SCAN / RECOVER** | Enter an intentional mode with its own lightweight Entry list |
+| **THINK / LEARN / SCAN / RECOVER / WRITE** | Intentional modes; WRITE produces traceable Output Assets |
 | **Entries / Projects** | State-based action starts and their durable work contexts |
 | **Explore Library** | The former Eagle-powered discovery workbench, now secondary to BUILD |
 | **DB Main** | Local/external media folders with Grid / Single / Linear views |
@@ -196,6 +200,8 @@ Every browsing page supports:
   leased jobs, curation, Obsidian bridge, Flask blueprint, and worker.
 - `src/flowinone/entry_system/` — Entry, Project, resume policy, safe target execution,
   Flask UI/API, state snapshots, and Think → Build flow.
+- `src/flowinone/gallery/` — independent flat-item query/read-model domain and Flask UI/API.
+- `src/flowinone/knowledge_os/` — project/mode retrieval, Decisions, Output Assets, and provenance.
 - `migrations/` — Alembic schema history for the durable Resource DB, FTS projection,
   and Entry system.
 - `file_handler.py` — core logic:

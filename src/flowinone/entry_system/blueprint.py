@@ -8,6 +8,7 @@ from typing import Any
 import click
 from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, render_template, request, url_for
 
+from src.flowinone.knowledge_os.service import KnowledgeOSService
 from src.flowinone.resource_library.database import get_resource_database, upgrade_database
 
 from .models import ENTRY_MODES, ENTRY_STATUSES, PROJECT_STATUSES
@@ -49,6 +50,12 @@ MODE_COPY = {
         "description": "這裡只保留恢復用入口，不混入未完成工作或提醒。",
         "create_label": "建立 RECOVER Entry",
     },
+    "write": {
+        "eyebrow": "06 / WRITE",
+        "title": "把已理解的內容變成可交付資產",
+        "description": "從 Brief、Wiki、Decision 或 Project 建立可追溯來源的 Output Asset。",
+        "create_label": "建立 WRITE Entry",
+    },
 }
 
 
@@ -59,6 +66,10 @@ def _database():
 
 def _service() -> EntryService:
     return EntryService(_database())
+
+
+def _knowledge() -> KnowledgeOSService:
+    return KnowledgeOSService(_database())
 
 
 def _form_data() -> dict[str, Any]:
@@ -109,6 +120,14 @@ def decorate_project(project: dict[str, Any]) -> dict[str, Any]:
     return decorated
 
 
+def decorate_retrieved_resource(resource: dict[str, Any]) -> dict[str, Any]:
+    decorated = dict(resource)
+    decorated["detail_url"] = url_for(
+        "resource_library.resource_detail", resource_id=resource["id"]
+    )
+    return decorated
+
+
 @bp.get("/build/", strict_slashes=False)
 def build_dashboard():
     service = _service()
@@ -124,6 +143,18 @@ def build_dashboard():
     dashboard["blocked_entries"] = [
         decorate_entry(entry, service) for entry in dashboard["blocked_entries"]
     ]
+    current_project_id = (dashboard.get("current_project") or {}).get("id")
+    dashboard["related_resources"] = (
+        [
+            decorate_retrieved_resource(resource)
+            for resource in _knowledge().retrieve(project_id=current_project_id, mode="build", limit=8)
+        ]
+        if current_project_id
+        else []
+    )
+    dashboard["related_decisions"] = (
+        _knowledge().list_decisions(current_project_id)[:6] if current_project_id else []
+    )
     if dashboard.get("current_project"):
         dashboard["current_project"] = decorate_project(dashboard["current_project"])
     return render_template(
@@ -169,6 +200,42 @@ def scan_page():
 @bp.get("/recover/", strict_slashes=False)
 def recover_page():
     return _render_mode("recover")
+
+
+@bp.get("/write/", strict_slashes=False)
+def write_page():
+    service = _service()
+    return render_template(
+        "entry_write.html",
+        title="WRITE · Flowinone",
+        mode="write",
+        mode_copy=MODE_COPY["write"],
+        entries=[
+            decorate_entry(entry, service)
+            for entry in service.repository.list_entries(mode="write")
+        ],
+        assets=_knowledge().list_assets(),
+        projects=[
+            decorate_project(project)
+            for project in service.repository.list_projects(statuses=("active",))
+        ],
+        notice=request.args.get("notice"),
+        error=request.args.get("error"),
+    )
+
+
+@bp.post("/output-assets/")
+def output_asset_create():
+    data = _form_data()
+    source_type = str(data.pop("source_type", "") or "").strip()
+    source_id = str(data.pop("source_id", "") or "").strip()
+    if source_type and source_id:
+        data["sources"] = [{"source_type": source_type, "source_id": source_id}]
+    try:
+        _knowledge().create_asset(data)
+    except Exception as exc:
+        return _form_error("entry_system.write_page", exc)
+    return redirect(url_for("entry_system.write_page", notice="Output Asset 已建立"))
 
 
 @bp.post("/entries/new")
@@ -354,6 +421,12 @@ def project_detail(project_id: str):
     except ProjectNotFound:
         abort(404)
     project["entries"] = [decorate_entry(entry, service) for entry in project.get("entries", [])]
+    project["decisions"] = _knowledge().list_decisions(project_id)
+    project["related_resources"] = [
+        decorate_retrieved_resource(resource)
+        for resource in _knowledge().retrieve(project_id=project_id, limit=20)
+    ]
+    project["output_assets"] = _knowledge().list_assets(project_id=project_id)
     return render_template(
         "entry_project_detail.html",
         title=f"{project['name']} · Flowinone",
@@ -372,6 +445,17 @@ def project_update(project_id: str):
     except Exception as exc:
         return _form_error("entry_system.project_detail", exc, project_id=project_id)
     return redirect(url_for("entry_system.project_detail", project_id=project_id, notice="Project 已更新"))
+
+
+@bp.post("/projects/<project_id>/decisions")
+def project_decision_create(project_id: str):
+    try:
+        _knowledge().create_decision(project_id, _form_data())
+    except Exception as exc:
+        return _form_error("entry_system.project_detail", exc, project_id=project_id)
+    return redirect(
+        url_for("entry_system.project_detail", project_id=project_id, notice="Decision 已記錄")
+    )
 
 
 # JSON API
@@ -487,6 +571,64 @@ def api_project_delete(project_id: str):
     except Exception as exc:
         return _api_error(exc)
     return "", 204
+
+
+@bp.get("/api/retrieval")
+def api_context_retrieval():
+    try:
+        items = _knowledge().retrieve(
+            project_id=(request.args.get("project_id") or "").strip() or None,
+            mode=(request.args.get("mode") or "").strip().lower() or None,
+            query=(request.args.get("q") or "").strip(),
+            limit=request.args.get("limit", 12),
+        )
+    except Exception as exc:
+        return _api_error(exc)
+    return jsonify({"items": items})
+
+
+@bp.get("/api/output-assets")
+def api_output_assets_list():
+    try:
+        assets = _knowledge().list_assets(
+            project_id=(request.args.get("project_id") or "").strip() or None,
+            status=(request.args.get("status") or "").strip() or None,
+        )
+    except Exception as exc:
+        return _api_error(exc)
+    return jsonify({"items": assets})
+
+
+@bp.post("/api/output-assets")
+def api_output_assets_create():
+    try:
+        asset = _knowledge().create_asset(request.get_json(silent=True) or {})
+    except Exception as exc:
+        return _api_error(exc)
+    return jsonify(asset), 201
+
+
+@bp.patch("/api/output-assets/<asset_id>")
+def api_output_asset_patch(asset_id: str):
+    try:
+        asset = _knowledge().update_asset(asset_id, request.get_json(silent=True) or {})
+    except Exception as exc:
+        return _api_error(exc)
+    return jsonify(asset)
+
+
+@bp.get("/api/projects/<project_id>/decisions")
+def api_project_decisions(project_id: str):
+    return jsonify({"items": _knowledge().list_decisions(project_id)})
+
+
+@bp.post("/api/projects/<project_id>/decisions")
+def api_project_decision_create(project_id: str):
+    try:
+        decision = _knowledge().create_decision(project_id, request.get_json(silent=True) or {})
+    except Exception as exc:
+        return _api_error(exc)
+    return jsonify(decision), 201
 
 
 def register_entry_system(app: Flask) -> None:
