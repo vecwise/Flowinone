@@ -1,0 +1,112 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_lab.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="gallery-lab family-{{ variant.family }} design-{{ variant.slug }}" data-gallery-query="{{ canonical_query }}" data-design="{{ variant.slug }}">
+  <nav class="lab-switcher" aria-label="Gallery 設計方案">
+    <a class="lab-switcher-back" href="{{ url_for('gallery.gallery_lab_index') }}">全部 {{ variants|length }} 款</a>
+    <div class="lab-switcher-options">
+      {% for option in variants %}
+      <a href="{{ url_for('gallery.gallery_lab_variant', variant_slug=option.slug) }}" class="{% if option.slug == variant.slug %}is-current{% endif %}" {% if option.slug == variant.slug %}aria-current="page"{% endif %} aria-label="{{ option.number }} {{ option.family_label }} {{ option.name }}">{{ option.number }}</a>
+      {% endfor %}
+    </div>
+    <span class="lab-switcher-family">{{ variant.family_label }}</span>
+  </nav>
+
+  <header class="lab-hero">
+    <div class="lab-hero-number" aria-hidden="true">{{ variant.number }}</div>
+    <div class="lab-hero-copy">
+      <p class="lab-kicker">{{ variant.family_label }} Study</p>
+      <h1>{{ variant.name }}</h1>
+      <p>{{ variant.summary }}</p>
+    </div>
+    {% if items %}
+    <a class="lab-hero-visual" href="{{ items[0].detail_url }}" aria-label="開啟精選項目 {{ items[0].title }}">
+      <img src="{{ items[0].thumbnail_url }}" alt="" width="900" height="660" decoding="async">
+      <span>{{ items[0].title }}</span>
+    </a>
+    {% endif %}
+  </header>
+
+  <div class="lab-workspace">
+    <form class="lab-filter" method="get" role="search" aria-label="Gallery 搜尋與篩選">
+      <div class="lab-field lab-field-search">
+        <label for="lab-search">搜尋素材</label>
+        <input id="lab-search" type="search" name="q" value="{{ query.q }}" placeholder="標題、tag 或來源">
+      </div>
+      <fieldset class="lab-sources">
+        <legend>資料來源 <small>可複選</small></legend>
+        <div>
+          {% for source in source_options %}
+          <label class="lab-source-option{% if source.key == 'eagle' %} is-eagle{% endif %}{% if source.error %} has-error{% endif %}" data-source="{{ source.key }}">
+            <input type="checkbox" name="source" value="{{ source.key }}" {% if source.key in query.sources %}checked{% endif %}>
+            <span class="lab-source-label">{{ source.label }} <small class="lab-source-count">{{ source.count }}</small></span>
+            {% if source.key == 'eagle' %}<em class="lab-source-state">{{ '未連線' if source.error else '已連線' }}</em>{% endif %}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="lab-field">
+        <label for="lab-type">類型</label>
+        <select id="lab-type" name="type">
+          <option value="" {% if not query.media_type %}selected{% endif %}>全部</option>
+          <option value="image" {% if query.media_type == 'image' %}selected{% endif %}>圖片</option>
+          <option value="video" {% if query.media_type == 'video' %}selected{% endif %}>影片</option>
+          <option value="bookmark" {% if query.media_type == 'bookmark' %}selected{% endif %}>書籤</option>
+        </select>
+      </div>
+      <div class="lab-field">
+        <label for="lab-sort">排序</label>
+        <select id="lab-sort" name="sort">
+          <option value="recently_added" {% if query.sort == 'recently_added' %}selected{% endif %}>最近加入</option>
+          <option value="newest" {% if query.sort == 'newest' %}selected{% endif %}>最新內容</option>
+          <option value="title" {% if query.sort == 'title' %}selected{% endif %}>標題</option>
+          <option value="most_viewed" {% if query.sort == 'most_viewed' %}selected{% endif %}>最常瀏覽</option>
+          <option value="favorites" {% if query.sort == 'favorites' %}selected{% endif %}>我的最愛</option>
+        </select>
+      </div>
+      <input type="hidden" name="view" value="{{ query.view }}">
+      <input type="hidden" name="limit" value="{{ query.limit }}">
+      <button class="lab-button lab-submit" type="submit">套用篩選</button>
+      <a class="lab-button lab-reset" href="{{ reset_url }}">清除</a>
+    </form>
+
+    {% for source in source_options if source.error %}<p class="lab-notice" role="status">{{ source.label }} 暫時無法載入，其他來源仍可瀏覽。</p>{% endfor %}
+
+    <section class="lab-results" aria-labelledby="lab-results-title">
+      <header class="lab-results-header">
+        <h2 id="lab-results-title">{{ total }} 個素材</h2>
+        <p>同一批內容，不同設計判斷</p>
+      </header>
+      {% if items %}
+      <div class="lab-grid">
+        {% for item in items %}
+        <article class="lab-card lab-card-{{ loop.index }}" data-gallery-item="{{ item.id }}">
+          <a class="lab-media" href="{{ item.detail_url }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="開啟 {{ item.title }}">
+            <img src="{{ item.thumbnail_url }}" alt="" width="640" height="480" loading="lazy" decoding="async">
+          </a>
+          <div class="lab-card-copy">
+            <div class="lab-meta"><span>{{ item.source.name }}</span><span>{{ {'image':'圖片','video':'影片','bookmark':'書籤'}.get(item.media_type, item.media_type) }}</span></div>
+            <h3><a href="{{ item.detail_url }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+            {% if item.tags %}<div class="lab-tags" aria-label="Tags">{% for tag in item.tags[:3] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
+            <button class="lab-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="lab-empty"><h3>沒有符合的素材</h3><p>調整關鍵字、來源或類型後再試一次。</p><a class="lab-button" href="{{ reset_url }}">查看全部</a></div>
+      {% endif %}
+    </section>
+  </div>
+
+  {% if next_url %}<nav class="lab-pagination" aria-label="Gallery 分頁"><a class="lab-button" href="{{ next_url }}">載入下一批</a></nav>{% endif %}
+</main>
+
+{% if variant.family == 'gsap' %}
+<script src="{{ url_for('static', filename='js/gallery_lab_gsap.bundle.js') }}" defer></script>
+{% else %}
+<script src="{{ url_for('static', filename='js/gallery_lab.js') }}" defer></script>
+{% endif %}
+{% endblock %}

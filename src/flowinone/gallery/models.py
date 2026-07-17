@@ -168,7 +168,7 @@ class GalleryItem:
         payload.pop("relevance", None)
         payload["source"] = {
             "key": self.source,
-            "name": {"local": "本機", "eagle": "Eagle", "bookmarks": "書籤"}[self.source],
+            "name": {"local": "本機", "eagle": "EAGLE", "bookmarks": "書籤"}[self.source],
         }
         return payload
 

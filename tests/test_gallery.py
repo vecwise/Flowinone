@@ -122,3 +122,46 @@ def test_gallery_html_and_api_keep_source_checkboxes_on_one_page(gallery_app):
     assert random_redirect.status_code == 302
     parsed = urlsplit(random_redirect.headers["Location"])
     assert parse_qs(parsed.query)["seed"][0].isdigit()
+
+
+def test_gallery_lab_lists_only_retained_numbered_designs(gallery_app):
+    client = gallery_app.test_client()
+    index = client.get("/gallery/lab")
+    assert index.status_code == 200
+    retained_numbers = (1, 2, 7, 10, 12, 16, 18, 21, 23)
+    for number in retained_numbers:
+        assert f">{number:02d}<".encode() in index.data
+    assert index.data.count(b'class="lab-choice ') == 9
+
+    variants = (
+        "gsap-filmstrip", "gsap-masonry", "taste-contact",
+        "uipro-workbench", "uipro-library", "gsap-rhythm",
+        "taste-swiss", "uipro-console", "uipro-board",
+    )
+    for slug in variants:
+        page = client.get(f"/gallery/lab/{slug}?source=local&type=image&sort=title")
+        assert page.status_code == 200
+        assert f'data-design="{slug}"'.encode() in page.data
+        assert page.data.count(b'type="checkbox" name="source"') == 3
+        assert "Travel reference".encode() in page.data
+        if slug.startswith("gsap-"):
+            assert b"gallery_lab_gsap.bundle.js" in page.data
+            assert b"cdn.jsdelivr.net" not in page.data
+
+    eagle_only = client.get("/gallery/lab/uipro-workbench?source=eagle")
+    assert eagle_only.status_code == 200
+    assert b'data-source="eagle"' in eagle_only.data
+    assert b'EAGLE' in eagle_only.data
+    assert b'value="eagle" checked' in eagle_only.data
+    assert b'value="local" checked' not in eagle_only.data
+
+    removed_variants = (
+        "gsap-focus", "gsap-stack", "taste-editorial", "taste-cobalt",
+        "taste-archive", "uipro-bento", "uipro-list", "gsap-lightband",
+        "gsap-parallax", "gsap-panorama", "taste-ink", "taste-cabinet",
+        "taste-wall", "uipro-master", "uipro-focus",
+    )
+    for slug in removed_variants:
+        assert client.get(f"/gallery/lab/{slug}").status_code == 404
+
+    assert client.get("/gallery/lab/not-a-design").status_code == 404

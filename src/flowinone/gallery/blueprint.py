@@ -17,6 +17,18 @@ from src.flowinone.catalog.service import CatalogService
 bp = Blueprint("gallery", __name__)
 _DEFAULT_SERVICE = GalleryService()
 
+GALLERY_LAB_VARIANTS = (
+    {"number": "01", "slug": "gsap-filmstrip", "family": "gsap", "family_label": "GSAP", "name": "動態膠卷", "summary": "橫向敘事與分鏡式進場，強調瀏覽節奏。"},
+    {"number": "02", "slug": "gsap-masonry", "family": "gsap", "family_label": "GSAP", "name": "動態瀑布", "summary": "不等高構圖配合批次捲動揭露。"},
+    {"number": "07", "slug": "taste-contact", "family": "taste", "family_label": "Taste", "name": "影像接觸表", "summary": "銳利、緊湊、像攝影工作室的素材索引。"},
+    {"number": "10", "slug": "uipro-workbench", "family": "uipro", "family_label": "UI/UX Pro Max", "name": "素材工作台", "summary": "桌面高效率側欄，行動版自然回到單欄。"},
+    {"number": "12", "slug": "uipro-library", "family": "uipro", "family_label": "UI/UX Pro Max", "name": "學術收藏室", "summary": "知識庫語彙、沉穩排版與可讀性優先。"},
+    {"number": "16", "slug": "gsap-rhythm", "family": "gsap", "family_label": "GSAP", "name": "節奏矩陣", "summary": "規整矩陣配合波浪式動態，兼顧效率與趣味。"},
+    {"number": "18", "slug": "taste-swiss", "family": "taste", "family_label": "Taste", "name": "瑞士索引", "summary": "紅黑高對比、嚴謹格線與直接的資訊層級。"},
+    {"number": "21", "slug": "uipro-console", "family": "uipro", "family_label": "UI/UX Pro Max", "name": "媒體控制台", "summary": "高資訊密度、清楚狀態與鍵盤友善的管理介面。"},
+    {"number": "23", "slug": "uipro-board", "family": "uipro", "family_label": "UI/UX Pro Max", "name": "收藏看板", "summary": "穩定卡片欄位、明確操作區與清楚內容狀態。"},
+)
+
 
 def _service() -> GalleryService:
     factory = current_app.config.get("FLOWINONE_GALLERY_SERVICE_FACTORY")
@@ -126,7 +138,7 @@ def gallery_index():
     next_url = None
     if page.next_cursor:
         next_url = f"{url_for('gallery.gallery_index')}?{urlencode(_query_pairs(query, cursor=page.next_cursor))}"
-    source_labels = {"local": "本機", "eagle": "Eagle", "bookmarks": "書籤"}
+    source_labels = {"local": "本機", "eagle": "EAGLE", "bookmarks": "書籤"}
     catalog_database = get_resource_database(Path(current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")) if current_app.config.get("FLOWINONE_RESOURCE_DB_PATH") else None)
     recent_sessions = CatalogService(catalog_database).recent_sessions(3)
     for session in recent_sessions:
@@ -164,6 +176,58 @@ def gallery_index():
     )
 
 
+@bp.get("/gallery/lab", strict_slashes=False)
+def gallery_lab_index():
+    """Numbered comparison surface for the retained gallery design studies."""
+    return render_template(
+        "gallery_lab_index.html",
+        title="Gallery Lab · Flowinone",
+        variants=GALLERY_LAB_VARIANTS,
+    )
+
+
+@bp.get("/gallery/lab/<variant_slug>")
+def gallery_lab_variant(variant_slug: str):
+    """Render one design study with the production Gallery query and item data."""
+    variant = next((item for item in GALLERY_LAB_VARIANTS if item["slug"] == variant_slug), None)
+    if variant is None:
+        abort(404)
+    query = _query()
+    try:
+        page = _service().list_items(query)
+    except InvalidGalleryCursor as exc:
+        abort(400, description=str(exc))
+    canonical_query = urlencode(_query_pairs(query))
+    variant_url = url_for("gallery.gallery_lab_variant", variant_slug=variant_slug)
+    return_to = f"{variant_url}?{canonical_query}"
+    payload = _page_payload(page, return_to)
+    next_url = None
+    if page.next_cursor:
+        next_url = f"{variant_url}?{urlencode(_query_pairs(query, cursor=page.next_cursor))}"
+    source_labels = {"local": "本機", "eagle": "EAGLE", "bookmarks": "書籤"}
+    return render_template(
+        "gallery_lab.html",
+        title=f"{variant['number']} {variant['name']} · Flowinone",
+        variant=variant,
+        variants=GALLERY_LAB_VARIANTS,
+        items=payload["items"],
+        total=page.total,
+        query=query,
+        source_options=[
+            {
+                "key": source,
+                "label": source_labels[source],
+                "count": page.source_counts.get(source, 0),
+                "error": page.source_errors.get(source),
+            }
+            for source in GALLERY_SOURCES
+        ],
+        next_url=next_url,
+        reset_url=variant_url,
+        canonical_query=canonical_query,
+    )
+
+
 @bp.get("/api/gallery/items")
 def api_gallery_items():
     query = _query()
@@ -179,7 +243,7 @@ def api_gallery_items():
 def api_gallery_sources():
     query = GalleryQuery.create(sources=GALLERY_SOURCES, limit=1)
     page = _service().list_items(query)
-    labels = {"local": "本機", "eagle": "Eagle", "bookmarks": "書籤"}
+    labels = {"local": "本機", "eagle": "EAGLE", "bookmarks": "書籤"}
     return jsonify(
         {
             "items": [

@@ -1,0 +1,34 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_lab.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="lab-index">
+  <header class="lab-index-hero">
+    <div>
+      <p class="lab-index-kicker">Flowinone Gallery Design Study</p>
+      <h1>三個 skill，{{ variants|length }} 款保留方案</h1>
+    </div>
+    <p>已移除不符合偏好的方案。剩餘設計沿用原編號，方便繼續比較與收斂。</p>
+  </header>
+
+  {% for family, family_label in [('gsap', 'GSAP'), ('taste', 'Taste'), ('uipro', 'UI/UX Pro Max')] %}
+  <section class="lab-family lab-family-{{ family }}" aria-labelledby="family-{{ family }}">
+    <div class="lab-family-heading">
+      <h2 id="family-{{ family }}">{{ family_label }}</h2>
+      <p>{{ {'gsap':'動態敘事與空間連續性','taste':'反模板化的內容策展','uipro':'可用性、清晰度與適應性'}[family] }}</p>
+    </div>
+    <div class="lab-choice-grid">
+      {% for variant in variants if variant.family == family %}
+      <a class="lab-choice lab-choice-{{ loop.index }} choice-{{ variant.slug }}" href="{{ url_for('gallery.gallery_lab_variant', variant_slug=variant.slug) }}">
+        <span class="lab-choice-number">{{ variant.number }}</span>
+        <span class="lab-choice-preview" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="lab-choice-copy"><strong>{{ variant.name }}</strong><small>{{ variant.summary }}</small></span>
+        <span class="lab-choice-open">開啟方案</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</main>
+{% endblock %}
