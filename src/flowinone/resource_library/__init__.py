@@ -1,4 +1,4 @@
-"""Resource ingestion, curation, search, and note-promotion domain."""
+"""Resource ingestion, enrichment, and renderer search domain."""
 
 from .database import ResourceDatabase, get_resource_database
 from .settings import ResourceSettings, get_resource_settings

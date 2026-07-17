@@ -57,15 +57,13 @@
 
       {% if recommended_actions %}
       <section>
-        <h2>下一步</h2>
+        <h2>可用操作</h2>
         <div class="rail-actions">
           {% for action in recommended_actions %}
           {% if action.url %}
           <a class="rail-action" href="{{ action.url }}">
           {% elif action.id == 'back' %}
           <a class="rail-action" href="{{ video.parent_url }}">
-          {% elif action.id == 'note' %}
-          <a class="rail-action" href="#notes">
           {% else %}
           <a class="rail-action" href="#related">
           {% endif %}
@@ -80,50 +78,12 @@
   </section>
 
   <section class="detail-body-grid">
-    <section class="note-surface">
-      <h2>加入靈感 Collection</h2>
-      {% if inspiration_collections and inspiration_item %}
-      <form class="resource-form" method="post" action="{{ url_for('resource_library.collection_add_item_from_source') }}">
-        <label for="video-inspiration-collection">Collection</label>
-        <select id="video-inspiration-collection" name="collection_id">{% for collection in inspiration_collections %}<option value="{{ collection.id }}">{{ collection.title }}</option>{% endfor %}</select>
-        <label for="video-inspiration-note">用途／觀察</label>
-        <textarea id="video-inspiration-note" name="annotation" rows="3"></textarea>
-        <input type="hidden" name="source_kind" value="{{ inspiration_item.source_kind }}">
-        <input type="hidden" name="source_id" value="{{ inspiration_item.source_id }}">
-        <input type="hidden" name="title" value="{{ inspiration_item.title }}">
-        <input type="hidden" name="url" value="{{ inspiration_item.url }}">
-        <input type="hidden" name="thumbnail" value="{{ inspiration_item.thumbnail or '' }}">
-        <input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}">
-        <button class="action-button primary" type="submit">加入 Collection</button>
-      </form>
-      {% else %}
-      <p>先建立一個靈感 Collection，再回來收集這段影片。</p>
-      <a class="action-button" href="{{ url_for('resource_library.collection_index') }}">建立 Collection</a>
-      {% endif %}
-    </section>
-
-    <section class="note-surface">
-      <h2>轉成工作入口</h2>
-      {% if inspiration_item %}
-      <p>把影片放進 LEARN 或 BUILD 的明確脈絡，而不只是繼續瀏覽。</p>
-      <div class="resource-card-actions">
-        <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}"><input type="hidden" name="source_kind" value="{{ inspiration_item.source_kind }}"><input type="hidden" name="source_id" value="{{ inspiration_item.source_id }}"><input type="hidden" name="title" value="{{ inspiration_item.title }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="target_uri" value="{{ inspiration_item.url }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="mode" value="learn"><button class="action-button primary" type="submit">建立 LEARN Entry</button></form>
-        <form method="post" action="{{ url_for('entry_system.entry_create_from_source') }}"><input type="hidden" name="source_kind" value="{{ inspiration_item.source_kind }}"><input type="hidden" name="source_id" value="{{ inspiration_item.source_id }}"><input type="hidden" name="title" value="{{ inspiration_item.title }}"><input type="hidden" name="target_type" value="flowinone_view"><input type="hidden" name="target_uri" value="{{ inspiration_item.url }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="mode" value="build"><button class="action-button" type="submit">建立 BUILD Entry</button></form>
-      </div>
-      {% else %}<p>目前來源沒有可儲存的安全入口。</p>{% endif %}
-    </section>
-
-    <section id="notes" class="note-surface">
-      <h2>個人筆記</h2>
-      <p>尚未建立個人筆記。之後可連到 Obsidian note 或 project page。</p>
-    </section>
-
-    <section class="note-surface">
-      <h2>AI Metadata</h2>
+    <section class="viewer-surface">
+      <h2>Metadata</h2>
       {% if metadata.description %}
       <p>{{ metadata.description }}</p>
       {% else %}
-      <p>尚未建立 AI summary。原始內容仍是主資料來源。</p>
+      <p>目前沒有額外說明；原始影片仍是主資料來源。</p>
       {% endif %}
     </section>
   </section>

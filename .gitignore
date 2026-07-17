@@ -17,7 +17,7 @@ docs/*
 !docs/schema.md
 !docs/workflows.md
 !docs/migration-plan.md
-!docs/flowinone_knowledge_flow_system.md
+!docs/renderer-architecture.md
 
 # Machine-local Flowinone extensions. Never include these in source or builds.
 .flowinone_local/

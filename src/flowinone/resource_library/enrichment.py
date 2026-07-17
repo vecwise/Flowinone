@@ -292,8 +292,6 @@ class EnrichmentService:
             stored.thumbnail_path = thumbnail_path or stored.thumbnail_path
             stored.enrichment_status = "complete"
             stored.enrichment_error = None
-            if stored.reading_state == "inbox":
-                stored.reading_state = "unread"
             stored.updated_at = utc_now_text()
             self.repository._sync_fts(session, stored, extracted.text)
             if self.ai.available:

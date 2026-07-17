@@ -89,7 +89,6 @@ class SidecarService:
                         "people": row.get("people_labels") or [],
                         "annotation": row.get("annotation") or "",
                         "source_url": row.get("source_url") or "",
-                        "collections": [],
                         "updated_at": row.get("sidecar_updated_at") or row.get("updated_at") or _now(),
                     }
                 )

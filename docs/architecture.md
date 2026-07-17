@@ -1,65 +1,49 @@
-# Flowinone architecture
+# Flowinone renderer architecture
 
-## Product boundary
+Flowinone is now a local-first **resource renderer**. It does not own a knowledge workflow, notes, projects, or an Obsidian bridge. Its job is to make resources from several sources easy to browse, open, search, and inspect.
 
-```text
-Flowinone
-├── Catalog Projection (rebuildable)
-│   ├── canonical items + multi-source origins
-│   ├── FTS / facets / keyset query
-│   └── relations / events / browse sessions
-├── Gallery Domain
-│   ├── Local media adapter
-│   ├── Eagle adapter
-│   ├── Bookmark adapter
-│   └── Flat browse query + cards + existing viewers
-└── Knowledge OS Domain
-    ├── Raw Resource
-    ├── Brief fields / AI artifacts
-    ├── Wiki Draft / Obsidian export
-    ├── Entry + Project + Decision
-    └── Output Asset + provenance
+```mermaid
+flowchart LR
+  local["Local media\nfilesystem + item_db index"]
+  eagle["Eagle\nlibrary/API"]
+  chrome["Chrome Bookmarks\nBookmarks JSON"]
+  resources["Web Resources\nURL import + extracted content"]
+
+  local --> catalog
+  eagle --> catalog
+  chrome --> catalog
+  resources --> catalog
+
+  catalog["Catalog projection\ncanonical identity · origins · tags\nSQLite FTS · facets · keyset cursor\nevents · sessions · item relations"]
+
+  catalog --> gallery["Gallery\nflat visual/media browsing"]
+  catalog --> search["Search\nall-source retrieval"]
+  resources --> resourcepage["Resource detail\nmetadata · summary · extracted text"]
+  catalog --> viewers["Existing viewers\nLocal/Eagle media · Bookmark URL"]
+
+  sidecar[".flowinone.json\nportable local metadata"] --> local
 ```
 
-Gallery 與 Knowledge OS 不共享 workflow state；兩者可讀同一個可重建 Catalog projection。Catalog 不是來源資料庫：Eagle、filesystem、Chrome 與 Resource DB 仍各自 authoritative。
+## Authority and projection
 
-## Gallery request flow
+Each source stays authoritative:
 
-```text
-/gallery/?q=&source=&type=&tags=&tag_mode=&sort=&seed=&cursor=
-  → GalleryQuery allowlist validation
-  → Catalog FTS / filter / facet
-  → SQLite keyset cursor page
-  → Jinja page or JSON response
-```
+- Local media: original filesystem; `item_db` is an index.
+- Eagle: Eagle library/API.
+- Bookmarks: Chrome Bookmarks JSON.
+- Web Resources: Flowinone SQLite database plus extracted-content files.
 
-Catalog sync 採部分成功：Eagle 關閉時 Local/Bookmarks/Resources 仍可更新。API 不回傳本機 absolute path；detail 只使用受控 URI。Gallery event、favorite 與 Browse Session 只屬於 Gallery，不污染 Resource 閱讀狀態。
+Catalog is a rebuildable projection, never the source of truth. It merges same-URL Bookmark and Resource records for search while preserving each origin, so opening a result still uses the correct source behavior.
 
-## Knowledge loop
+## Main surfaces
 
-```text
-Resource (raw)
-  → extracted content + Brief
-  → Project / Mode relevance
-  → BUILD / LEARN / SCAN retrieval
-  → DraftNote (Wiki draft)
-  → WRITE Entry
-  → OutputAsset
-      └── AssetSource provenance
-```
+| Surface | Purpose | Source scope |
+| --- | --- | --- |
+| `/gallery/` | Browse flat image, video, and bookmark cards | Local, Eagle, Bookmarks |
+| `/search/` | FTS search and facets | Local, Eagle, Bookmarks, Resources |
+| `/resources/` | Browse imported web resources | Resources |
+| Existing source pages | Folder/tree maintenance and source-specific browsing | Local, Eagle, Chrome |
 
-Decision 是 Project 的人工資料。AI 可以產生建議，但沒有自動覆寫 Decision、`user_note` 或 user tags 的 service 路徑。
+## Intentional boundary
 
-## Ownership rules
-
-- Eagle：Eagle library 為 authoritative。
-- Local media：filesystem 為 authoritative；`item_db.db` 是索引。
-- Chrome bookmarks：Chrome JSON 為 authoritative；Resource import 是 durable snapshot/workflow。
-- Resource metadata、Entry、Project、Decision、Output Asset：`flowinone.sqlite3` 為 authoritative。
-- Wiki：Draft 在 SQLite；匯出後 Obsidian Markdown 是人工長期資產，重匯出有衝突保護。
-- Catalog：`flowinone.sqlite3` 內的衍生查詢投影，可從所有來源重建。
-- Local sidecar：`.flowinone.json` 保存可攜、人工 metadata；DB 保存查詢索引與 cache。
-
-## Why Flask remains
-
-外部 Gallery spec 推薦 FastAPI/React，但目前 app、viewer、source integration、tests 與部署都在 Flask/Jinja。新的 Gallery package 已建立 API/domain boundary，未來若獨立前端，只需改 consumer，不必先做高風險雙棧 migration。
+There are no BUILD, THINK, LEARN, SCAN, RECOVER, WRITE, Entry, Project, Collection, Draft Note, or Obsidian routes in the running app. Existing source folders remain source metadata or source-specific views; they are not Gallery cards themselves.

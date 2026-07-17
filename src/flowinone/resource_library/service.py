@@ -1,4 +1,4 @@
-"""Application service orchestrating imports, workflow, tags, and jobs."""
+"""Application service orchestrating imports, renderer metadata, and jobs."""
 
 from __future__ import annotations
 
@@ -14,15 +14,6 @@ from .importers import BookmarkRecord, load_bookmarks
 from .jobs import JobQueue
 from .models import AppState, utc_now_text
 from .repository import ResourceRepository
-
-
-READING_TRANSITIONS = {
-    "inbox": {"unread", "skimmed", "reading", "digested"},
-    "unread": {"inbox", "skimmed", "reading", "digested"},
-    "skimmed": {"unread", "reading", "digested"},
-    "reading": {"unread", "skimmed", "digested"},
-    "digested": {"reading", "unread"},
-}
 
 
 @dataclass
@@ -166,7 +157,6 @@ class ResourceService:
         url: str,
         *,
         title: str = "",
-        saved_reason: str = "",
         enqueue: bool = True,
         link_thumbnails: Optional[bool] = None,
     ) -> dict:
@@ -183,18 +173,11 @@ class ResourceService:
         )
         canonical = normalize_resource_url(url)
         resource = self.repository.get_by_canonical_url(canonical)
-        if saved_reason:
-            resource = self.repository.update(resource["id"], {"saved_reason": saved_reason})
         from src.flowinone.catalog.service import CatalogSyncService
         CatalogSyncService(self.database).sync_resource(resource["id"])
         return {"resource": resource, "import": summary.to_dict()}
 
     def update_resource(self, resource_id: str, changes: dict) -> dict:
-        next_state = changes.get("reading_state")
-        if next_state:
-            current = self.repository.get(resource_id)["reading_state"]
-            if next_state != current and next_state not in READING_TRANSITIONS.get(current, set()):
-                raise ValueError(f"不允許從 {current} 直接改成 {next_state}")
         resource = self.repository.update(resource_id, changes)
         from src.flowinone.catalog.service import CatalogSyncService
         CatalogSyncService(self.database).sync_resource(resource_id)
@@ -231,4 +214,4 @@ class ResourceService:
         return queued
 
 
-__all__ = ["ImportSummary", "READING_TRANSITIONS", "ResourceService"]
+__all__ = ["ImportSummary", "ResourceService"]

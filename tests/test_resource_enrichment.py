@@ -37,9 +37,6 @@ def make_settings(tmp_path: Path) -> ResourceSettings:
         data_dir=tmp_path / "data",
         database_path=tmp_path / "resource.db",
         content_dir=tmp_path / "data" / "content",
-        export_dir=tmp_path / "data" / "exports",
-        obsidian_vault_path=None,
-        obsidian_target_folder="Resources/Digested",
         llm_base_url=None,
         llm_api_key=None,
         llm_model=None,
@@ -83,7 +80,7 @@ def test_github_extractor_uses_repository_metadata_and_readme():
             if url.endswith("/readme"):
                 payload = {
                     "content": base64.b64encode(
-                        b"# Flowinone\n\nDurable resource workflow and inspiration collections."
+                        b"# Flowinone\n\nMulti-source resource rendering and search."
                     ).decode("ascii")
                 }
             else:
@@ -104,7 +101,7 @@ def test_github_extractor_uses_repository_metadata_and_readme():
     assert metadata.title == "alvin/flowinone"
     assert metadata.source_type == "github"
     content = extractor.extract_content("https://github.com/alvin/flowinone")
-    assert "Durable resource workflow" in content.text
+    assert "Multi-source resource rendering" in content.text
     assert content.raw_content_type == "text/markdown"
 
 
@@ -177,7 +174,6 @@ def test_enrichment_persists_content_and_updates_fts(monkeypatch, tmp_path):
     result = enrichment.extract_content(resource_id)
     assert Path(result["text_path"]).is_file()
     detail = service.repository.get(resource_id)
-    assert detail["reading_state"] == "unread"
     assert detail["enrichment_status"] == "complete"
     assert service.repository.list(query="hippocampus").total == 1
     monkeypatch.setattr(

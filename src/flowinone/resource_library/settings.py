@@ -6,7 +6,6 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -24,9 +23,6 @@ class ResourceSettings:
     data_dir: Path
     database_path: Path
     content_dir: Path
-    export_dir: Path
-    obsidian_vault_path: Optional[Path]
-    obsidian_target_folder: str
     llm_base_url: Optional[str]
     llm_api_key: Optional[str]
     llm_model: Optional[str]
@@ -37,7 +33,6 @@ class ResourceSettings:
     @classmethod
     def from_environment(cls) -> "ResourceSettings":
         data_dir = _path_from_env("FLOWINONE_DATA_DIR", PROJECT_ROOT / "data")
-        vault_raw = os.environ.get("OBSIDIAN_VAULT_PATH", "").strip()
         timeout_raw = os.environ.get("HTTP_TIMEOUT_SECONDS", "30")
         bytes_raw = os.environ.get("MAX_DOWNLOAD_BYTES", "20000000")
         try:
@@ -59,15 +54,6 @@ class ResourceSettings:
                 "FLOWINONE_RESOURCE_CONTENT_DIR",
                 data_dir / "content",
             ),
-            export_dir=_path_from_env(
-                "FLOWINONE_RESOURCE_EXPORT_DIR",
-                data_dir / "exports" / "resources",
-            ),
-            obsidian_vault_path=Path(vault_raw).expanduser().resolve() if vault_raw else None,
-            obsidian_target_folder=(
-                os.environ.get("OBSIDIAN_TARGET_FOLDER", "Resources/Digested").strip()
-                or "Resources/Digested"
-            ),
             llm_base_url=os.environ.get("LLM_BASE_URL", "").strip() or None,
             llm_api_key=os.environ.get("LLM_API_KEY", "").strip() or None,
             llm_model=os.environ.get("LLM_MODEL", "").strip() or None,
@@ -82,11 +68,10 @@ class ResourceSettings:
         )
 
     def ensure_directories(self) -> None:
-        """Create only Flowinone-owned directories; never create an Obsidian vault."""
+        """Create only Flowinone-owned renderer directories."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.content_dir.mkdir(parents=True, exist_ok=True)
-        self.export_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache(maxsize=1)

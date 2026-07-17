@@ -5,9 +5,6 @@ import pytest
 from flask import Flask
 
 from routes import register_routes
-from src.flowinone.resource_library.curation import CollectionService, DraftNoteService
-from src.flowinone.resource_library.database import get_resource_database
-from src.flowinone.resource_library.service import ResourceService
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -43,10 +40,10 @@ def test_resource_pages_and_json_crud(resource_app):
     assert b"Route Resource" in client.get("/resources/").data
 
     patched = client.patch(
-        f"/api/resources/{resource['id']}", json={"reading_state": "reading", "priority": 5}
+        f"/api/resources/{resource['id']}", json={"title": "Renamed Resource"}
     )
     assert patched.status_code == 200
-    assert patched.get_json()["reading_state"] == "reading"
+    assert patched.get_json()["title"] == "Renamed Resource"
     tagged = client.post(
         f"/api/resources/{resource['id']}/tags", json={"tags": ["AI", "Architecture"]}
     )
@@ -56,38 +53,26 @@ def test_resource_pages_and_json_crud(resource_app):
     removed = client.delete(f"/api/resources/{resource['id']}/tags/{ai_tag['id']}")
     assert removed.status_code == 200
     assert "AI" not in removed.get_json()["tag_names"]
-    archived = client.post(
-        f"/api/resources/{resource['id']}/status", json={"status": "archived"}
-    )
-    assert archived.status_code == 200
-    assert archived.get_json()["disposition"] == "archived"
-    promoted = client.post(f"/api/resources/{resource['id']}/promote", json={})
-    assert promoted.status_code == 200
-    assert promoted.get_json()["note"]["note_type"] == "literature"
+    assert client.post(f"/api/resources/{resource['id']}/status", json={}).status_code == 404
+    assert client.post(f"/api/resources/{resource['id']}/promote", json={}).status_code == 404
 
 
-def test_collection_note_pages_render_mixed_source_flow(resource_app):
-    database = get_resource_database(Path(resource_app.config["FLOWINONE_RESOURCE_DB_PATH"]))
-    resource = ResourceService(database, link_thumbnail_cache=False).create_url(
-        "https://example.com/curation-route", title="Curation", enqueue=False
-    )["resource"]
-    collections = CollectionService(database)
-    collection = collections.create("Route collection")
-    collection = collections.add_item(
-        collection["id"], source_kind="resource", source_id=resource["id"]
-    )
-    note = DraftNoteService(database).create_from_collection(collection)
-
+def test_renderer_root_and_removed_workflow_routes(resource_app):
     client = resource_app.test_client()
-    collection_index = client.get("/inspiration/")
-    assert collection_index.status_code == 200
-    assert "靈感 Collections".encode() in collection_index.data
-    collection_page = client.get(f"/inspiration/{collection['id']}/")
-    assert collection_page.status_code == 200
-    assert b"Route collection" in collection_page.data
-    note_page = client.get(f"/notes/{note['id']}/")
-    assert note_page.status_code == 200
-    assert b"Curation" in note_page.data
+    assert client.get("/").headers["Location"].endswith("/gallery/")
+    for path in (
+        "/build/",
+        "/think/",
+        "/learn/",
+        "/scan/",
+        "/recover/",
+        "/write/",
+        "/entries/",
+        "/projects/",
+        "/inspiration/",
+        "/notes/",
+    ):
+        assert client.get(path).status_code == 404
 
 
 def test_chrome_upload_api_imports_json(resource_app):

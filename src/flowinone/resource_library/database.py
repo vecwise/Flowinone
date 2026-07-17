@@ -38,7 +38,7 @@ def upgrade_database(path: Path) -> None:
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-            if {"alembic_version", "resources", "collections", "draft_notes"} <= tables:
+            if {"alembic_version", "resources", "resource_origins", "processing_jobs"} <= tables:
                 version = connection.execute(
                     "SELECT version_num FROM alembic_version LIMIT 1"
                 ).fetchone()
@@ -107,7 +107,7 @@ class ResourceDatabase:
                 text(
                     """
                     SELECT title, summary_one_line, summary_short,
-                           why_this_matters, user_note
+                           why_this_matters
                     FROM resources WHERE id=:resource_id
                     """
                 ),
@@ -123,10 +123,10 @@ class ResourceDatabase:
                         """
                         INSERT INTO resource_fts (
                             resource_id, title, summary_one_line, summary_short,
-                            why_this_matters, user_note, extracted_text
+                            why_this_matters, extracted_text
                         ) VALUES (
                             :resource_id, :title, :summary_one_line, :summary_short,
-                            :why_this_matters, :user_note, :extracted_text
+                            :why_this_matters, :extracted_text
                         )
                         """
                     ),
@@ -136,7 +136,6 @@ class ResourceDatabase:
                         "summary_one_line": row["summary_one_line"] or "",
                         "summary_short": row["summary_short"] or "",
                         "why_this_matters": row["why_this_matters"] or "",
-                        "user_note": row["user_note"] or "",
                         "extracted_text": extracted_text or "",
                     },
                 )

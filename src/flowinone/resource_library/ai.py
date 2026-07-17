@@ -1,4 +1,4 @@
-"""Optional OpenAI-compatible summarization without coupling core workflows to AI."""
+"""Optional OpenAI-compatible resource summarization."""
 
 from __future__ import annotations
 

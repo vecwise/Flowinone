@@ -5,14 +5,14 @@
     <header class="browse-header">
         <div>
             <p class="eyebrow">Local index</p>
-            <h1 class="detail-title">Inbox</h1>
+            <h1 class="detail-title">本機索引</h1>
             <p class="shelf-kicker">
                 {{ payload.total }} 筆索引 · {{ available_count }} 筆可用 · {{ stale_count }} 筆需同步
                 {% if selected_tag %}· #{{ selected_tag }}{% endif %}
             </p>
         </div>
         <div class="action-row">
-            <a class="action-button" href="{{ url_for('index', mode='process') }}">返回整理台</a>
+            <a class="action-button" href="{{ url_for('content_library') }}">返回來源總覽</a>
             <a class="action-button {% if stale_count %}warning{% endif %}" href="{{ url_for('update_item_db_route') }}">同步索引</a>
             {% if available_count %}<a class="action-button" href="{{ url_for('update_thumbnails_route') }}">補縮圖</a>{% endif %}
         </div>

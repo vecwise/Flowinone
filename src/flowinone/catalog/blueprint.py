@@ -129,16 +129,6 @@ def api_rebuild_relations():
     return jsonify(DiscoveryService(_database()).rebuild_item_relations())
 
 
-@bp.post("/api/catalog/collections/generate")
-def api_generate_collections():
-    payload = request.get_json(silent=True) or {}
-    service = DiscoveryService(_database())
-    if payload.get("rebuild", True):
-        service.rebuild_item_relations()
-    collections = service.generate_collections(limit=max(1, min(int(payload.get("limit") or 20), 100)))
-    return jsonify({"collections": collections}), 201
-
-
 @bp.get("/api/catalog/sessions")
 def api_sessions():
     return jsonify({"items": CatalogService(_database()).recent_sessions(request.args.get("limit", 3, type=int))})
@@ -203,13 +193,6 @@ def register_catalog(app: Flask) -> None:
     @app.cli.command("catalog-relations-rebuild")
     def catalog_relations_rebuild() -> None:
         click.echo(DiscoveryService(_database()).rebuild_item_relations())
-
-    @app.cli.command("catalog-collections-generate")
-    @click.option("--limit", type=click.IntRange(1, 100), default=20)
-    def catalog_collections_generate(limit: int) -> None:
-        service = DiscoveryService(_database())
-        service.rebuild_item_relations()
-        click.echo({"collections": len(service.generate_collections(limit=limit))})
 
     @app.cli.command("catalog-ocr")
     @click.argument("item_id")

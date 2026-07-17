@@ -20,7 +20,6 @@ from .models import (
     ProcessingJob,
     Resource,
     ResourceContent,
-    ResourceNoteLink,
     ResourceOrigin,
     ResourceTag,
     Tag,
@@ -29,8 +28,6 @@ from .models import (
 )
 
 
-READING_STATES = {"inbox", "unread", "skimmed", "reading", "digested"}
-DISPOSITIONS = {"active", "archived", "rejected"}
 AVAILABILITY_STATES = {"unknown", "available", "dead", "blocked", "auth_required"}
 TAG_SOURCES = {"user", "ai", "chrome_folder", "imported", "rule"}
 
@@ -77,7 +74,7 @@ def _artifact_question(artifact) -> Optional[str]:
     return str(payload.get("question") or "").strip() or None if isinstance(payload, dict) else None
 
 
-def serialize_resource(resource: Resource, *, promoted: bool = False, detail: bool = False) -> dict:
+def serialize_resource(resource: Resource, *, detail: bool = False) -> dict:
     """Return a stable JSON/template representation without leaking ORM state."""
     tag_rows = sorted(
         (
@@ -104,15 +101,10 @@ def serialize_resource(resource: Resource, *, promoted: bool = False, detail: bo
         "author": resource.author,
         "language": resource.language,
         "mime_type": resource.mime_type,
-        "reading_state": resource.reading_state,
-        "disposition": resource.disposition,
         "availability": resource.availability,
-        "priority": resource.priority,
-        "saved_reason": resource.saved_reason,
         "published_at": resource.published_at,
         "captured_at": resource.captured_at,
         "last_checked_at": resource.last_checked_at,
-        "read_at": resource.read_at,
         "favicon_path": resource.favicon_path,
         "thumbnail_path": resource.thumbnail_path,
         "thumbnail_media_id": resource.thumbnail_media_id,
@@ -120,7 +112,6 @@ def serialize_resource(resource: Resource, *, promoted: bool = False, detail: bo
         "summary_short": resource.summary_short,
         "summary_structured_json": resource.summary_structured_json,
         "why_this_matters": resource.why_this_matters,
-        "user_note": resource.user_note,
         "content_hash": resource.content_hash,
         "enrichment_status": resource.enrichment_status,
         "enrichment_error": resource.enrichment_error,
@@ -128,7 +119,6 @@ def serialize_resource(resource: Resource, *, promoted: bool = False, detail: bo
         "updated_at": resource.updated_at,
         "tags": tag_rows,
         "tag_names": [row["name"] for row in tag_rows],
-        "promoted": promoted,
     }
     if detail:
         payload["origins"] = [
@@ -194,10 +184,10 @@ class ResourceRepository:
                 """
                 INSERT INTO resource_fts (
                     resource_id, title, summary_one_line, summary_short,
-                    why_this_matters, user_note, extracted_text
+                    why_this_matters, extracted_text
                 ) VALUES (
                     :resource_id, :title, :summary_one_line, :summary_short,
-                    :why_this_matters, :user_note, :extracted_text
+                    :why_this_matters, :extracted_text
                 )
                 """
             ),
@@ -207,7 +197,6 @@ class ResourceRepository:
                 "summary_one_line": resource.summary_one_line or "",
                 "summary_short": resource.summary_short or "",
                 "why_this_matters": resource.why_this_matters or "",
-                "user_note": resource.user_note or "",
                 "extracted_text": extracted_text or "",
             },
         )
@@ -311,14 +300,7 @@ class ResourceRepository:
             )
             if resource is None:
                 raise ResourceNotFound(resource_id)
-            promoted = bool(
-                session.scalar(
-                    select(func.count())
-                    .select_from(ResourceNoteLink)
-                    .where(ResourceNoteLink.resource_id == resource_id)
-                )
-            )
-            return serialize_resource(resource, promoted=promoted, detail=True)
+            return serialize_resource(resource, detail=True)
 
     def get_by_canonical_url(self, canonical_url: str) -> dict:
         _, url_hash = resource_identity(canonical_url)
@@ -328,25 +310,15 @@ class ResourceRepository:
             )
             if resource is None:
                 raise ResourceNotFound(canonical_url)
-            promoted = bool(
-                session.scalar(
-                    select(func.count())
-                    .select_from(ResourceNoteLink)
-                    .where(ResourceNoteLink.resource_id == resource.id)
-                )
-            )
-            return serialize_resource(resource, promoted=promoted, detail=True)
+            return serialize_resource(resource, detail=True)
 
     def list(
         self,
         *,
         query: str = "",
-        reading_states: Sequence[str] = (),
-        dispositions: Sequence[str] = (),
         source_types: Sequence[str] = (),
         tag: str = "",
         domain: str = "",
-        min_priority: Optional[int] = None,
         page: int = 1,
         per_page: int = 30,
     ) -> ResourcePage:
@@ -354,22 +326,10 @@ class ResourceRepository:
         per_page = max(1, min(per_page, 100))
         with self.database.session() as session:
             conditions = []
-            if reading_states:
-                valid = [value for value in reading_states if value in READING_STATES]
-                if valid:
-                    conditions.append(Resource.reading_state.in_(valid))
-            if dispositions:
-                valid = [value for value in dispositions if value in DISPOSITIONS]
-                if valid:
-                    conditions.append(Resource.disposition.in_(valid))
-            else:
-                conditions.append(Resource.disposition == "active")
             if source_types:
                 conditions.append(Resource.source_type.in_(list(source_types)))
             if domain:
                 conditions.append(Resource.domain == domain.strip().lower())
-            if min_priority is not None:
-                conditions.append(Resource.priority >= max(0, min(int(min_priority), 5)))
             if tag:
                 normalized = normalize_tag(tag)
                 conditions.append(
@@ -416,25 +376,15 @@ class ResourceRepository:
                 statement = statement.order_by(ordering, Resource.captured_at.desc())
             else:
                 statement = statement.order_by(
-                    Resource.priority.desc(), Resource.captured_at.desc(), Resource.created_at.desc()
+                    Resource.captured_at.desc(), Resource.created_at.desc()
                 )
             resources = list(
                 session.scalars(
                     statement.offset((page - 1) * per_page).limit(per_page)
                 ).unique()
             )
-            promoted_ids = set(
-                session.scalars(
-                    select(ResourceNoteLink.resource_id).where(
-                        ResourceNoteLink.resource_id.in_([resource.id for resource in resources])
-                    )
-                )
-            ) if resources else set()
             return ResourcePage(
-                [
-                    serialize_resource(resource, promoted=resource.id in promoted_ids)
-                    for resource in resources
-                ],
+                [serialize_resource(resource) for resource in resources],
                 total,
                 page,
                 per_page,
@@ -442,12 +392,7 @@ class ResourceRepository:
 
     def update(self, resource_id: str, changes: dict) -> dict:
         allowed = {
-            "reading_state",
-            "disposition",
             "availability",
-            "priority",
-            "saved_reason",
-            "user_note",
             "title",
         }
         with self.database.session() as session:
@@ -455,18 +400,10 @@ class ResourceRepository:
             if resource is None:
                 raise ResourceNotFound(resource_id)
             filtered = {key: value for key, value in changes.items() if key in allowed}
-            if "reading_state" in filtered and filtered["reading_state"] not in READING_STATES:
-                raise ValueError("無效的閱讀狀態")
-            if "disposition" in filtered and filtered["disposition"] not in DISPOSITIONS:
-                raise ValueError("無效的處置狀態")
             if "availability" in filtered and filtered["availability"] not in AVAILABILITY_STATES:
                 raise ValueError("無效的連結狀態")
-            if "priority" in filtered:
-                filtered["priority"] = max(0, min(int(filtered["priority"]), 5))
             for key, value in filtered.items():
                 setattr(resource, key, value)
-            if filtered.get("reading_state") in {"reading", "digested"} and not resource.read_at:
-                resource.read_at = utc_now_text()
             resource.updated_at = utc_now_text()
             self._sync_fts(session, resource)
         return self.get(resource_id)
@@ -530,14 +467,6 @@ class ResourceRepository:
     def stats(self) -> dict:
         with self.database.session() as session:
             total = int(session.scalar(select(func.count(Resource.id))) or 0)
-            states = {
-                key: int(value)
-                for key, value in session.execute(
-                    select(Resource.reading_state, func.count(Resource.id)).group_by(
-                        Resource.reading_state
-                    )
-                )
-            }
             source_types = {
                 key: int(value)
                 for key, value in session.execute(
@@ -554,15 +483,10 @@ class ResourceRepository:
                 )
                 or 0
             )
-            promoted = int(
-                session.scalar(select(func.count(func.distinct(ResourceNoteLink.resource_id)))) or 0
-            )
         return {
             "total": total,
-            "reading_states": states,
             "source_types": source_types,
             "pending_jobs": pending_jobs,
-            "promoted": promoted,
         }
 
     def latest_content_text(self, resource_id: str) -> str:
@@ -589,7 +513,6 @@ class ResourceRepository:
         """Rank a bounded candidate set by explainable metadata overlap."""
         target = self.get(resource_id)
         candidates = self.list(
-            dispositions=("active",),
             page=1,
             per_page=100,
         ).items
@@ -618,8 +541,6 @@ class ResourceRepository:
 
 __all__ = [
     "AVAILABILITY_STATES",
-    "DISPOSITIONS",
-    "READING_STATES",
     "ResourceNotFound",
     "ResourcePage",
     "ResourceRepository",

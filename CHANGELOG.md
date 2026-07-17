@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-18
+
+### Changed
+
+- Simplified Flowinone into a multi-source resource renderer; `/` now opens Gallery.
+- Kept Gallery, Catalog/Search, Resource extraction, source viewers, sidecars, and explainable related items.
+
+### Removed
+
+- BUILD/THINK/LEARN/SCAN/RECOVER/WRITE, Entry, Project, Decision, and Output Asset runtime.
+- Collections, Draft Notes, Obsidian export/mirrors, and Resource workflow/promotion routes.
+- Migrations `0007_renderer_only_cleanup` and `0008_renderer_resource_schema` remove the corresponding tables, legacy workflow fields, and personal-note FTS data after a user backup.
+
 ## 2026-07-11
 
 ### Added

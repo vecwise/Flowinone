@@ -13,7 +13,7 @@
     <a class="action-button" href="{{ random_url }}">隨機探索</a>
   </header>
 
-  {% if recent_sessions %}<section class="resource-surface"><div class="gallery-results-heading"><div><p class="eyebrow">Continue Browsing</p><h2>最近的瀏覽 Session</h2></div></div><div class="collection-grid">{% for session in recent_sessions %}<a class="collection-card" href="{{ session.url }}"><span class="resource-type">{{ session.updated_at }}</span><h3>{{ session.query.q or 'Gallery Browse' }}</h3><p>{{ session.query.sources|join(' · ') }} · {{ session.query.sort }}</p></a>{% endfor %}</div></section>{% endif %}
+  {% if recent_sessions %}<section class="resource-surface"><div class="gallery-results-heading"><div><p class="eyebrow">Continue Browsing</p><h2>最近的瀏覽 Session</h2></div></div><div class="session-grid">{% for session in recent_sessions %}<a class="session-card" href="{{ session.url }}"><span class="resource-type">{{ session.updated_at }}</span><h3>{{ session.query.q or 'Gallery Browse' }}</h3><p>{{ session.query.sources|join(' · ') }} · {{ session.query.sort }}</p></a>{% endfor %}</div></section>{% endif %}
 
   <form class="gallery-query" method="get" role="search" aria-label="Gallery 搜尋與篩選">
     <div class="gallery-search-field">

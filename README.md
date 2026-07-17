@@ -1,252 +1,82 @@
-# Flowinone — Gallery + Knowledge OS
+# Flowinone — multi-source resource renderer
 
-Flowinone has two explicit product domains:
+Flowinone is a local-first renderer for visual media, bookmarks, and imported web resources. It lets you browse or search across Local files, Eagle, Chrome Bookmarks, and Resources without moving the authoritative source into a new system.
 
-- **Gallery** — flat item browsing across local media, Eagle, and bookmarks.
-- **Knowledge OS** — Resource → Brief → Wiki Draft → Entry/Project → Output Asset.
-
-Gallery never treats folders as browse items and does not carry reading/note state. Knowledge OS may reference a media item only through an explicit Entry or typed source link.
-
-Both domains now read from a rebuildable **Catalog projection** across Local, Eagle, Chrome Bookmarks, and Resources. Each source remains authoritative; canonical URLs are merged for search while every origin is preserved.
-
----
-
-## 🔥 Highlights
-
-- **Single-page Gallery**: `/gallery/` provides checkboxes for Local, Eagle, and Bookmarks; search, type, sort, view, random seed, and cursor remain in the URL.
-- **Cross-source Search**: `/search/` uses SQLite FTS5, facets, tag ANY/ALL, deterministic random order, and keyset cursors.
-- **Durable browsing signals**: favorites, views, bounded browse sessions, and Continue Browsing remain local.
-- **Flat items**: source folder hierarchy may become metadata or tags, but never a Gallery item.
-
-- **Eagle Explorer**: Real-time access to Eagle folders, tags, and items. The home page curates newly-added and trending collections automatically.
-- **Multi-source browsing**: Local disks, Eagle, Chrome bookmarks, and YouTube videos all surface in the same UI with quick view switching (Grid / Single / Linear).
-- **Chrome + YouTube integration**:
-  - Navigate the entire bookmark tree.
-  - A dedicated YouTube page gathers every saved video and displays rich thumbnails.
-- **Smart discovery**: The landing page offers random inspiration, video highlights, folder spotlights, popular tags, and AI-style similar clusters.
-- **Thoughtful interactions**:
-  - Bookmarks and YouTube links open in new tabs.
-  - Local and Eagle videos play in the built-in viewer.
-  - Finder/Explorer shortcuts jump straight to the real file system path.
-
-### Resource Flow + Obsidian
-
-Flowinone now also contains a local-first Resource Library instead of treating every
-bookmark as a finished note:
-
-```text
-Chrome / URL
-    → Resource Inbox
-    → metadata + local thumbnail + extracted article/PDF/transcript
-    → FTS5 search + reading workflow + optional AI summary
-    → mixed-source Inspiration Collection
-    → literature or synthesis Draft
-    → Obsidian Markdown
+```mermaid
+flowchart LR
+  local["Local media"] --> catalog["Catalog projection"]
+  eagle["Eagle"] --> catalog
+  chrome["Chrome Bookmarks"] --> catalog
+  resource["Imported URLs"] --> catalog
+  catalog --> gallery["Gallery"]
+  catalog --> search["Search"]
+  resource --> detail["Resource detail"]
 ```
 
-- `/resources/` — searchable resource cards, reading states, tags, priority, archive/reject.
-- `/inspiration/` — collections that may mix Resource, Eagle, and filesystem references.
-- Collections support manual membership, query-backed Smart Collections, and review-before-publish Generated Collections.
-- `/notes/` — multi-source Markdown drafts and conflict-safe Obsidian export.
-- Resource metadata/workflow lives in `data/flowinone.sqlite3`.
-- Large/raw content stays under `data/content/`; thumbnails remain filesystem cache.
-- Eagle and local files remain authoritative in Eagle/filesystem. Collections store typed references and display snapshots only.
-- AI is optional. Import, browsing, FTS, workflow, collections, and Obsidian export work without it.
+## What it does
 
-### Entry System + BUILD Dashboard
+- **Gallery** — flat Local/Eagle/Bookmark browsing with source multi-select, filters, stable random order, scroll restoration, favorites, and bounded sessions.
+- **Search** — SQLite FTS across Local, Eagle, Bookmarks, and Resources, with source/type/tag facets, tag ANY/ALL, and keyset pagination.
+- **Resources** — import URLs or Chrome bookmarks; render metadata, thumbnail, summary, extracted article/PDF/transcript text, tags, and related resources.
+- **Source-specific pages** — retain Eagle folders/tags/smart folders, Chrome bookmark tree, local folder views, image/video viewers, and maintenance tools.
+- **Local sidecars** — portable `.flowinone.json` metadata import/export/audit for local media.
 
-The default `/` route now opens `/build/`: a deliberate resume surface rather than a
-content feed. It uses Entry + Project records in the same local SQLite database:
+Flowinone is deliberately **not** a knowledge-workflow application. BUILD, THINK, LEARN, SCAN, RECOVER, WRITE, Entries, Projects, Collections, Notes, and Obsidian export are not part of the running app.
 
-```text
-BUILD / THINK / LEARN / SCAN / RECOVER / WRITE
-    → Entry (target + context + state snapshot + next action)
-    → Project context
-    → Resource / Eagle / local-media / Collection / Draft target
-```
+Read [architecture](docs/architecture.md), [how to use it](docs/renderer-architecture.md), [schema](docs/schema.md), and [operational workflows](docs/workflows.md).
 
-- `/build/` — Continue, New, Think → Build, Current Project, recent work, blocked work.
-- `/write/` — Output Assets with Resource/Note/Decision/Entry provenance.
-- `/entries/` and `/projects/` — manage reusable context and stateful entry points.
-- Entry transitions and typed links preserve multiple Entry, Resource, Collection, Gallery item, Note, or Output Asset sources without auto-completing the source.
-- `/library/` — preserves the former content-discovery workbench as a secondary surface.
-- Resource filters can be saved as entries; Resource, Collection, Draft, Eagle image, and
-  local video pages can create LEARN or BUILD entries directly.
-- Targets are validated local paths or allowed URI schemes; Flowinone never executes an
-  arbitrary shell command from Entry metadata.
+## Start
 
-Read [the spec integration decision](docs/spec-integration.md), [architecture](docs/architecture.md), [schema](docs/schema.md), and [workflows](docs/workflows.md).
+Use the existing Conda environment:
 
----
-
-## ⚙️ Getting Started
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/your-name/flowinone.git
-cd flowinone
-```
-
-### 2. Use the project Conda environment
 ```bash
 conda activate py3.11
-python --version
 python -m pip install -r requirements.txt
-```
-
-Flowinone uses the existing `py3.11` environment. Do not create a project `venv` or install dependencies with the system Python.
-
-### 3. Configure paths
-- `config.json` 內的 `DB_route_external` / `DB_route_internal` 為空時，啟動會跳出圖形化視窗讓你選資料夾，選完自動寫回 `config.json`。
-- 若要手動設定或在 headless 環境執行：
-  - 直接編輯 `config.json` 裡的 `DB_route_external` / `DB_route_internal`
-  - 或預先設定 `FLOWINONE_HEADLESS=1` 並提供有效路徑，避免啟動時顯示 GUI。
-- `CHROME_BOOKMARK_PATH`: Chrome bookmark JSON (預設為 macOS；Windows/Linux 請自行修改)
-
-### 4. Launch the app
-```bash
-conda activate py3.11
 python run.py
 ```
-Visit `http://localhost:5894`.
 
-### Verification and thumbnail sync
+Visit `http://localhost:5894`; `/` redirects to `/gallery/`.
 
-Use `conda run` for commands that must not depend on shell activation:
+For headless setup, set valid Local media roots in `config.json` and use `FLOWINONE_HEADLESS=1`. `CHROME_BOOKMARK_PATH` defaults to the platform Chrome profile path and may be overridden in app configuration.
 
-```bash
-conda run -n py3.11 python -m compileall routes.py src
-conda run -n py3.11 python -m pytest
-conda run -n py3.11 flask --app run thumbnails-sync --missing
-conda run -n py3.11 flask --app run catalog-sync --source all
-```
+## Typical use
 
-The thumbnail sync command also accepts `--force`, `--domain`, and `--limit`.
+1. Open **Gallery** to browse Local, Eagle, and Bookmarks visually.
+2. Use **Search** when you do not know which source contains the item.
+3. Open **Resources** for imported URLs and their extracted full text.
+4. Add user tags when they make future search better.
+5. Sync a source after a large change.
 
-### Resource Library setup
-
-Copy the relevant values from `.env.example` into your shell environment. At minimum,
-the defaults work locally. To promote notes, set an existing vault explicitly:
-
-```bash
-export OBSIDIAN_VAULT_PATH="$HOME/Documents/My Vault"
-export OBSIDIAN_TARGET_FOLDER="Resources/Digested"
-```
-
-Flowinone will create the target subfolder but will not create a vault, leave the vault,
-or overwrite a different existing note without an explicit overwrite request.
-
-Apply migrations and import the current Chrome profile:
+## Maintenance
 
 ```bash
 conda run -n py3.11 flask --app run resources-db-upgrade
-conda run -n py3.11 flask --app run entries-db-upgrade
-conda run -n py3.11 flask --app run resources-sync --no-enqueue
-```
-
-`--no-enqueue` is recommended for the first large backfill. New resources can be enriched
-from their detail page, or imported with jobs enabled. Process ready jobs manually with:
-
-```bash
+conda run -n py3.11 flask --app run catalog-sync --source all
 conda run -n py3.11 flask --app run resources-worker --limit 20
-```
-
-Maintenance commands:
-
-```bash
 conda run -n py3.11 flask --app run resources-rebuild-fts
-conda run -n py3.11 flask --app run resources-retry-failed
-conda run -n py3.11 flask --app run resources-export-mirrors
 conda run -n py3.11 flask --app run catalog-relations-rebuild
-conda run -n py3.11 flask --app run catalog-collections-generate
 conda run -n py3.11 flask --app run sidecars-audit
 conda run -n py3.11 flask --app run sidecars-export
 conda run -n py3.11 flask --app run sidecars-import
 ```
 
-Equivalent standalone scripts are under `scripts/` for bookmark import, FTS rebuilding,
-and failed-job retry.
+`resources-worker` performs metadata, thumbnail, content extraction, and optional AI-summary work. It never writes notes or exports to Obsidian.
 
-If `LLM_BASE_URL` and `LLM_MODEL` are configured, content extraction automatically queues
-AI summaries and AI tags. The prompt input is limited to extracted content and the provider
-is shown in stored AI artifact provenance. `user_note` and user tags are never overwritten.
+## Architecture
 
-### Machine-local thumbnail adapters
+- `routes.py` — Flask routes for Local, Eagle, Chrome, source viewers, and app registration.
+- `src/flowinone/gallery/` — Gallery query/read model and HTTP surface.
+- `src/flowinone/catalog/` — rebuildable cross-source Catalog, FTS, facets, cursors, events, sessions, and explainable item relations.
+- `src/flowinone/resource_library/` — imported URL database, extraction jobs, Resource UI/API, and optional AI metadata.
+- `src/file_handler/` — filesystem, Chrome, Eagle adapters, thumbnails, item DB, and sidecars.
+- `migrations/` — Alembic history. `0007_renderer_only_cleanup` and `0008_renderer_resource_schema` remove the former knowledge-workflow tables, fields, and personal-note FTS data.
 
-The public build includes YouTube plus Open Graph, Twitter Card, JSON-LD, and `image_src` metadata providers. Optional machine-specific rules can live in `.flowinone_local/thumbnail_provider.py`, which is ignored by Git and excluded from the Python package. The adapter may export `classify_url(url)` and `resolve(url, fetch_html)`; set `FLOWINONE_LOCAL_THUMBNAIL_PROVIDER` to load a different local file.
+## Boundaries
 
----
+Not planned here: cross-device sync, Raw → Wiki, Obsidian integration, OneTab/Keep/Notion/social connectors, autoplay/infinite feeds, Graph DB, agent swarm, or a full React/FastAPI rewrite.
 
-## 🧭 Navigation Cheat Sheet
+Before upgrading an existing installation, back up `data/flowinone.sqlite3`. Migrations `0007_renderer_only_cleanup` and `0008_renderer_resource_schema` are intentionally destructive for former workflow, curation, and personal-note records.
 
-| Menu item | What you get |
-|-----------|---------------|
-| **GALLERY** | One flat grid with Local / Eagle / Bookmark source checkboxes |
-| **SEARCH** | FTS and facets across Local / Eagle / Bookmark / Resource Catalog items |
-| **BUILD (Home)** | Resume a current project or the next meaningful action without a content feed |
-| **THINK / LEARN / SCAN / RECOVER / WRITE** | Intentional modes; WRITE produces traceable Output Assets |
-| **Entries / Projects** | State-based action starts and their durable work contexts |
-| **Explore Library** | The former Eagle-powered discovery workbench, now secondary to BUILD |
-| **DB Main** | Local/external media folders with Grid / Single / Linear views |
-| **Chrome Bookmarks** | Full Chrome bookmark hierarchy |
-| **YouTube Bookmarks** | Every YouTube link rendered with thumbnails |
-| **EAGLE Folders / Tags / Smart Folders / Stream** | Browse Eagle folders, dynamic smart folders, tags, and real-time item streams |
-| **Resource Flow** | Process unread web resources, search extracted content, and promote notes |
-| **Inspiration** | Curate mixed Eagle/local/resource references into collections |
-| **Synthesis Notes** | Merge multiple sources and export Markdown to Obsidian |
-
-Every browsing page supports:
-- Three view toggles (Grid / Single / Linear)
-- Alphabetical sorting (A→Z / Z→A)
-- Folder drill-down; bookmarks/videos open directly (new tab or built-in player)
-
----
-
-## 🧩 Architecture at a Glance
-
-- `run.py` — bootstraps the Flask app and registers all routes.
-- `routes.py` — routing layer combining Eagle, file-system, and Chrome bookmark endpoints.
-- `src/eagle_api/` — isolated Eagle Web API v2 client and compatibility facade. Local Eagle
-  uses `http://localhost:41595/api/v2` by default; set `EAGLE_API_URL` and
-  `EAGLE_API_TOKEN` when connecting to Eagle over LAN.
-- `src/flowinone/resource_library/` — Resource domain, repository/services, extractors,
-  leased jobs, curation, Obsidian bridge, Flask blueprint, and worker.
-- `src/flowinone/entry_system/` — Entry, Project, resume policy, safe target execution,
-  Flask UI/API, state snapshots, and Think → Build flow.
-- `src/flowinone/gallery/` — independent flat-item query/read-model domain and Flask UI/API.
-- `src/flowinone/catalog/` — rebuildable cross-source projection, FTS/facets/cursors, events, relations, generated collections, and OCR/person artifact interfaces.
-- `src/flowinone/knowledge_os/` — project/mode retrieval, Decisions, Output Assets, and provenance.
-- `src/file_handler/sidecars.py` — portable local-media metadata import/export/audit with atomic writes and move relinking.
-- `migrations/` — Alembic schema history for Resource, Entry, Catalog, relations, events, and collection modes.
-- `file_handler.py` — core logic:
-  - Normalizes all media metadata (local + Eagle).
-  - Parses Chrome bookmarks, detects YouTube URLs, and builds recommendations.
-  - Powers the AI-style homepage feed.
-- `templates/` — Jinja2 templates, with `view_both.html` providing the three-view UI.
-- `書籤瀏覽器_youtube專用/` — original YouTube bookmark scripts kept for reference (now integrated).
-
----
-
-## 🛣️ Roadmap & Ideas
-
-- [ ] Benchmark optional local OCR and face providers on real media; add anonymous cluster merge/split UI.
-- [ ] Tune explainable recommendation weights from local events without autoplay or an infinite feed.
-- [ ] Improve full incremental synchronization and progress reporting for large Eagle libraries.
-
-Cross-device sync, automatic Raw → Wiki, Notion/Keep/OneTab/social connectors, and Obsidian two-way sync are intentionally out of scope.
-
-### Backup and restore
-
-Stop Flowinone or make a consistent SQLite backup, then copy the whole `data/` directory.
-That captures the Resource DB, extracted content, resource mirrors, and preview cache. The
-Obsidian vault is intentionally outside Flowinone ownership and must be backed up separately.
-After restore, run `resources-db-upgrade`; derived FTS rows can be repaired with
-`resources-rebuild-fts` and thumbnail caches can be regenerated.
-
-PRs and issues are very welcome—let’s make Flowinone even better together!
-
----
-
-## 📄 License
+## License
 
 Distributed under the [MIT License](LICENSE).

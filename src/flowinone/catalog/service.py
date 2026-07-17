@@ -359,8 +359,8 @@ class CatalogSyncService:
                 description=row["summary_one_line"] or row["description"] or "",
                 detail_uri=f"/resources/{row['id']}/", original_url=canonical,
                 tags=tags, captured_at=row["captured_at"],
-                metadata={"reading_state": row["reading_state"], "disposition": row["disposition"], "priority": row["priority"]},
-                extracted_text="\n".join(filter(None, (row["summary_short"], row["why_this_matters"], row["user_note"], extracted))),
+                metadata={},
+                extracted_text="\n".join(filter(None, (row["summary_short"], row["why_this_matters"], extracted))),
                 content_fingerprint=row["content_hash"] or "", prefer=True,
             )
             count += 1
@@ -650,7 +650,7 @@ class CatalogService:
         A canonical Catalog item can have several origins. Callers that render a
         source-specific surface must use this method instead of the item-level
         primary URI, otherwise a Bookmark can accidentally open its Resource
-        workflow page.
+        detail page.
         """
         stale_clause = "" if include_stale else "AND stale=0"
         with self.database.engine.connect() as conn:
@@ -666,7 +666,7 @@ class CatalogService:
         return result
 
     def record_event(self, item_id: str, event_type: str, *, value: float | None = None, session_id: str | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
-        if event_type not in {"open", "view", "favorite", "unfavorite", "hide", "unhide", "add_to_collection"}:
+        if event_type not in {"open", "view", "favorite", "unfavorite", "hide", "unhide"}:
             raise ValueError("不支援的 Catalog event")
         now = utc_now_text()
         with self.database.engine.begin() as conn:

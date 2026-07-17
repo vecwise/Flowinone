@@ -21,7 +21,6 @@ DEFAULT_JOB_PRIORITIES = {
     "generate_summary": 50,
     "generate_tags": 55,
     "generate_embedding": 80,
-    "export_obsidian": 90,
 }
 
 

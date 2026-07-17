@@ -1,4 +1,4 @@
-"""Catalog projection, discovery, sessions, transitions, and sidecar coverage."""
+"""Catalog projection, discovery, sessions, and sidecar coverage."""
 
 from __future__ import annotations
 
@@ -14,10 +14,8 @@ from src.file_handler import item_db
 from src.file_handler.sidecars import SidecarService
 from src.flowinone.catalog.discovery import DiscoveryService
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
-from src.flowinone.entry_system.service import EntryService
 from src.flowinone.gallery.models import GalleryQuery
 from src.flowinone.gallery.service import CatalogGalleryService
-from src.flowinone.resource_library.curation import CollectionService
 from src.flowinone.resource_library.database import get_resource_database
 
 
@@ -83,19 +81,15 @@ def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path)
     assert service.recent_sessions(1)[0]["id"] == session["id"]
 
 
-def test_generated_and_smart_collections_use_catalog_items(tmp_path):
+def test_item_relations_are_explainable_renderer_recommendations(tmp_path):
     database, first, second, third = _catalog(tmp_path)
-    collections = CollectionService(database)
-    smart = collections.create("Knowledge", membership_mode="smart", query={"tags": ["knowledge"], "tag_mode": "any"})
-    assert collections.get(smart["id"])["item_count"] == 2
-
     discovery = DiscoveryService(database)
     rebuilt = discovery.rebuild_item_relations()
     assert rebuilt["relations"] >= 2
-    generated = discovery.generate_collections(minimum_size=2, limit=5)
-    assert generated
-    assert generated[0]["membership_mode"] == "generated"
-    assert generated[0]["lifecycle_status"] == "draft"
+    related = discovery.related_items(first)
+    assert related
+    assert all(item["id"] != first for item in related)
+    assert all(item["reason"] for item in related)
 
 
 def test_gallery_uses_selected_origin_and_hides_unavailable_eagle(monkeypatch, tmp_path):
@@ -113,31 +107,6 @@ def test_gallery_uses_selected_origin_and_hides_unavailable_eagle(monkeypatch, t
     assert eagle_page.items == []
     assert "eagle" in eagle_page.source_errors
     assert second
-
-
-def test_entry_transition_is_explicit_and_linked(tmp_path):
-    database = get_resource_database(tmp_path / "entries.db")
-    service = EntryService(database)
-    source = service.create_entry({
-        "name": "Bounded scan", "mode": "scan", "status": "active",
-        "context": {"scan": {"item_limit": 5}},
-    })
-    result = service.transition_entry(source["id"], {
-        "target_mode": "learn", "learning_question": "What matters?",
-        "stop_condition": "Explain it", "expected_output": "BUILD task",
-    })
-    assert result["source_entry"]["status"] == "active"
-    assert result["target_entry"]["mode"] == "learn"
-    assert service.repository.list_links(source["id"])["outgoing"][0]["entry_id"] == result["target_entry"]["id"]
-    incoming = service.repository.list_links(result["target_entry"]["id"])["incoming"][0]
-    assert (incoming["linked_type"], incoming["linked_id"]) == ("entry", source["id"])
-
-    from_resource = service.create_source_entry({
-        "source_kind": "resource", "source_id": "resource-1", "title": "Source",
-        "mode": "learn", "target_uri": "/resources/resource-1/",
-    })
-    resource_link = service.repository.list_links(from_resource["id"])["incoming"][0]
-    assert (resource_link["linked_type"], resource_link["linked_id"]) == ("resource", "resource-1")
 
 
 def test_sidecar_roundtrip_preserves_portable_identity(monkeypatch, tmp_path):

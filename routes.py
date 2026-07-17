@@ -232,8 +232,8 @@ def _content_card_from_db_item(item, why=None, lane=None):
         "meta_line": " · ".join(meta_bits),
         "tags": tags[:4],
         "why": why or "來自本機資料庫",
-        "lane": lane or "library",
-        "status": "archived" if item.get("is_archived") else "inbox" if is_allowed else "stale",
+        "lane": lane or "local",
+        "status": "indexed" if is_allowed else "stale",
         "target_blank": False,
         "primary_action": "開啟" if is_allowed else "來源已失效",
         "updated_at": item.get("updated_at"),
@@ -277,11 +277,11 @@ def _content_card_from_resource(item, why=None, lane=None):
         "source_label": "Resource Library",
         "meta_line": " · ".join(meta_bits),
         "tags": (item.get("tag_names") or [])[:4],
-        "why": why or item.get("why_this_matters") or item.get("summary_one_line") or "等待整理",
+        "why": why or item.get("why_this_matters") or item.get("summary_one_line") or "查看資源資料",
         "lane": lane or "resource",
-        "status": item.get("reading_state") or "inbox",
+        "status": "ready",
         "target_blank": False,
-        "primary_action": "整理",
+        "primary_action": "開啟",
         "is_available": True,
         "disabled_reason": None,
     }
@@ -318,7 +318,7 @@ def _decorate_related_items(items, metadata=None):
         card = _content_card_from_media(
             item,
             source_label="Related",
-            why="同 tag" if tags else "同集合" if folders else "相鄰項目",
+            why="同 tag" if tags else "同來源資料夾" if folders else "相鄰項目",
             lane="up-next",
         )
         decorated.append(card)
@@ -374,7 +374,7 @@ def _build_detail_actions(media_kind, metadata):
         {
             "id": "back",
             "label": "返回",
-            "description": "回到上一個 shelf 或集合頁。",
+            "description": "回到上一個瀏覽頁或來源資料夾。",
             "kind": "secondary",
         },
         {
@@ -382,12 +382,6 @@ def _build_detail_actions(media_kind, metadata):
             "label": "找相似",
             "description": "依 tag 與資料夾脈絡繼續探索。",
             "kind": "primary",
-        },
-        {
-            "id": "note",
-            "label": "轉成筆記",
-            "description": "把個人筆記與 AI summary 分開沉澱。",
-            "kind": "secondary",
         },
     ]
     if metadata.get("filesystem_path"):
@@ -401,20 +395,6 @@ def _build_detail_actions(media_kind, metadata):
     if media_kind == "video":
         actions[1]["label"] = "看相關"
     return actions
-
-
-def _get_inspiration_collections():
-    """Load collection choices without making media browsing depend on the resource DB."""
-    try:
-        from src.flowinone.resource_library.curation import CollectionService
-        from src.flowinone.resource_library.database import get_resource_database
-
-        configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-        database = get_resource_database(Path(configured)) if configured else get_resource_database()
-        return CollectionService(database).list()
-    except Exception:
-        current_app.logger.exception("Failed to load inspiration collections")
-        return []
 
 
 def _compute_feature_flags():
@@ -486,38 +466,23 @@ def _render_media_view(template_name, folder_path, source=None):
     return render_template(template_name, metadata=metadata_dict, data=data_list)
 
 
-def _build_index_context(flags, active_mode="explore"):
-    """Prepare task-oriented homepage shelves and exclude unavailable records."""
-    mode_copy = {
-        "explore": ("探索台", "從最近內容、視覺線索與主題入口開始。"),
-        "process": ("整理台", "處理待標記、待補縮圖與失效索引。"),
-        "project": ("專案台", "沿集合與 tag 找回可重用素材。"),
-        "review": ("回顧台", "檢視近期內容與 metadata 較完整的項目。"),
-    }
-    if active_mode not in mode_copy:
-        active_mode = "explore"
+def _build_index_context(flags):
+    """Prepare a source-oriented legacy overview without workflow modes."""
 
     context = {
-        "active_mode": active_mode,
-        "mode_heading": mode_copy[active_mode][0],
-        "mode_description": mode_copy[active_mode][1],
-        "modes": [
-            {
-                "id": mode_id,
-                "label": label,
-                "url": url_for("index", mode=mode_id),
-            }
-            for mode_id, (label, _) in mode_copy.items()
-        ],
+        "active_mode": "sources",
+        "mode_heading": "來源總覽",
+        "mode_description": "查看目前可用的來源、媒體與 metadata。",
+        "modes": [],
         "hero_item": None,
         "home_shelves": [],
         "tag_cloud": [],
-        "show_tag_cloud": active_mode in {"explore", "project", "review"},
+        "show_tag_cloud": True,
         "source_summary": [],
         "action_queue": [],
         "stale_db_count": 0,
         "fallback_heading": "尚未有可探索內容",
-        "fallback_message": "連接 Eagle、本機資料庫或 Chrome 書籤後，這裡會形成你的內容工作台。",
+        "fallback_message": "連接 Eagle、本機資料庫或 Chrome 書籤後，這裡會顯示可瀏覽的來源。",
         "has_content": False,
     }
 
@@ -590,7 +555,7 @@ def _build_index_context(flags, active_mode="explore"):
         try:
             payload = fetch_items(limit=1000, offset=0)
             raw_db_cards = [
-                _content_card_from_db_item(item, why="本機資料庫", lane="inbox")
+                _content_card_from_db_item(item, why="本機資料庫", lane="local")
                 for item in payload.get("items", [])
             ]
             db_cards = [card for card in raw_db_cards if card.get("is_available")]
@@ -643,11 +608,7 @@ def _build_index_context(flags, active_mode="explore"):
             if configured_resource_db
             else None
         )
-        resource_page = resource_service.repository.list(
-            dispositions=("active",),
-            page=1,
-            per_page=48,
-        )
+        resource_page = resource_service.repository.list(page=1, per_page=48)
         resource_cards = [
             _content_card_from_resource(item, lane="resource")
             for item in resource_page.items
@@ -666,141 +627,51 @@ def _build_index_context(flags, active_mode="explore"):
         context["source_summary"].append({
             "label": "Resources",
             "value": resource_page.total,
-            "hint": "可整理資源",
+            "hint": "已匯入資源",
             "tone": "ready",
             "url": url_for("resource_library.resource_index"),
         })
     except Exception:
         current_app.logger.exception("Failed to build Resource Library homepage context")
 
-    cleanup_items = [
-        card for card in db_cards
-        if card.get("missing_thumbnail") or card.get("missing_tags")
-    ]
-    tagged_cards = sorted(
-        (card for card in all_cards if card.get("tags")),
-        key=lambda card: len(card.get("tags") or []),
-        reverse=True,
-    )
-
     shelves = []
-    if active_mode == "explore":
-        if all_cards:
-            shelves.append(_build_shelf(
-                "繼續探索",
-                "最近可用，不需要先回到資料表",
-                [_clone_card(card, "最近更新", "continue") for card in all_cards[:10]],
-                action_label="查看全部" if flags.get("eagle") else None,
-                action_url=url_for("eagle_stream") if flags.get("eagle") else None,
-            ))
-        if image_cards:
-            sample = random.sample(image_cards, min(10, len(image_cards)))
-            shelves.append(_build_shelf(
-                "視覺岔路",
-                "小批次隨機探索，每次停在可控制的範圍",
-                [_clone_card(card, "隨機靈感", "inspiration") for card in sample],
-            ))
-        if video_cards:
-            shelves.append(_build_shelf(
-                "接著觀看",
-                "不自動播放，由你決定下一個",
-                [_clone_card(card, "影片候選", "watch-next") for card in video_cards[:8]],
-            ))
-        if folder_cards:
-            shelves.append(_build_shelf(
-                "集合入口",
-                "沿資料夾與內容集合進入脈絡",
-                [_clone_card(card, "集合入口", "source") for card in folder_cards[:10]],
-                layout="compact",
-                action_label="所有集合" if flags.get("eagle") else None,
-                action_url=url_for("list_all_eagle_folder") if flags.get("eagle") else None,
-            ))
-    elif active_mode == "process":
-        if resource_cards:
-            shelves.append(_build_shelf(
-                "Resource Inbox",
-                "把未讀素材轉成可搜尋、可整併的個人知識",
-                [_clone_card(card, "等待閱讀或整理", "resource-inbox") for card in resource_cards[:12]],
-                action_label="打開 Resource Flow",
-                action_url=url_for("resource_library.resource_index"),
-            ))
-        if db_cards:
-            shelves.append(_build_shelf(
-                "待整理 Inbox",
-                "補上 tags、筆記與專案關聯，讓內容可以再被找到",
-                [_clone_card(card, "等待整理", "inbox") for card in db_cards[:12]],
-                action_label="檢查索引",
-                action_url=url_for("view_item_db"),
-            ))
-        if cleanup_items:
-            cleanup_cards = []
-            for card in cleanup_items[:12]:
-                if card.get("missing_thumbnail") and card.get("missing_tags"):
-                    reason = "缺縮圖與 tags"
-                elif card.get("missing_thumbnail"):
-                    reason = "缺縮圖"
-                else:
-                    reason = "缺 tags"
-                cleanup_cards.append(_clone_card(card, reason, "cleanup"))
-            shelves.append(_build_shelf(
-                "清理佇列",
-                "先修復會直接改善掃描與推薦品質的缺口",
-                cleanup_cards,
-                layout="compact",
-                action_label="補縮圖",
-                action_url=url_for("update_thumbnails_route"),
-            ))
-    elif active_mode == "project":
-        if folder_cards:
-            shelves.append(_build_shelf(
-                "專案與集合",
-                "以集合為邊界整理素材，不讓檔案散回總庫",
-                [_clone_card(card, "集合脈絡", "project") for card in folder_cards[:16]],
-                layout="compact",
-                action_label="所有集合" if flags.get("eagle") else None,
-                action_url=url_for("list_all_eagle_folder") if flags.get("eagle") else None,
-            ))
-        if tagged_cards:
-            shelves.append(_build_shelf(
-                "可重用素材",
-                "已有主題線索，適合拉進下一個專案",
-                [_clone_card(card, "已有 metadata", "project-ready") for card in tagged_cards[:12]],
-            ))
-    elif active_mode == "review":
-        if tagged_cards:
-            shelves.append(_build_shelf(
-                "Metadata 較完整",
-                "依可解釋的 metadata 完整度排序，不假裝成熱門排行",
-                [_clone_card(card, f"{len(card.get('tags') or [])} 個標記線索", "review") for card in tagged_cards[:12]],
-                layout="compact",
-            ))
-        if all_cards:
-            shelves.append(_build_shelf(
-                "近期取樣",
-                "回看最近進入 Flowinone 的內容",
-                [_clone_card(card, "最近更新", "recent") for card in all_cards[:12]],
-            ))
+    if all_cards:
+        shelves.append(_build_shelf(
+            "最近來源項目",
+            "最近可用的媒體、書籤與網頁資源",
+            [_clone_card(card, "最近更新", "recent") for card in all_cards[:10]],
+            action_label="開啟 Gallery",
+            action_url=url_for("gallery.gallery_index"),
+        ))
+    if image_cards:
+        sample = random.sample(image_cards, min(10, len(image_cards)))
+        shelves.append(_build_shelf(
+            "隨機視覺瀏覽",
+            "小批次隨機探索；由你決定下一個",
+            [_clone_card(card, "隨機探索", "random") for card in sample],
+        ))
+    if video_cards:
+        shelves.append(_build_shelf(
+            "影片",
+            "不自動播放；開啟你要看的來源",
+            [_clone_card(card, "影片", "video") for card in video_cards[:8]],
+        ))
+    if folder_cards:
+        shelves.append(_build_shelf(
+            "來源資料夾",
+            "從來源自己的資料夾與集合頁進入",
+            [_clone_card(card, "來源入口", "source") for card in folder_cards[:10]],
+            layout="compact",
+            action_label="Eagle Folders" if flags.get("eagle") else None,
+            action_url=url_for("list_all_eagle_folder") if flags.get("eagle") else None,
+        ))
 
-    hero_candidates = all_cards
-    if active_mode == "process":
-        hero_candidates = resource_cards or db_cards
-        if not hero_candidates and context["stale_db_count"]:
-            context["fallback_heading"] = "本機索引需要同步"
-            context["fallback_message"] = (
-                f"目前 {context['stale_db_count']} 筆紀錄的來源已不存在，"
-                "同步後再開始整理。"
-            )
-    elif active_mode == "project":
-        hero_candidates = folder_cards or tagged_cards
-    elif active_mode == "review":
-        hero_candidates = tagged_cards or all_cards
-
-    if hero_candidates:
-        context["hero_item"] = _clone_card(hero_candidates[0], "從這裡繼續", "featured")
+    if all_cards:
+        context["hero_item"] = _clone_card(all_cards[0], "開啟來源", "featured")
 
     actions = [{
-        "label": "整理 Resource Inbox",
-        "description": "閱讀、標記、建立靈感集合並升級為 Obsidian 筆記。",
+        "label": "瀏覽 Web Resources",
+        "description": "查看已擷取的網頁 metadata、摘要與全文。",
         "url": url_for("resource_library.resource_index"),
         "enabled": True,
         "tone": "neutral",
@@ -815,8 +686,8 @@ def _build_index_context(flags, active_mode="explore"):
         })
     elif flags.get("db"):
         actions.append({
-            "label": "整理 Inbox",
-            "description": "把新內容連到 tags、筆記與專案。",
+            "label": "瀏覽本機索引",
+            "description": "查看本機資料庫已索引的媒體與檔案。",
             "url": url_for("view_item_db"),
             "enabled": True,
             "tone": "neutral",
@@ -831,8 +702,8 @@ def _build_index_context(flags, active_mode="explore"):
         })
     if flags.get("chrome"):
         actions.append({
-            "label": "處理書籤",
-            "description": "回到尚未沉澱成筆記的網頁素材。",
+            "label": "瀏覽書籤",
+            "description": "直接瀏覽 Chrome 書籤來源。",
             "url": url_for("view_chrome_root"),
             "enabled": True,
             "tone": "neutral",
@@ -872,12 +743,10 @@ def register_routes(app):
     _register_thumbnail_cli(app)
     _register_sidecar_cli(app)
     from src.flowinone.resource_library.blueprint import register_resource_library
-    from src.flowinone.entry_system.blueprint import register_entry_system
     from src.flowinone.gallery.blueprint import register_gallery
     from src.flowinone.catalog.blueprint import register_catalog
 
     register_resource_library(app)
-    register_entry_system(app)
     register_gallery(app)
     register_catalog(app)
 
@@ -891,17 +760,14 @@ def _register_context_processors(app):
 def _register_index_routes(app):
     @app.route('/')
     def index():
-        """Default to BUILD; preserve old query-mode links as the content library."""
-        if request.args.get("mode"):
-            return redirect(url_for("content_library", mode=request.args.get("mode")))
-        return redirect(url_for("entry_system.build_dashboard"))
+        """The renderer opens directly in its cross-source Gallery."""
+        return redirect(url_for("gallery.gallery_index"))
 
     @app.route('/library/')
     def content_library():
-        """Legacy content workbench, retained as a secondary discovery surface."""
+        """Legacy source overview, retained as a secondary browsing surface."""
         flags = _get_feature_flags()
-        active_mode = request.args.get("mode", "explore").strip().lower()
-        context = _build_index_context(flags, active_mode=active_mode)
+        context = _build_index_context(flags)
         return render_template('index.html', **context)
 
 
@@ -953,10 +819,10 @@ def _register_folder_routes(app):
         """取得指定資料夾內的所有圖片（Slide 模式）"""
         return _render_media_view('view_slide.html', folder_path)
 
-    @app.route('/collections/')
+    @app.route('/folders/')
     @require_feature("db")
-    def view_collections():
-        """顯示 DB main 目錄，使用 view_both 版型"""
+    def view_source_folders():
+        """Display the local source root with the folder/media renderer."""
         source = request.args.get('src', 'external')
         try:
             metadata, data = get_all_folders_info(source)
@@ -1062,7 +928,7 @@ def _register_item_db_debug_routes(app):
             ]
 
         item_cards = [
-            _content_card_from_db_item(item, why="本機資料庫", lane="inbox")
+            _content_card_from_db_item(item, why="本機資料庫", lane="local")
             for item in payload.get("items", [])
         ]
         db_rows = [
@@ -1248,7 +1114,7 @@ def _register_eagle_routes(app):
     @app.route('/EAGLE_smart_folders/')
     @require_feature("eagle")
     def list_eagle_smart_folders():
-        """List Eagle v2 smart folders as dynamic collections."""
+        """List Eagle v2 smart folders as dynamic source folders."""
         try:
             metadata, data = get_eagle_smart_folders()
         except ExternalServiceError as exc:
@@ -1405,14 +1271,6 @@ def _register_eagle_routes(app):
             video=video_dict,
             related_items=related_items,
             recommended_actions=recommended_actions,
-            inspiration_collections=_get_inspiration_collections(),
-            inspiration_item={
-                "source_kind": "eagle",
-                "source_id": item_id,
-                "title": metadata_dict.get("name") or video_dict.get("name"),
-                "url": request.path,
-                "thumbnail": video_dict.get("thumbnail_route"),
-            },
         )
 
     @app.route('/EAGLE_image/<item_id>/')
@@ -1443,14 +1301,6 @@ def _register_eagle_routes(app):
             image=image_dict,
             related_items=related_items,
             recommended_actions=recommended_actions,
-            inspiration_collections=_get_inspiration_collections(),
-            inspiration_item={
-                "source_kind": "eagle",
-                "source_id": item_id,
-                "title": metadata_dict.get("name") or image_dict.get("name"),
-                "url": request.path,
-                "thumbnail": image_dict.get("thumbnail_route") or image_dict.get("source_url"),
-            },
         )
 
 
@@ -1498,14 +1348,6 @@ def _register_media_routes(app):
                 _catalog_related_for_origin("local", video_dict.get("relative_path") or video_path),
             ),
             recommended_actions=_build_detail_actions("video", metadata_dict),
-            inspiration_collections=_get_inspiration_collections(),
-            inspiration_item={
-                "source_kind": "filesystem",
-                "source_id": f"{source}:{video_dict.get('relative_path') or video_path}",
-                "title": metadata_dict.get("name") or video_dict.get("name"),
-                "url": request.path,
-                "thumbnail": video_dict.get("thumbnail_route"),
-            },
         )
 
     @app.route('/image/<path:image_path>')
@@ -1529,12 +1371,4 @@ def _register_media_routes(app):
                 _catalog_related_for_origin("local", image_dict.get("relative_path") or image_path),
             ),
             recommended_actions=_build_detail_actions("image", metadata_dict),
-            inspiration_collections=_get_inspiration_collections(),
-            inspiration_item={
-                "source_kind": "filesystem",
-                "source_id": f"{source}:{image_dict.get('relative_path') or image_path}",
-                "title": metadata_dict.get("name") or image_dict.get("name"),
-                "url": request.path,
-                "thumbnail": image_dict.get("thumbnail_route") or image_dict.get("source_url"),
-            },
         )

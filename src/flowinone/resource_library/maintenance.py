@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from .database import ResourceDatabase
-from .models import ProcessingJob, Resource, utc_now_text
-from .obsidian import ObsidianExporter
+from .models import ProcessingJob, utc_now_text
 from .repository import ResourceRepository
 
 
@@ -45,19 +44,4 @@ def retry_failed_jobs(database: ResourceDatabase) -> dict:
     return {"retried": count}
 
 
-def export_resource_mirrors(database: ResourceDatabase) -> dict:
-    exporter = ObsidianExporter(database)
-    with database.session() as session:
-        resource_ids = list(session.scalars(select(Resource.id)))
-    exported = 0
-    errors = []
-    for resource_id in resource_ids:
-        try:
-            exporter.export_resource_mirror(resource_id)
-            exported += 1
-        except Exception as exc:
-            errors.append({"resource_id": resource_id, "error": str(exc)})
-    return {"exported": exported, "failed": len(errors), "errors": errors[:50]}
-
-
-__all__ = ["export_resource_mirrors", "rebuild_fts", "retry_failed_jobs"]
+__all__ = ["rebuild_fts", "retry_failed_jobs"]

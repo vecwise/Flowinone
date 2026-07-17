@@ -598,7 +598,7 @@
 
 .reader-surface,
 .side-rail,
-.note-surface {
+.viewer-surface {
     border: 1px solid var(--fo-border);
     border-radius: 8px;
     background: var(--fo-surface);
@@ -644,18 +644,18 @@
     gap: 14px;
 }
 
-.note-surface {
+.viewer-surface {
     padding: 14px;
 }
 
-.note-surface h2,
+.viewer-surface h2,
 .side-rail h2 {
     margin: 0 0 10px;
     color: var(--fo-text);
     font-size: 1rem;
 }
 
-.note-surface p {
+.viewer-surface p {
     margin: 0;
     color: var(--fo-muted-text);
 }

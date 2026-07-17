@@ -29,18 +29,18 @@
   <header class="workbench-header">
     <div class="workbench-copy">
       <div>
-        <p class="eyebrow">Personal Content OS</p>
-        <h1 class="workbench-title">Flowinone</h1>
+        <p class="eyebrow">Source overview</p>
+        <h1 class="workbench-title">來源總覽</h1>
         <p class="workbench-subtitle">{{ mode_heading }} · {{ mode_description }}</p>
       </div>
 
-      <nav class="mode-tabs" aria-label="工作情境">
+      {% if modes %}<nav class="mode-tabs" aria-label="來源檢視">
         {% for mode in modes %}
         <a class="mode-pill {% if mode.id == active_mode %}is-active{% endif %}"
            href="{{ mode.url }}"
            {% if mode.id == active_mode %}aria-current="page"{% endif %}>{{ mode.label }}</a>
         {% endfor %}
-      </nav>
+      </nav>{% endif %}
     </div>
 
     {% if source_summary %}
@@ -62,12 +62,12 @@
     {% endif %}
   </header>
 
-  <section class="decision-grid" aria-label="目前焦點">
+  <section class="decision-grid" aria-label="來源預覽與快速入口">
     <div class="hero-preview">
       <div class="panel-heading">
         <span class="panel-index">01</span>
         <div>
-          <h2>從這裡繼續</h2>
+          <h2>來源預覽</h2>
           <p>最近可用的內容入口</p>
         </div>
       </div>
@@ -81,12 +81,12 @@
       {% endif %}
     </div>
 
-    <aside class="next-actions" aria-label="下一步">
+    <aside class="next-actions" aria-label="快速入口">
       <div class="panel-heading">
         <span class="panel-index">02</span>
         <div>
-          <h2>下一步</h2>
-          <p>依目前資料狀態排序</p>
+          <h2>快速入口</h2>
+          <p>開啟合適的資源瀏覽頁</p>
         </div>
       </div>
       <div class="queue-panel">

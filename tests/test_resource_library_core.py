@@ -36,11 +36,16 @@ def test_migration_creates_domain_and_fts_tables(tmp_path):
             "resource_origins",
             "resource_tags",
             "processing_jobs",
-            "collections",
-            "draft_notes",
             "resource_fts",
             "alembic_version",
         } <= tables
+        assert {
+            "collections",
+            "draft_notes",
+            "entries",
+            "projects",
+            "output_assets",
+        }.isdisjoint(tables)
     finally:
         database.dispose()
 
@@ -122,16 +127,15 @@ def test_duplicate_urls_merge_but_origins_and_fts_remain(resource_service):
     assert {origin["folder_path"] for origin in detail["origins"]} == {"A", "B"}
 
 
-def test_workflow_tags_and_job_retry(resource_service):
+def test_renderer_metadata_tags_and_job_retry(resource_service):
     result = resource_service.create_url(
         "https://example.com/resource",
         title="Resource",
         enqueue=False,
     )
     resource_id = result["resource"]["id"]
-    updated = resource_service.update_resource(resource_id, {"reading_state": "reading", "priority": 4})
-    assert updated["reading_state"] == "reading"
-    assert updated["priority"] == 4
+    updated = resource_service.update_resource(resource_id, {"title": "Updated Resource"})
+    assert updated["title"] == "Updated Resource"
     tagged = resource_service.replace_tags(resource_id, ["AI", "Knowledge Base"])
     assert {name.casefold() for name in tagged["tag_names"]} >= {"ai", "knowledge base"}
 
@@ -140,15 +144,6 @@ def test_workflow_tags_and_job_retry(resource_service):
     claimed = queue.claim("test-owner")
     assert [row["id"] for row in claimed] == [job["id"]]
     assert queue.fail(job["id"], "temporary") == "retry"
-
-
-def test_invalid_reading_transition_is_rejected(resource_service):
-    resource_id = resource_service.create_url(
-        "https://example.com/transition", enqueue=False
-    )["resource"]["id"]
-    resource_service.update_resource(resource_id, {"reading_state": "skimmed"})
-    with pytest.raises(ValueError):
-        resource_service.update_resource(resource_id, {"reading_state": "inbox"})
 
 
 def test_find_similar_uses_explainable_tag_and_type_overlap(resource_service):

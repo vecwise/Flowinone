@@ -5,30 +5,26 @@
 {% endblock %}
 
 {% block page_content %}
-{% set state_labels = {'inbox':'Inbox','unread':'未讀','skimmed':'略讀','reading':'閱讀中','digested':'已消化'} %}
 <main id="main-content" class="container resource-page">
   {% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}
   {% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
 
   <header class="resource-hero">
     <div>
-      <p class="eyebrow">Resource Operating System</p>
-      <h1>把收藏變成可消化的資源流</h1>
-      <p>Chrome 書籤先進 Inbox，完成摘要、閱讀與整理後，再升級成你的 Obsidian 知識。</p>
+      <p class="eyebrow">Web resource renderer</p>
+      <h1>網頁資源</h1>
+      <p>顯示已擷取的網頁 metadata、摘要、全文與 tags。跨 Local、Eagle、Bookmarks、Resources 的查找請使用 Search。</p>
     </div>
-    <div class="resource-hero-actions" aria-label="Resource Library 快速入口">
-      <a class="action-button primary" href="{{ url_for('resource_library.collection_index') }}">靈感 Collections</a>
-      <a class="action-button" href="{{ url_for('resource_library.note_index') }}">整併筆記</a>
+    <div class="resource-hero-actions">
+      <a class="action-button primary" href="{{ url_for('catalog.search_page') }}">跨來源搜尋</a>
+      <a class="action-button" href="{{ url_for('gallery.gallery_index') }}">開啟 Gallery</a>
     </div>
   </header>
 
   <section class="resource-stats" aria-label="資源統計">
     <article><strong>{{ stats.total }}</strong><span>全部資源</span></article>
-    <article><strong>{{ stats.reading_states.get('unread', 0) }}</strong><span>未讀</span></article>
-    <article><strong>{{ stats.reading_states.get('reading', 0) }}</strong><span>閱讀中</span></article>
-    <article><strong>{{ stats.reading_states.get('digested', 0) }}</strong><span>已消化</span></article>
-    <article><strong>{{ stats.promoted }}</strong><span>已連結筆記</span></article>
-    <article><strong>{{ stats.pending_jobs }}</strong><span>背景工作</span></article>
+    <article><strong>{{ stats.source_types|length }}</strong><span>資源類型</span></article>
+    <article><strong>{{ stats.pending_jobs }}</strong><span>背景處理</span></article>
   </section>
 
   <section class="resource-command-grid" aria-label="新增與同步資源">
@@ -39,17 +35,15 @@
         <input id="new-resource-url" name="url" type="url" required placeholder="https://example.com/article">
         <label for="new-resource-title">自訂標題（可留空）</label>
         <input id="new-resource-title" name="title" type="text">
-        <label for="new-resource-reason">為什麼收藏</label>
-        <textarea id="new-resource-reason" name="saved_reason" rows="2"></textarea>
-        <button class="action-button primary" type="submit">加入 Inbox</button>
+        <button class="action-button primary" type="submit">加入 Resources</button>
       </form>
     </details>
 
     <details class="resource-panel">
-      <summary>同步 Chrome</summary>
+      <summary>同步 Chrome 到 Resources</summary>
       <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_import_chrome') }}">
-        <p class="resource-helper">讀取目前 Chrome Profile；只新增或更新 placement，不會刪除原資源。</p>
-        <label class="resource-check"><input type="checkbox" name="enqueue" value="1" checked> 建立 metadata／內容處理工作</label>
+        <p class="resource-helper">增量讀取目前 Chrome Profile；同一 canonical URL 只保留一筆 Resource。</p>
+        <label class="resource-check"><input type="checkbox" name="enqueue" value="1" checked> 擷取 metadata、縮圖與內容</label>
         <button class="action-button primary" type="submit">增量同步</button>
       </form>
     </details>
@@ -66,17 +60,8 @@
 
   <form class="resource-filter" method="get" role="search">
     <div class="resource-filter-search">
-      <label for="resource-query">搜尋標題、摘要、全文與筆記</label>
+      <label for="resource-query">搜尋標題、摘要與全文</label>
       <input id="resource-query" type="search" name="q" value="{{ filters.query }}" placeholder="例如：knowledge base architecture">
-    </div>
-    <div>
-      <label for="reading-state">閱讀狀態</label>
-      <select id="reading-state" name="reading_state">
-        <option value="">全部</option>
-        {% for value, label in state_labels.items() %}
-        <option value="{{ value }}" {% if value in filters.reading_states %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
     </div>
     <div>
       <label for="source-type">類型</label>
@@ -87,39 +72,13 @@
         {% endfor %}
       </select>
     </div>
-    <div>
-      <label for="disposition">處置</label>
-      <select id="disposition" name="disposition">
-        <option value="active" {% if filters.dispositions == () %}selected{% endif %}>使用中</option>
-        <option value="archived" {% if 'archived' in filters.dispositions %}selected{% endif %}>封存</option>
-        <option value="rejected" {% if 'rejected' in filters.dispositions %}selected{% endif %}>拒絕</option>
-        <option value="all" {% if filters.dispositions|length == 3 %}selected{% endif %}>全部</option>
-      </select>
-    </div>
-    <button class="action-button primary" type="submit">套用篩選</button>
+    <button class="action-button primary" type="submit">搜尋</button>
     <a class="action-button" href="{{ url_for('resource_library.resource_index') }}">清除</a>
   </form>
 
-  <details class="resource-panel resource-snapshot-panel">
-    <summary>將目前篩選儲存為狀態化 Entry</summary>
-    <form class="resource-form resource-form-inline" method="post" action="{{ url_for('entry_system.entry_create_snapshot') }}">
-      <input type="hidden" name="target_uri" value="{{ snapshot_target_uri }}">
-      <input type="hidden" name="state" value="{{ snapshot_state_json }}">
-      <input type="hidden" name="context" value="{{ snapshot_context_json }}">
-      <input type="hidden" name="return_to" value="{{ snapshot_target_uri }}">
-      <div class="resource-form-grow"><label for="snapshot-name">Entry 名稱</label><input id="snapshot-name" name="name" required placeholder="例如：待閱讀的 RISC-V 資源"></div>
-      <div><label for="snapshot-mode">進入模式</label><select id="snapshot-mode" name="mode"><option value="learn">LEARN</option><option value="scan">SCAN</option><option value="build">BUILD</option></select></div>
-      <div class="resource-form-grow"><label for="snapshot-next-action">下一步（選填）</label><input id="snapshot-next-action" name="next_action" placeholder="進去後先做什麼？"></div>
-      <button class="action-button" type="submit">儲存 Entry</button>
-    </form>
-  </details>
-
   <section aria-labelledby="resource-results-heading">
     <div class="resource-section-heading">
-      <div>
-        <p class="eyebrow">Library</p>
-        <h2 id="resource-results-heading">{{ page.total }} 筆符合資源</h2>
-      </div>
+      <div><p class="eyebrow">Resources</p><h2 id="resource-results-heading">{{ page.total }} 筆結果</h2></div>
       <span>第 {{ page.page }} / {{ page_count }} 頁</span>
     </div>
 
@@ -132,46 +91,28 @@
           <span class="resource-type">{{ resource.source_type }}</span>
         </a>
         <div class="resource-card-body">
-          <div class="resource-card-meta">
-            <span class="state-badge state-{{ resource.reading_state }}">{{ state_labels.get(resource.reading_state, resource.reading_state) }}</span>
-            <span>{{ resource.domain or '未知來源' }}</span>
-          </div>
+          <div class="resource-card-meta"><span>{{ resource.domain or '未知來源' }}</span><span>{{ resource.captured_at[:10] if resource.captured_at else '' }}</span></div>
           <h3><a href="{{ resource.detail_url }}">{{ resource.title }}</a></h3>
-          <p class="resource-summary">{{ resource.summary_one_line or resource.description or '尚待抽取摘要；仍可先標記、分類或開啟來源。' }}</p>
-          {% if resource.tag_names %}
-          <div class="resource-tags" aria-label="Tags">
-            {% for tag in resource.tag_names[:4] %}<span>{{ tag }}</span>{% endfor %}
-          </div>
-          {% endif %}
+          <p class="resource-summary">{{ resource.summary_one_line or resource.description or '尚未擷取摘要。' }}</p>
+          {% if resource.tag_names %}<div class="resource-tags">{% for tag in resource.tag_names[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="resource-card-actions">
-            <a class="action-button primary" href="{{ resource.detail_url }}">整理</a>
+            <a class="action-button primary" href="{{ resource.detail_url }}">查看</a>
             <a class="action-button" href="{{ resource.original_url }}" target="_blank" rel="noopener noreferrer">開原文</a>
-            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}">
-              <input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}">
-              <input type="hidden" name="disposition" value="archived">
-              <button class="action-button" type="submit">封存</button>
-            </form>
-            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="reading_state" value="skimmed"><button class="action-button" type="submit">略讀</button></form>
-            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="reading_state" value="reading"><button class="action-button" type="submit">開始閱讀</button></form>
-            <form method="post" action="{{ url_for('resource_library.resource_workflow', resource_id=resource.id) }}"><input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="reading_state" value="digested"><button class="action-button" type="submit">已消化</button></form>
           </div>
         </div>
       </article>
       {% endfor %}
     </div>
     {% else %}
-    <div class="resource-empty">
-      <h3>這個篩選還沒有資源</h3>
-      <p>同步 Chrome、加入一個網址，或清除目前篩選條件。</p>
-    </div>
+    <div class="resource-empty"><h3>沒有符合的資源</h3><p>加入網址、同步 Chrome，或清除目前搜尋條件。</p></div>
     {% endif %}
   </section>
 
   {% if page_count > 1 %}
   <nav class="resource-pagination" aria-label="資源分頁">
-    {% if page.page > 1 %}<a class="action-button" href="{{ url_for('resource_library.resource_index', page=page.page-1, q=filters.query, reading_state=(filters.reading_states|first or ''), source_type=(filters.source_types|first or ''), disposition=(filters.dispositions|first or 'active')) }}">上一頁</a>{% endif %}
+    {% if page.page > 1 %}<a class="action-button" href="{{ url_for('resource_library.resource_index', page=page.page-1, q=filters.query, source_type=(filters.source_types|first or '')) }}">上一頁</a>{% endif %}
     <span>第 {{ page.page }} 頁</span>
-    {% if page.page < page_count %}<a class="action-button" href="{{ url_for('resource_library.resource_index', page=page.page+1, q=filters.query, reading_state=(filters.reading_states|first or ''), source_type=(filters.source_types|first or ''), disposition=(filters.dispositions|first or 'active')) }}">下一頁</a>{% endif %}
+    {% if page.page < page_count %}<a class="action-button" href="{{ url_for('resource_library.resource_index', page=page.page+1, q=filters.query, source_type=(filters.source_types|first or '')) }}">下一頁</a>{% endif %}
   </nav>
   {% endif %}
 </main>
