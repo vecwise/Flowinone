@@ -11,6 +11,7 @@ from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, rende
 
 from src.flowinone.resource_library.database import get_resource_database
 from src.file_handler.eagle_integration import is_eagle_available
+from src.flowinone.gallery.models import GALLERY_SOURCES
 
 from .service import CATALOG_SOURCES, CatalogQuery, CatalogService, CatalogSyncService
 from .discovery import DiscoveryService
@@ -18,6 +19,17 @@ from .artifacts import CatalogArtifactService, PersonService
 
 
 bp = Blueprint("catalog", __name__)
+
+NAVIGATOR_SCOPE_SOURCES = {
+    "gallery": GALLERY_SOURCES,
+    "all": CATALOG_SOURCES,
+}
+SOURCE_LABELS = {
+    "local": "本機",
+    "eagle": "EAGLE",
+    "bookmarks": "書籤",
+    "resources": "Resources",
+}
 
 
 def _database():
@@ -37,21 +49,68 @@ def _query(scope: str | None = None) -> CatalogQuery:
     )
 
 
-@bp.get("/search/")
-def search_page():
-    service = CatalogService(_database())
-    query = _query()
-    if query.sort == "random" and not query.seed:
-        args = request.args.to_dict(flat=False)
-        args["seed"] = [str(secrets.randbelow(2_147_483_646) + 1)]
-        return redirect(f"{url_for('catalog.search_page')}?{urlencode(args, doseq=True)}")
-    if service.count() == 0:
-        CatalogSyncService(_database()).sync(("resources", "bookmarks", "local"))
-    try:
-        payload = service.list(query)
-    except ValueError as exc:
-        abort(400, description=str(exc))
-    eagle_available = is_eagle_available() if "eagle" in query.sources else True
+def _navigator_query() -> CatalogQuery:
+    """Build a query whose source defaults always match the chosen scope."""
+    scope = request.args.get("scope", "gallery").strip().lower()
+    if scope not in NAVIGATOR_SCOPE_SOURCES:
+        scope = "gallery"
+    allowed_sources = NAVIGATOR_SCOPE_SOURCES[scope]
+    requested_sources = request.args.getlist("source")
+    sources = tuple(source for source in requested_sources if source in allowed_sources) or allowed_sources
+    return CatalogQuery.create(
+        q=request.args.get("q"), scope=scope, sources=sources,
+        item_type=request.args.get("type"),
+        tags=request.args.getlist("tags") or request.args.get("tags"),
+        tag_mode=request.args.get("tag_mode"), favorite=request.args.get("favorite"),
+        unviewed=request.args.get("unviewed"),
+        duration_min=request.args.get("duration_min"), duration_max=request.args.get("duration_max"),
+        added_from=request.args.get("added_from"), added_to=request.args.get("added_to"),
+        sort=request.args.get("sort"), seed=request.args.get("seed"),
+        limit=request.args.get("limit"), cursor=request.args.get("cursor"),
+    )
+
+
+def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) -> list[tuple[str, str]]:
+    pairs = [("scope", query.scope)]
+    if query.q:
+        pairs.append(("q", query.q))
+    pairs.extend(("source", source) for source in query.sources)
+    if query.item_type:
+        pairs.append(("type", query.item_type))
+    if query.tags:
+        pairs.extend((("tags", ",".join(query.tags)), ("tag_mode", query.tag_mode)))
+    if query.favorite:
+        pairs.append(("favorite", "1"))
+    if query.unviewed:
+        pairs.append(("unviewed", "1"))
+    if query.duration_min is not None:
+        pairs.append(("duration_min", str(query.duration_min)))
+    if query.duration_max is not None:
+        pairs.append(("duration_max", str(query.duration_max)))
+    if query.added_from:
+        pairs.append(("added_from", query.added_from))
+    if query.added_to:
+        pairs.append(("added_to", query.added_to))
+    pairs.extend((("sort", query.sort), ("limit", str(query.limit))))
+    if query.seed:
+        pairs.append(("seed", str(query.seed)))
+    if cursor:
+        pairs.append(("cursor", cursor))
+    return pairs
+
+
+def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
+    return f"{url_for('catalog.navigator_page')}?{urlencode(_navigator_query_pairs(query, cursor=cursor))}"
+
+
+def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
+    values = query.public_dict()
+    values.update({"scope": scope, "sources": NAVIGATOR_SCOPE_SOURCES[scope], "cursor": ""})
+    return CatalogQuery.create(**values)
+
+
+def _visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -> list[dict]:
+    """Decorate canonical rows with a source-specific, usable launch target."""
     visible_items = []
     for item in payload["items"]:
         origins = []
@@ -64,27 +123,105 @@ def search_page():
                 origin = service.get_origin(item["id"], source)
                 if origin:
                     origins.append(origin)
-        chosen = next((origin for origin in origins if origin["source_kind"] != "eagle" or eagle_available), None)
-        if chosen:
-            metadata = chosen.get("metadata") or {}
-            item["launch_source"] = chosen["source_kind"]
-            item["launch_uri"] = (chosen.get("original_url") or chosen.get("detail_uri")) if chosen["source_kind"] == "bookmarks" else chosen.get("detail_uri")
-            item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
-        else:
-            # Do not render a dead link for an Eagle-only item while Eagle is
-            # offline. Mixed-origin items remain visible through their other
-            # origin.
+        chosen = origins[0] if origins else None
+        if not chosen:
             continue
+        metadata = chosen.get("metadata") or {}
+        source = chosen["source_kind"]
+        item["launch_source"] = source
+        item["launch_source_label"] = SOURCE_LABELS[source]
+        item["launch_uri"] = (
+            chosen.get("original_url") or chosen.get("detail_uri")
+            if source == "bookmarks"
+            else chosen.get("detail_uri")
+        )
+        item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
+        item["target_blank"] = source == "bookmarks"
         visible_items.append(item)
-    payload["items"] = visible_items
+    return visible_items
+
+
+def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
+    sessions = service.recent_sessions(3)
+    for session in sessions:
+        saved_query = dict(session.get("query") or {})
+        scope = saved_query.get("scope") or "gallery"
+        if scope not in NAVIGATOR_SCOPE_SOURCES:
+            scope = "gallery"
+        saved_query["scope"] = scope
+        saved_query["sources"] = tuple(
+            source for source in saved_query.get("sources") or ()
+            if source in NAVIGATOR_SCOPE_SOURCES[scope]
+        ) or NAVIGATOR_SCOPE_SOURCES[scope]
+        session_query = CatalogQuery.create(**saved_query)
+        session["url"] = _navigator_url(session_query)
+        session["scope_label"] = "素材" if scope == "gallery" else "全部內容"
+    return sessions
+
+
+@bp.get("/navigator/", strict_slashes=False)
+def navigator_page():
+    service = CatalogService(_database())
+    query = _navigator_query()
+    if query.sort == "random" and not query.seed:
+        values = query.public_dict()
+        values["seed"] = secrets.randbelow(2_147_483_646) + 1
+        return redirect(_navigator_url(CatalogQuery.create(**values)))
+
+    eagle_available = is_eagle_available() if "eagle" in query.sources else True
+    active_sources = tuple(source for source in query.sources if source != "eagle" or eagle_available)
+    values = query.public_dict()
+    values["sources"] = active_sources
+    effective_query = CatalogQuery.create(**values)
+
+    if service.count() == 0:
+        CatalogSyncService(_database()).sync(effective_query.sources)
+    try:
+        payload = service.list(effective_query) if active_sources else {
+            "items": [], "next_cursor": None, "total_estimate": 0,
+            "facets": service.facets(query),
+        }
+    except ValueError as exc:
+        abort(400, description=str(exc))
+    payload["items"] = _visible_items(service, payload, effective_query)
     if not payload["next_cursor"]:
-        payload["total_estimate"] = len(visible_items)
+        payload["total_estimate"] = len(payload["items"])
     next_url = None
     if payload["next_cursor"]:
-        args = request.args.to_dict(flat=False)
-        args["cursor"] = [payload["next_cursor"]]
-        next_url = f"{url_for('catalog.search_page')}?{urlencode(args, doseq=True)}"
-    return render_template("catalog_search.html", title="Search · Flowinone", payload=payload, query=query, sources=CATALOG_SOURCES, next_url=next_url, eagle_available=eagle_available)
+        next_url = _navigator_url(effective_query, cursor=payload["next_cursor"])
+    scope_sources = NAVIGATOR_SCOPE_SOURCES[query.scope]
+    reset_query = CatalogQuery.create(scope=query.scope, sources=scope_sources)
+    random_values = query.public_dict()
+    random_values.update({"sort": "random", "seed": 0, "cursor": ""})
+    return render_template(
+        "navigator.html",
+        title="Navigator · Flowinone",
+        payload=payload,
+        query=query,
+        source_options=[
+            {
+                "key": source,
+                "label": SOURCE_LABELS[source],
+                "count": payload["facets"]["sources"].get(source, 0),
+                "error": "目前未連線" if source == "eagle" and not eagle_available else None,
+            }
+            for source in scope_sources
+        ],
+        next_url=next_url,
+        reset_url=_navigator_url(reset_query),
+        random_url=_navigator_url(CatalogQuery.create(**random_values)),
+        scope_urls={scope: _navigator_url(_with_scope(query, scope)) for scope in NAVIGATOR_SCOPE_SOURCES},
+        recent_sessions=_navigator_recent_sessions(service),
+        eagle_available=eagle_available,
+    )
+
+
+@bp.get("/search/", strict_slashes=False)
+def search_page():
+    """Legacy deep link for the former Search destination."""
+    args = request.args.to_dict(flat=False)
+    args["scope"] = ["all"]
+    return redirect(f"{url_for('catalog.navigator_page')}?{urlencode(args, doseq=True)}")
 
 
 @bp.get("/api/catalog/items")

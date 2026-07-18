@@ -1,5 +1,5 @@
 <nav class="app-nav" aria-label="主要導覽">
-    <a class="app-brand" href="{{ url_for('gallery.gallery_index') }}">
+    <a class="app-brand" href="{{ url_for('catalog.navigator_page', scope='gallery') }}">
         <span class="app-brand-mark" aria-hidden="true">F</span>
         <span>
             <strong>Flowinone</strong>
@@ -8,26 +8,17 @@
     </a>
 
     <div class="nav-links">
-        <a class="{% if request.blueprint == 'gallery' %}is-active{% endif %}" href="{{ url_for('gallery.gallery_index') }}" {% if request.blueprint == 'gallery' %}aria-current="page"{% endif %}>GALLERY</a>
-        <a class="{% if request.blueprint == 'catalog' %}is-active{% endif %}" href="{{ url_for('catalog.search_page') }}" {% if request.blueprint == 'catalog' %}aria-current="page"{% endif %}>SEARCH</a>
+        <a class="{% if request.endpoint == 'catalog.navigator_page' %}is-active{% endif %}" href="{{ url_for('catalog.navigator_page', scope='gallery') }}" {% if request.endpoint == 'catalog.navigator_page' %}aria-current="page"{% endif %}>NAVIGATOR</a>
         <a class="{% if request.blueprint == 'resource_library' %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}" {% if request.blueprint == 'resource_library' %}aria-current="page"{% endif %}>RESOURCES</a>
     </div>
 
     <div class="nav-actions">
-        {% if request.blueprint == 'gallery' %}
-        <form class="search-container" action="{{ url_for('gallery.gallery_index') }}" method="GET" role="search">
-            <label class="sr-only" for="globalSearch">搜尋 Gallery</label>
-            <input id="globalSearch" type="search" placeholder="搜尋 Gallery item" name="q" value="{{ request.args.get('q', '') }}">
-            {% for source in request.args.getlist('source') %}<input type="hidden" name="source" value="{{ source }}">{% endfor %}
+        <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="GET" role="search">
+            <label class="sr-only" for="globalSearch">搜尋 Navigator</label>
+            <input id="globalSearch" type="search" placeholder="搜尋素材與資源" name="q" value="{{ request.args.get('q', '') if request.endpoint == 'catalog.navigator_page' else '' }}">
+            <input type="hidden" name="scope" value="{{ request.args.get('scope', 'gallery') if request.endpoint == 'catalog.navigator_page' else 'gallery' }}">
             <button type="submit">搜尋</button>
         </form>
-        {% else %}
-        <form class="search-container" action="{{ url_for('catalog.search_page') }}" method="GET" role="search">
-            <label class="sr-only" for="globalSearch">跨來源搜尋</label>
-            <input id="globalSearch" type="search" placeholder="跨來源搜尋" name="q" value="{{ request.args.get('q', '') if request.blueprint == 'catalog' else '' }}">
-            <button type="submit">搜尋</button>
-        </form>
-        {% endif %}
 
         <details class="nav-tools">
             <summary>來源</summary>

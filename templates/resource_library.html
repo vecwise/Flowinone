@@ -13,11 +13,10 @@
     <div>
       <p class="eyebrow">Web resource renderer</p>
       <h1>網頁資源</h1>
-      <p>顯示已擷取的網頁 metadata、摘要、全文與 tags。跨 Local、Eagle、Bookmarks、Resources 的查找請使用 Search。</p>
+      <p>顯示已擷取的網頁 metadata、摘要、全文與 tags。跨 Local、Eagle、Bookmarks、Resources 的查找請使用 Navigator。</p>
     </div>
     <div class="resource-hero-actions">
-      <a class="action-button primary" href="{{ url_for('catalog.search_page') }}">跨來源搜尋</a>
-      <a class="action-button" href="{{ url_for('gallery.gallery_index') }}">開啟 Gallery</a>
+      <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='all') }}">在 Navigator 搜尋</a>
     </div>
   </header>
 

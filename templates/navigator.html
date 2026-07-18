@@ -1,0 +1,222 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container gallery-page navigator-page" data-navigator-query="{{ query.signature() }}">
+  <header class="gallery-hero navigator-hero">
+    <div>
+      <p class="eyebrow">Cross-source navigator</p>
+      <h1>{% if query.scope == 'gallery' %}在同一處探索視覺素材{% else %}在同一處搜尋所有內容{% endif %}</h1>
+      <p>{% if query.scope == 'gallery' %}本機、Eagle 與書籤以扁平 item 瀏覽；資料夾只作為描述或 tag。{% else %}本機、Eagle、書籤與 Resources 共用可搜尋索引；包含標題、摘要、tag 與已擷取內容。{% endif %}</p>
+    </div>
+    <div class="navigator-hero-actions">
+      <a class="action-button" href="{{ random_url }}">隨機探索</a>
+      <details class="navigator-maintenance">
+        <summary>來源管理</summary>
+        <div class="navigator-maintenance-panel">
+          <button class="action-button" id="catalog-reindex" type="button">重新建立索引</button>
+          <p id="catalog-sync-status" class="muted-text" aria-live="polite">{% for source, state in payload.facets.sync.items() %}{{ source }}：{{ state.status }}{% if not loop.last %} · {% endif %}{% else %}尚未建立索引{% endfor %}</p>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <nav class="navigator-scope" aria-label="Navigator 範圍">
+    <a class="navigator-scope-option {% if query.scope == 'gallery' %}is-active{% endif %}" href="{{ scope_urls.gallery }}" {% if query.scope == 'gallery' %}aria-current="page"{% endif %}>
+      <strong>素材</strong><span>本機、Eagle、書籤</span>
+    </a>
+    <a class="navigator-scope-option {% if query.scope == 'all' %}is-active{% endif %}" href="{{ scope_urls.all }}" {% if query.scope == 'all' %}aria-current="page"{% endif %}>
+      <strong>全部內容</strong><span>素材加上 Resources 與全文</span>
+    </a>
+  </nav>
+
+  {% if not eagle_available and 'eagle' in query.sources %}
+  <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
+  {% endif %}
+
+  {% if recent_sessions %}
+  <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">
+    <div class="gallery-results-heading"><div><p class="eyebrow">Continue browsing</p><h2 id="navigator-sessions-heading">最近的瀏覽</h2></div></div>
+    <div class="navigator-session-grid">
+      {% for session in recent_sessions %}
+      <a class="navigator-session-card" href="{{ session.url }}">
+        <span class="navigator-session-meta">{{ session.scope_label }} · {{ session.updated_at }}</span>
+        <h3>{{ session.query.q or '未命名瀏覽' }}</h3>
+        <p>{{ session.query.sources|join(' · ') }} · {{ session.query.sort }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <form class="gallery-query navigator-query" method="get" role="search" aria-label="Navigator 搜尋與篩選">
+    <input type="hidden" name="scope" value="{{ query.scope }}">
+    <div class="gallery-search-field">
+      <label for="navigator-q">搜尋</label>
+      <input id="navigator-q" type="search" name="q" value="{{ query.q }}" placeholder="{% if query.scope == 'gallery' %}標題、tag 或素材描述{% else %}標題、摘要、tag 或擷取內容{% endif %}">
+    </div>
+
+    <fieldset class="gallery-source-filter">
+      <legend>來源</legend>
+      <div class="gallery-source-options {% if source_options|length == 4 %}has-four-sources{% endif %}">
+        {% for source in source_options %}
+        <label class="source-option {% if source.error %}has-warning{% endif %}">
+          <input type="checkbox" name="source" value="{{ source.key }}" {% if source.key in query.sources %}checked{% endif %}>
+          <span><strong>{{ source.label }}</strong><small>{{ source.count }} items{% if source.error %} · {{ source.error }}{% endif %}</small></span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <div class="gallery-select-field">
+      <label for="navigator-type">類型</label>
+      <select id="navigator-type" name="type">
+        <option value="">全部 item</option>
+        {% for item_type, count in payload.facets.types.items() %}
+        <option value="{{ item_type }}" {% if query.item_type == item_type %}selected{% endif %}>{{ item_type }} ({{ count }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="gallery-search-field">
+      <label for="navigator-tags">Tags（逗號分隔）</label>
+      <input id="navigator-tags" name="tags" value="{{ query.tags|join(',') }}" placeholder="例如：reference, motion">
+    </div>
+    <div class="gallery-select-field">
+      <label for="navigator-tag-mode">Tag 規則</label>
+      <select id="navigator-tag-mode" name="tag_mode"><option value="any" {% if query.tag_mode == 'any' %}selected{% endif %}>符合任一</option><option value="all" {% if query.tag_mode == 'all' %}selected{% endif %}>符合全部</option></select>
+    </div>
+    <label class="source-option"><input type="checkbox" name="favorite" value="1" {% if query.favorite %}checked{% endif %}><span><strong>只看最愛</strong></span></label>
+    <label class="source-option"><input type="checkbox" name="unviewed" value="1" {% if query.unviewed %}checked{% endif %}><span><strong>尚未瀏覽</strong></span></label>
+    <div class="gallery-select-field"><label for="navigator-duration-min">最短秒數</label><input id="navigator-duration-min" type="number" min="0" name="duration_min" value="{{ query.duration_min if query.duration_min is not none else '' }}"></div>
+    <div class="gallery-select-field"><label for="navigator-duration-max">最長秒數</label><input id="navigator-duration-max" type="number" min="0" name="duration_max" value="{{ query.duration_max if query.duration_max is not none else '' }}"></div>
+    <div class="gallery-select-field">
+      <label for="navigator-sort">排序</label>
+      <select id="navigator-sort" name="sort">
+        <option value="recently_added" {% if query.sort == 'recently_added' %}selected{% endif %}>最近加入</option>
+        <option value="newest" {% if query.sort == 'newest' %}selected{% endif %}>最新內容</option>
+        <option value="relevance" {% if query.sort == 'relevance' %}selected{% endif %}>搜尋相關度</option>
+        <option value="title" {% if query.sort == 'title' %}selected{% endif %}>標題</option>
+        <option value="random" {% if query.sort == 'random' %}selected{% endif %}>隨機探索</option>
+        <option value="most_viewed" {% if query.sort == 'most_viewed' %}selected{% endif %}>最常瀏覽</option>
+        <option value="recently_viewed" {% if query.sort == 'recently_viewed' %}selected{% endif %}>最近瀏覽</option>
+        <option value="favorites" {% if query.sort == 'favorites' %}selected{% endif %}>我的最愛</option>
+      </select>
+    </div>
+    {% if query.seed %}<input type="hidden" name="seed" value="{{ query.seed }}">{% endif %}
+    <button class="action-button primary" type="submit">套用</button>
+    <a class="action-button" href="{{ reset_url }}">重設</a>
+  </form>
+
+  <section aria-labelledby="navigator-results-heading">
+    <div class="gallery-results-heading">
+      <div><p class="eyebrow">{{ 'Browse' if query.scope == 'gallery' else 'Results' }}</p><h2 id="navigator-results-heading">{{ payload.total_estimate }} 個項目</h2></div>
+      <div class="gallery-view-label">{{ '素材範圍' if query.scope == 'gallery' else '全部內容範圍' }}</div>
+    </div>
+    {% if payload['items'] %}
+    <div class="gallery-grid">
+      {% for item in payload['items'] %}
+      <article class="gallery-card" data-navigator-item="{{ item.id }}">
+        <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="開啟 {{ item.title }}">
+          <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async">
+          <span class="gallery-type-badge">{{ item.item_type }}</span>
+          {% if item.duration_seconds %}<span class="gallery-type-badge" style="left:auto;right:.6rem">{{ item.duration_seconds|int }}s</span>{% endif %}
+        </a>
+        <div class="gallery-card-body">
+          <div class="gallery-card-source"><span>{{ item.launch_source_label }}</span>{% if item.duration_seconds %}<span>{{ item.duration_seconds|int }}s</span>{% endif %}</div>
+          <h3><a href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+          {% if item.tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.tags[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
+          <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="gallery-empty"><h3>找不到符合的項目</h3><p>可移除部分條件、改用另一個範圍，或重新同步來源。</p><a class="action-button primary" href="{{ reset_url }}">查看此範圍的所有項目</a></div>
+    {% endif %}
+  </section>
+
+  {% if next_url %}<nav class="gallery-pagination" aria-label="Navigator 批次載入"><a class="action-button primary" href="{{ next_url }}">載入下一批</a></nav>{% endif %}
+</main>
+
+<script>
+(() => {
+  const page = document.querySelector('[data-navigator-query]');
+  if (!page) return;
+  const stateKey = `flowinone-navigator-scroll:${page.dataset.navigatorQuery}`;
+  const sessionKey = `flowinone-navigator-session:${page.dataset.navigatorQuery}`;
+  const saved = sessionStorage.getItem(stateKey);
+  if (saved) requestAnimationFrame(() => window.scrollTo({top: Number(saved), behavior: 'instant'}));
+  const query = {{ query.public_dict()|tojson }};
+  let browseSession = sessionStorage.getItem(sessionKey);
+  const saveSession = (payload) => fetch(
+    browseSession ? `/api/catalog/sessions/${browseSession}` : '/api/catalog/sessions',
+    {method: browseSession ? 'PATCH' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)},
+  ).then(async (response) => {
+    if (response.ok) {
+      const value = await response.json();
+      browseSession = value.id;
+      sessionStorage.setItem(sessionKey, value.id);
+    }
+  });
+  saveSession({query, scroll_position: Number(saved || 0)});
+
+  document.querySelectorAll('[data-navigator-item] a').forEach((link) => link.addEventListener('click', () => {
+    sessionStorage.setItem(stateKey, String(window.scrollY));
+    const item = link.closest('[data-navigator-item]');
+    if (!item) return;
+    if (browseSession) saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
+    navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: 'open'})], {type: 'application/json'}));
+  }));
+
+  document.querySelectorAll('.navigator-favorite').forEach((button) => button.addEventListener('click', async () => {
+    const item = button.closest('[data-navigator-item]');
+    const enabled = button.dataset.favorite === '1';
+    const response = await fetch(`/api/catalog/items/${item.dataset.navigatorItem}/events`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({event_type: enabled ? 'unfavorite' : 'favorite'})});
+    if (response.ok) {
+      button.dataset.favorite = enabled ? '0' : '1';
+      button.textContent = enabled ? '收藏' : '已收藏';
+    }
+  }));
+
+  let scrollTimer;
+  window.addEventListener('scroll', () => {
+    window.clearTimeout(scrollTimer);
+    scrollTimer = window.setTimeout(() => {
+      sessionStorage.setItem(stateKey, String(window.scrollY));
+      if (browseSession) saveSession({query, scroll_position: window.scrollY});
+    }, 500);
+  }, {passive: true});
+
+  let searchTimer;
+  const search = document.getElementById('navigator-q');
+  if (search) search.addEventListener('input', () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => search.form.requestSubmit(), 350);
+  });
+  document.querySelectorAll('.navigator-query input[type="checkbox"], .navigator-query select').forEach((control) => {
+    control.addEventListener('change', () => control.form.requestSubmit());
+  });
+
+  const reindex = document.getElementById('catalog-reindex');
+  const syncStatus = document.getElementById('catalog-sync-status');
+  if (reindex) reindex.addEventListener('click', async () => {
+    reindex.disabled = true;
+    syncStatus.textContent = '正在同步 Local、Eagle、Bookmarks、Resources…';
+    try {
+      const response = await fetch('/api/catalog/sync', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sources: ['local', 'eagle', 'bookmarks', 'resources']})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '同步失敗');
+      syncStatus.textContent = Object.entries(result).map(([source, value]) => `${source}: ${value.status}${value.count === undefined ? '' : ` (${value.count})`}`).join(' · ');
+      window.setTimeout(() => window.location.reload(), 600);
+    } catch (error) {
+      syncStatus.textContent = error.message;
+      reindex.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

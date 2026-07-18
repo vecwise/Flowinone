@@ -666,8 +666,8 @@ def _build_index_context(flags):
             "最近來源項目",
             "最近可用的媒體、書籤與網頁資源",
             [_clone_card(card, "最近更新", "recent") for card in all_cards[:10]],
-            action_label="開啟 Gallery",
-            action_url=url_for("gallery.gallery_index"),
+            action_label="開啟 Navigator",
+            action_url=url_for("catalog.navigator_page", scope="gallery"),
         ))
     if image_cards:
         sample = random.sample(image_cards, min(10, len(image_cards)))
@@ -785,8 +785,8 @@ def _register_context_processors(app):
 def _register_index_routes(app):
     @app.route('/')
     def index():
-        """The renderer opens directly in its cross-source Gallery."""
-        return redirect(url_for("gallery.gallery_index"))
+        """The renderer opens directly in its cross-source Navigator."""
+        return redirect(url_for("catalog.navigator_page", scope="gallery"))
 
     @app.route('/library/')
     def content_library():

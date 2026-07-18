@@ -104,12 +104,15 @@ def test_gallery_search_filter_and_cursor_signature():
     assert [item.id for item in searched.items] == ["local:image-1"]
 
 
-def test_gallery_html_and_api_keep_source_checkboxes_on_one_page(gallery_app):
+def test_gallery_legacy_link_redirects_to_navigator_and_api_remains_available(gallery_app):
     client = gallery_app.test_client()
-    page = client.get("/gallery/?source=local&source=bookmarks&type=image")
-    assert page.status_code == 200
-    assert page.data.count(b'type="checkbox" name="source"') == 3
-    assert "資料夾只保留為描述或 tag".encode() in page.data
+    page = client.get("/gallery/?source=local&source=bookmarks&type=image", follow_redirects=False)
+    assert page.status_code == 302
+    parsed = urlsplit(page.headers["Location"])
+    redirect_query = parse_qs(parsed.query)
+    assert redirect_query["scope"] == ["gallery"]
+    assert redirect_query["source"] == ["local", "bookmarks"]
+    assert redirect_query["type"] == ["image"]
 
     response = client.get("/api/gallery/items?source=local&source=eagle&limit=1")
     assert response.status_code == 200
@@ -118,7 +121,7 @@ def test_gallery_html_and_api_keep_source_checkboxes_on_one_page(gallery_app):
     assert payload["query"]["sources"] == ["local", "eagle"]
     assert "absolute_path" not in payload["items"][0]
 
-    random_redirect = client.get("/gallery/?source=local&sort=random", follow_redirects=False)
+    random_redirect = client.get("/navigator/?scope=gallery&source=local&sort=random", follow_redirects=False)
     assert random_redirect.status_code == 302
     parsed = urlsplit(random_redirect.headers["Location"])
     assert parse_qs(parsed.query)["seed"][0].isdigit()

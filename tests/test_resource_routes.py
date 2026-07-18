@@ -59,7 +59,7 @@ def test_resource_pages_and_json_crud(resource_app):
 
 def test_renderer_root_and_removed_workflow_routes(resource_app):
     client = resource_app.test_client()
-    assert client.get("/").headers["Location"].endswith("/gallery/")
+    assert client.get("/").headers["Location"].endswith("/navigator/?scope=gallery")
     for path in (
         "/build/",
         "/think/",

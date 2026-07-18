@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from flask import Flask
@@ -152,9 +153,24 @@ def test_new_catalog_routes_render(tmp_path):
     app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(tmp_path / "web.db"), FLOWINONE_RESOURCE_LINK_THUMBNAILS=False)
     register_routes(app)
     client = app.test_client()
-    assert client.get("/search/").status_code == 200
+    gallery = client.get("/navigator/?scope=gallery")
+    assert gallery.status_code == 200
+    assert b"Cross-source navigator" in gallery.data
+    assert gallery.data.count(b'type="checkbox" name="source"') == 3
+
+    all_content = client.get("/navigator/?scope=all")
+    assert all_content.status_code == 200
+    assert all_content.data.count(b'type="checkbox" name="source"') == 4
+
+    gallery_legacy = client.get("/gallery/?source=bookmarks", follow_redirects=False)
+    assert gallery_legacy.status_code == 302
+    assert parse_qs(urlsplit(gallery_legacy.headers["Location"]).query)["scope"] == ["gallery"]
+
+    search_legacy = client.get("/search/?source=bookmarks", follow_redirects=False)
+    assert search_legacy.status_code == 302
+    assert parse_qs(urlsplit(search_legacy.headers["Location"]).query)["scope"] == ["all"]
     assert client.get("/api/catalog/items").status_code == 200
-    bookmark_search = client.get("/search/?source=bookmarks")
+    bookmark_search = client.get("/navigator/?scope=all&source=bookmarks")
     assert b"https://example.com/web" in bookmark_search.data
     assert b"/resources/resource-web/" not in bookmark_search.data
 

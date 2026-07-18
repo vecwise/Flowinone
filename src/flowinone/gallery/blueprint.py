@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from urllib.parse import urlencode
 
 from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, render_template, request, url_for
@@ -11,7 +10,6 @@ from .models import GALLERY_SOURCES, GalleryItem, GalleryQuery
 from .service import CatalogGalleryService, GalleryService, InvalidGalleryCursor
 from src.flowinone.resource_library.database import get_resource_database
 from pathlib import Path
-from src.flowinone.catalog.service import CatalogService
 
 
 bp = Blueprint("gallery", __name__)
@@ -123,57 +121,10 @@ def _page_payload(page, return_to: str) -> dict:
 
 @bp.get("/gallery/", strict_slashes=False)
 def gallery_index():
-    query = _query()
-    if query.sort == "random" and not query.seed:
-        pairs = _query_pairs(query)
-        pairs.append(("seed", str(secrets.randbelow(2_147_483_646) + 1)))
-        return redirect(f"{url_for('gallery.gallery_index')}?{urlencode(pairs)}")
-    try:
-        page = _service().list_items(query)
-    except InvalidGalleryCursor as exc:
-        abort(400, description=str(exc))
-    canonical_query = urlencode(_query_pairs(query))
-    return_to = f"{url_for('gallery.gallery_index')}?{canonical_query}"
-    payload = _page_payload(page, return_to)
-    next_url = None
-    if page.next_cursor:
-        next_url = f"{url_for('gallery.gallery_index')}?{urlencode(_query_pairs(query, cursor=page.next_cursor))}"
-    source_labels = {"local": "本機", "eagle": "EAGLE", "bookmarks": "書籤"}
-    catalog_database = get_resource_database(Path(current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")) if current_app.config.get("FLOWINONE_RESOURCE_DB_PATH") else None)
-    recent_sessions = CatalogService(catalog_database).recent_sessions(3)
-    for session in recent_sessions:
-        pairs = []
-        for key, value in session["query"].items():
-            if value in (None, "", False, []):
-                continue
-            if key == "sources":
-                pairs.extend(("source", source) for source in value)
-            elif key == "tags":
-                pairs.append(("tags", ",".join(value)))
-            else:
-                pairs.append((key, str(int(value)) if isinstance(value, bool) else str(value)))
-        session["url"] = f"{url_for('gallery.gallery_index')}?{urlencode(pairs)}"
-    return render_template(
-        "gallery.html",
-        title="Gallery · Flowinone",
-        items=payload["items"],
-        total=page.total,
-        query=query,
-        source_options=[
-            {
-                "key": source,
-                "label": source_labels[source],
-                "count": page.source_counts.get(source, 0),
-                "error": page.source_errors.get(source),
-            }
-            for source in GALLERY_SOURCES
-        ],
-        next_url=next_url,
-        random_url=url_for("gallery.gallery_index", source=list(query.sources), sort="random"),
-        reset_url=url_for("gallery.gallery_index"),
-        canonical_query=canonical_query,
-        recent_sessions=recent_sessions,
-    )
+    """Legacy deep link for the former Gallery destination."""
+    args = request.args.to_dict(flat=False)
+    args["scope"] = ["gallery"]
+    return redirect(f"{url_for('catalog.navigator_page')}?{urlencode(args, doseq=True)}")
 
 
 @bp.get("/gallery/lab", strict_slashes=False)
