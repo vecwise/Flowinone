@@ -68,7 +68,7 @@
 
   <section class="browse-toolbar" aria-label="Browse controls">
     <div class="toolbar-group">
-      <span class="toolbar-label">{{ data|length }} items</span>
+      <span class="toolbar-label">{{ data|length }}{% if metadata.pagination %} / {{ metadata.pagination.total }}{% endif %} items</span>
     </div>
     <div class="toolbar-group">
       <button id="sortButton" class="view-button" data-direction="asc">Sort A to Z</button>
@@ -141,6 +141,12 @@
     </article>
     {% endfor %}
   </section>
+  {% if metadata.pagination and (metadata.pagination.previous_url or metadata.pagination.next_url) %}
+  <nav class="load-more-row" aria-label="Eagle pagination">
+    {% if metadata.pagination.previous_url %}<a class="action-button" href="{{ metadata.pagination.previous_url }}">上一頁</a>{% endif %}
+    {% if metadata.pagination.next_url %}<a class="action-button primary" href="{{ metadata.pagination.next_url }}">下一頁</a>{% endif %}
+  </nav>
+  {% endif %}
   <p id="thumbnailSyncStatus" class="sr-only" aria-live="polite"></p>
 </main>
 

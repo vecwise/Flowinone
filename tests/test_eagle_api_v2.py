@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
+from flask import Flask, jsonify
+
+import routes
 import src.eagle_api as eagle
-from src.eagle_api.client import EagleClient
+from src.eagle_api.client import EagleAdminClient, EagleClient
+from src.eagle_api.models import EagleCapabilities
+from src.file_handler import eagle_integration
+from src.file_handler.models import MediaEntry
 
 
 def _response(payload):
@@ -101,3 +107,101 @@ def test_ai_status_rejects_unknown_endpoint():
         assert "Unknown AI Search" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("unknown endpoint should be rejected")
+
+
+def test_admin_operations_require_the_opt_in_admin_client():
+    assert not hasattr(EagleClient, "switch_library")
+    assert not hasattr(EagleClient, "merge_tags")
+    assert hasattr(EagleAdminClient, "switch_library")
+    assert hasattr(EagleAdminClient, "merge_tags")
+
+
+def test_capabilities_combines_eagle_and_optional_ai_state():
+    session = Mock()
+    session.request.side_effect = [
+        _response({"status": "success", "data": {"version": "4.0.0", "buildVersion": "build22"}}),
+        _response({"status": "success", "data": {"progress": 0.75}}),
+        _response({"status": "success", "data": {"data": [], "total": 0, "offset": 0, "limit": 1}}),
+        _response({"status": "success", "data": True}),
+        _response({"status": "success", "data": True}),
+        _response({"status": "success", "data": False}),
+        _response({"status": "success", "data": True}),
+    ]
+
+    capabilities = EagleClient(session=session).capabilities()
+
+    assert capabilities.available is True
+    assert capabilities.supports_smart_folders is True
+    assert capabilities.supports_comments is True
+    assert capabilities.ai_installed is True
+    assert capabilities.ai_ready is True
+    assert capabilities.ai_starting is False
+    assert capabilities.ai_syncing is True
+    assert capabilities.ai_sync_progress == 0.75
+
+
+def test_ai_similar_results_use_the_v2_results_envelope(monkeypatch):
+    monkeypatch.setattr(
+        eagle_integration,
+        "get_eagle_capabilities",
+        lambda: EagleCapabilities(available=True, ai_ready=True),
+    )
+    monkeypatch.setattr(
+        eagle_integration.EG,
+        "EAGLE_ai_search_similar",
+        lambda *args, **kwargs: {
+            "status": "success",
+            "data": {"results": [{"item": {"id": "match", "name": "Match", "ext": "jpg"}, "score": 0.875}]},
+        },
+    )
+    monkeypatch.setattr(
+        eagle_integration,
+        "_format_eagle_items",
+        lambda items, **kwargs: [
+            MediaEntry(id=item["id"], name=item["name"], url="/image", thumbnail_route="/thumb", item_path=None, media_type="image", ext=item["ext"])
+            for item in items
+        ],
+    )
+
+    matches = eagle_integration._build_eagle_similar_items("current", [], [], limit=6)
+
+    assert [match.id for match in matches] == ["match"]
+    assert matches[0].description == "AI similarity 88%"
+
+
+def test_eagle_sorting_does_not_mutate_or_reorder_when_preserving_api_order():
+    items = [
+        {"id": "new", "name": "Zebra", "modificationTime": 20},
+        {"id": "old", "name": "Apple", "modificationTime": 10},
+    ]
+
+    preserved = eagle_integration._sort_eagle_items(items, None)
+    newest = eagle_integration._sort_eagle_items(items, "modificationTime", reverse=True)
+
+    assert [item["id"] for item in preserved] == ["new", "old"]
+    assert [item["id"] for item in newest] == ["new", "old"]
+    assert items[0]["name"] == "Zebra"
+
+
+def test_eagle_pagination_urls_preserve_existing_query_arguments():
+    app = Flask(__name__)
+
+    @app.get("/search")
+    def search_page():
+        metadata = {
+            "pagination": {
+                "offset": 120,
+                "limit": 120,
+                "total": 400,
+                "previous_offset": 0,
+                "next_offset": 240,
+            }
+        }
+        routes._attach_eagle_pagination_urls(metadata)
+        return jsonify(metadata)
+
+    response = app.test_client().get("/search?query=orange+cat&offset=120&limit=120")
+    pagination = response.get_json()["pagination"]
+
+    assert pagination["previous_url"] == "/search?query=orange+cat&offset=0&limit=120"
+    assert pagination["next_url"] == "/search?query=orange+cat&offset=240&limit=120"

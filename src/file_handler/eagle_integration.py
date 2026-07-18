@@ -21,7 +21,57 @@ from .paths import (
 )
 
 
+_EAGLE_CACHE_TTL_SECONDS = 60.0
 _EAGLE_STATUS_CACHE = {"timestamp": 0.0, "value": False}
+_EAGLE_LIBRARY_CACHE = {"timestamp": 0.0, "value": None}
+_EAGLE_CAPABILITIES_CACHE = {"timestamp": 0.0, "value": None}
+
+
+def _cache_value(cache, loader, force=False):
+    now = time.time()
+    if not force and cache["value"] is not None and now - cache["timestamp"] < _EAGLE_CACHE_TTL_SECONDS:
+        return cache["value"]
+    value = loader()
+    if getattr(value, "get", lambda *_: None)("status") == "success" or hasattr(value, "available"):
+        cache.update({"timestamp": now, "value": value})
+    return value
+
+
+def _get_eagle_library_info(force=False):
+    return _cache_value(_EAGLE_LIBRARY_CACHE, EG.EAGLE_get_library_info, force)
+
+
+def get_eagle_capabilities(force=False):
+    """Return cached v2/AI capability information for Flowinone feature decisions."""
+    return _cache_value(_EAGLE_CAPABILITIES_CACHE, EG.EAGLE_get_capabilities, force)
+
+
+def _get_eagle_library_path():
+    response = _get_eagle_library_info()
+    if response.get("status") != "success":
+        raise ExternalServiceError(f"Failed to fetch Eagle library info: {response.get('data')}")
+    path = (response.get("data") or {}).get("path")
+    if not path:
+        raise ExternalServiceError("Eagle v2 library path is unavailable")
+    return path
+
+
+def _pagination_from_response(response):
+    page = response.get("pagination") or {}
+    try:
+        total = int(page.get("total"))
+        offset = int(page.get("offset") or 0)
+        limit = int(page.get("limit") or 1)
+    except (TypeError, ValueError):
+        return None
+    item_count = len(response.get("data") or [])
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "previous_offset": max(0, offset - limit) if offset else None,
+        "next_offset": offset + item_count if offset + item_count < total else None,
+    }
 
 
 def is_eagle_available(force: bool = False) -> bool:
@@ -29,8 +79,7 @@ def is_eagle_available(force: bool = False) -> bool:
     if not force and now - _EAGLE_STATUS_CACHE["timestamp"] < 60:
         return _EAGLE_STATUS_CACHE["value"]
     try:
-        response = EG.EAGLE_get_library_info()
-        available = response.get("status") == "success"
+        available = bool(get_eagle_capabilities(force=force).available)
     except Exception:
         available = False
     _EAGLE_STATUS_CACHE.update({"timestamp": now, "value": available})
@@ -41,7 +90,7 @@ def get_eagle_folders():
     """
     獲取 Eagle API 提供的所有資料夾資訊
     """
-    response = EG.EAGLE_get_library_info()
+    response = _get_eagle_library_info()
     if response.get("status") != "success":
         raise ExternalServiceError(f"Failed to fetch Eagle folders: {response.get('data')}")
 
@@ -51,7 +100,7 @@ def get_eagle_folders():
         tags=["eagle", "folders"],
         path="/EAGLE_folder",
         thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
-        filesystem_path=EG.EAGLE_get_current_library_path()
+        filesystem_path=_get_eagle_library_path()
     )
 
     data: list[MediaEntry] = []
@@ -59,10 +108,9 @@ def get_eagle_folders():
         folder_id = folder.get("id")
         folder_name = folder.get("name", "Unnamed Folder")
 
-        folder_response = EG.EAGLE_list_items(folders=[folder_id])
+        folder_response = EG.EAGLE_list_items(folders=[folder_id], limit=1, fields=["id", "name", "ext"])
         image_items = folder_response.get("data", [])
-        image_items.sort(key=lambda x: x.get("name", ""))
-        thumbnail_path = f"/serve_image/{EG.EAGLE_get_current_library_path()}/images/{image_items[0]['id']}.info/{image_items[0]['name']}.{image_items[0]['ext']}" if image_items else DEFAULT_THUMBNAIL_ROUTE
+        thumbnail_path = _eagle_item_media_path(image_items[0], _get_eagle_library_path()) if image_items else DEFAULT_THUMBNAIL_ROUTE
 
         data.append(MediaEntry(
             name=folder_name,
@@ -76,11 +124,11 @@ def get_eagle_folders():
     return metadata, data
 
 
-def get_eagle_images_by_folderid(eagle_folder_id):
+def get_eagle_images_by_folderid(eagle_folder_id, offset=0, limit=120):
     """
     獲取 Eagle API 提供的指定資料夾內的圖片資訊，符合 EAGLE API 格式
     """
-    response = EG.EAGLE_list_items(folders=[eagle_folder_id])
+    response = EG.EAGLE_list_items(folders=[eagle_folder_id], offset=offset, limit=limit)
     if response.get("status") != "success":
         raise ExternalServiceError(f"Failed to fetch images from Eagle folder: {response.get('data')}")
 
@@ -113,18 +161,19 @@ def get_eagle_images_by_folderid(eagle_folder_id):
         path=f"/EAGLE_folder/{eagle_folder_id}",
         thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
         filesystem_path=None,
-        folders=folder_links
+        folders=folder_links,
+        pagination=_pagination_from_response(response),
     )
     image_items = response.get("data", [])
-    data = _format_eagle_items(image_items)
+    data = _format_eagle_items(image_items, sort_by="name")
     return metadata, data
 
 
-def get_eagle_images_by_tag(target_tag):
+def get_eagle_images_by_tag(target_tag, offset=0, limit=120):
     """
     從 Eagle API 獲取所有帶有指定標籤的圖片，符合 EAGLE API 格式。
     """
-    response = EG.EAGLE_list_items(tags=[target_tag], orderBy="CREATEDATE")
+    response = EG.EAGLE_list_items(tags=[target_tag], offset=offset, limit=limit)
     if response.get('status') == 'error':
         raise ExternalServiceError(f"Error fetching images with tag '{target_tag}': {response.get('data')}")
 
@@ -134,11 +183,12 @@ def get_eagle_images_by_tag(target_tag):
         tags=[target_tag],
         path=f"/EAGLE_tag/{target_tag}",
         thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
-        filesystem_path=None
+        filesystem_path=None,
+        pagination=_pagination_from_response(response),
     )
 
     image_items = response.get("data", [])
-    data = _format_eagle_items(image_items)
+    data = _format_eagle_items(image_items, sort_by="name")
     return metadata, data
 
 
@@ -197,14 +247,15 @@ def get_eagle_tags():
     return metadata, tags
 
 
-def search_eagle_items(keyword, limit=120):
+def search_eagle_items(keyword, offset=0, limit=120):
     """Use Eagle v2 full-text search, including AND/OR/NOT query syntax."""
-    response = EG.EAGLE_query_items(keyword, limit=limit)
+    response = EG.EAGLE_query_items(keyword, offset=offset, limit=limit)
     if response.get("status") != "success":
         raise ExternalServiceError(f"Failed to search Eagle items: {response.get('data')}")
 
     raw_items = response.get("data", [])
-    data = _format_eagle_items(raw_items)
+    # item/query already returns relevance-aware results; preserve that order.
+    data = _format_eagle_items(raw_items, sort_by=None)
 
     metadata = PageMetadata(
         name=f"Search Results: {keyword}",
@@ -212,7 +263,8 @@ def search_eagle_items(keyword, limit=120):
         tags=[keyword],
         path=f"/search?query={keyword}",
         thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
-        filesystem_path=EG.EAGLE_get_current_library_path()
+        filesystem_path=_get_eagle_library_path(),
+        pagination=_pagination_from_response(response),
     )
 
     return metadata, data
@@ -230,7 +282,7 @@ def get_eagle_smart_folders():
         tags=["eagle", "smart-folders"],
         path="/EAGLE_smart_folders/",
         thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
-        filesystem_path=EG.EAGLE_get_current_library_path(),
+        filesystem_path=_get_eagle_library_path(),
     )
     data: list[MediaEntry] = []
     for folder in response.get("data") or []:
@@ -239,7 +291,7 @@ def get_eagle_smart_folders():
             continue
         items_response = EG.EAGLE_get_smart_folder_items(folder_id, fields=["id", "name", "ext"])
         items = items_response.get("data") or [] if items_response.get("status") == "success" else []
-        thumbnail = _format_eagle_items(items[:1])[0].thumbnail_route if items else DEFAULT_THUMBNAIL_ROUTE
+        thumbnail = _format_eagle_items(items[:1], sort_by=None)[0].thumbnail_route if items else DEFAULT_THUMBNAIL_ROUTE
         data.append(MediaEntry(
             id=folder_id,
             name=folder.get("name") or "Unnamed Smart Folder",
@@ -252,8 +304,8 @@ def get_eagle_smart_folders():
     return metadata, data
 
 
-def get_eagle_images_by_smart_folder_id(smart_folder_id):
-    response = EG.EAGLE_get_smart_folder_items(smart_folder_id)
+def get_eagle_images_by_smart_folder_id(smart_folder_id, offset=0, limit=120):
+    response = EG.EAGLE_get_smart_folder_items(smart_folder_id, offset=offset, limit=limit)
     if response.get("status") != "success":
         raise ExternalServiceError(f"Failed to fetch Eagle smart folder: {response.get('data')}")
     folders_response = EG.EAGLE_get_smart_folders()
@@ -265,8 +317,9 @@ def get_eagle_images_by_smart_folder_id(smart_folder_id):
         path=f"/EAGLE_smart_folder/{smart_folder_id}/",
         thumbnail_route=DEFAULT_THUMBNAIL_ROUTE,
         filesystem_path=None,
+        pagination=_pagination_from_response(response),
     )
-    return metadata, _format_eagle_items(response.get("data") or [])
+    return metadata, _format_eagle_items(response.get("data") or [], sort_by="name")
 
 
 def get_eagle_stream_items(offset=0, limit=30):
@@ -274,7 +327,7 @@ def get_eagle_stream_items(offset=0, limit=30):
     取得 Eagle 圖片/影片串流用的項目清單。
     """
     try:
-        response = EG.EAGLE_list_items(limit=limit, offset=offset, orderBy="CREATEDATE")
+        response = EG.EAGLE_list_items(limit=limit, offset=offset)
     except Exception as exc:
         raise ExternalServiceError(f"Failed to fetch Eagle stream items: {exc}") from exc
 
@@ -282,7 +335,7 @@ def get_eagle_stream_items(offset=0, limit=30):
         raise ExternalServiceError(f"Failed to fetch Eagle stream items: {response.get('data')}")
 
     raw_items = response.get("data", []) or []
-    return _format_eagle_items(raw_items)
+    return _format_eagle_items(raw_items, sort_by="modificationTime", reverse=True)
 
 
 def _extract_folder_ids(raw_folders):
@@ -315,6 +368,27 @@ def _extract_folder_ids(raw_folders):
     return list(ids.keys())
 
 
+def _iter_eagle_folders(nodes, parent=None):
+    for node in nodes or []:
+        if not isinstance(node, dict):
+            continue
+        yield node, parent
+        yield from _iter_eagle_folders(node.get("children"), node)
+
+
+def _eagle_folder_index():
+    """Build an id lookup from the cached v2 library folder tree."""
+    response = _get_eagle_library_info()
+    if response.get("status") != "success":
+        return {}
+    folders = (response.get("data") or {}).get("folders") or []
+    return {
+        folder_id: {"folder": folder, "parent": parent}
+        for folder, parent in _iter_eagle_folders(folders)
+        if (folder_id := folder.get("id"))
+    }
+
+
 def _build_eagle_folder_links(folder_ids):
     """
     將 folder id 轉換成可供前端使用的連結資訊。
@@ -323,18 +397,10 @@ def _build_eagle_folder_links(folder_ids):
     if not folder_ids:
         return []
 
-    try:
-        df = EG.EAGLE_get_folders_df_all(flatten=True)
-    except Exception:
-        df = None
-
-    lookup = {}
-    if df is not None and getattr(df, "empty", True) is False:
-        for _, row in df.iterrows():
-            row_id = str(row.get("id") or "").strip()
-            if not row_id:
-                continue
-            lookup[row_id] = row.get("name") or row_id
+    lookup = {
+        folder_id: entry["folder"].get("name") or folder_id
+        for folder_id, entry in _eagle_folder_index().items()
+    }
 
     links = []
     seen = OrderedDict()
@@ -383,25 +449,10 @@ def _get_eagle_folder_context(folder_id):
     取得指定 Eagle 資料夾及其父資料夾資訊。
     Returns (current_folder, parent_folder)
     """
-    response = EG.EAGLE_get_library_info()
-    if response.get("status") != "success":
+    entry = _eagle_folder_index().get(folder_id)
+    if not entry:
         return None, None
-
-    folders = response.get("data", {}).get("folders", [])
-
-    def _search(nodes, parent=None):
-        for node in nodes:
-            if node.get("id") == folder_id:
-                return node, parent
-            result = _search(node.get("children", []), node)
-            if result is not None:
-                return result
-        return None
-
-    found = _search(folders)
-    if not found:
-        return None, None
-    return found
+    return entry["folder"], entry["parent"]
 
 
 def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
@@ -409,17 +460,25 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
     根據標籤或資料夾推薦相似項目。
     """
     candidate_map = OrderedDict()
+    candidate_scores = {}
     used_ai = False
 
     # Prefer v2 AI visual similarity when the optional Eagle plugin is ready.
     try:
-        if EG.EAGLE_ai_is_ready():
+        if get_eagle_capabilities().ai_ready:
             ai_response = EG.EAGLE_ai_search_similar(current_item_id, limit=limit + 1)
             if ai_response.get("status") == "success":
-                for result in ai_response.get("data") or []:
-                    raw = result.get("item") if isinstance(result, dict) else None
-                    if raw and raw.get("id") != current_item_id:
+                payload = ai_response.get("data") or {}
+                results = payload.get("results") if isinstance(payload, dict) else []
+                for result in results or []:
+                    try:
+                        match = EG.EagleAIResult.from_response_data(result)
+                    except (AttributeError, TypeError, ValueError):
+                        continue
+                    raw = match.item
+                    if raw.get("id") != current_item_id:
                         candidate_map.setdefault(raw["id"], raw)
+                        candidate_scores[raw["id"]] = match.score
                         used_ai = True
     except Exception:
         pass
@@ -438,7 +497,7 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
     primary_tags = tags[:2] if tags else []
     for tag in primary_tags:
         try:
-            resp = EG.EAGLE_list_items(tags=[tag], limit=120, orderBy="MODIFIEDDATE")
+            resp = EG.EAGLE_list_items(tags=[tag], limit=120)
         except Exception:
             continue
         _accumulate_from_response(resp)
@@ -449,7 +508,7 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
         primary_folders = folder_ids[:2]
         for folder_id in primary_folders:
             try:
-                resp = EG.EAGLE_list_items(folders=[folder_id], limit=120, orderBy="MODIFIEDDATE")
+                resp = EG.EAGLE_list_items(folders=[folder_id], limit=120)
             except Exception:
                 continue
             _accumulate_from_response(resp)
@@ -467,7 +526,7 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
     # AI responses are score-sorted. Keep that order; legacy tag/folder fallback
     # remains sampled so the detail page does not become repetitive.
     sampled_raw = candidate_list[:sample_size] if used_ai else random.sample(candidate_list, sample_size)
-    formatted_candidates = _format_eagle_items(sampled_raw)
+    formatted_candidates = _format_eagle_items(sampled_raw, sort_by=None)
     formatted_map = {item.id: item for item in formatted_candidates if getattr(item, "id", None)}
 
     similar_items = []
@@ -478,6 +537,8 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
             continue
         media_type = formatted.media_type
         detail_path = f"/EAGLE_video/{item_id}/" if media_type == "video" else f"/EAGLE_image/{item_id}/"
+        score = candidate_scores.get(item_id)
+        description = f"AI similarity {float(score):.0%}" if score is not None else None
         similar_items.append(MediaEntry(
             id=item_id,
             name=formatted.name or "Untitled",
@@ -485,7 +546,8 @@ def _build_eagle_similar_items(current_item_id, tags, folder_ids, limit=6):
             thumbnail_route=formatted.thumbnail_route or DEFAULT_THUMBNAIL_ROUTE,
             item_path=formatted.item_path,
             media_type=media_type,
-            ext=formatted.ext
+            ext=formatted.ext,
+            description=description,
         ))
 
     return similar_items
@@ -515,7 +577,7 @@ def get_eagle_video_details(item_id):
     if ext not in VIDEO_EXTENSIONS:
         raise MediaNotFound("Requested Eagle item is not a video.")
 
-    base_library_path = EG.EAGLE_get_current_library_path()
+    base_library_path = _get_eagle_library_path()
     item_dir = os.path.join(base_library_path, "images", f"{item_id}.info")
 
     candidate_files = []
@@ -620,7 +682,7 @@ def get_eagle_image_details(item_id):
     file_name = item.get("name") or item_id
     file_name_with_ext = item.get("fileName")
 
-    base_library_path = EG.EAGLE_get_current_library_path()
+    base_library_path = _get_eagle_library_path()
     item_dir = os.path.join(base_library_path, "images", f"{item_id}.info")
 
     candidate_files = []
@@ -701,19 +763,42 @@ def get_eagle_image_details(item_id):
     return metadata, image_data
 
 
-def _format_eagle_items(image_items):
-    """
-    將 Eagle 圖片清單格式化成 EAGLE API 樣式的 data list。
-    """
-    image_items.sort(key=lambda x: x.get("name", ""))
+def _eagle_item_media_path(item, library_path):
+    item_id = item.get("id")
+    item_name = item.get("name") or "unknown"
+    item_ext = item.get("ext") or "jpg"
+    return f"/serve_image/{library_path}/images/{item_id}.info/{item_name}.{item_ext}"
+
+
+def _sort_eagle_items(items, sort_by, reverse=False):
+    if sort_by is None:
+        return list(items)
+
+    def key(item):
+        value = item.get(sort_by)
+        if sort_by == "name":
+            return str(value or "").casefold()
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    return sorted(items, key=key, reverse=reverse)
+
+
+def _format_eagle_items(image_items, *, sort_by="name", reverse=False, library_path=None):
+    """Map Eagle items without mutating their API order unless sorting is requested."""
+    image_items = _sort_eagle_items(image_items or [], sort_by, reverse)
     data: list[MediaEntry] = []
 
-    base = EG.EAGLE_get_current_library_path()
+    base = library_path or _get_eagle_library_path()
     for image in image_items:
         image_id = image.get("id")
+        if not image_id:
+            continue
         image_name = image.get("name", "unknown")
         image_ext = image.get("ext", "jpg")
-        image_path = f"/serve_image/{base}/images/{image_id}.info/{image_name}.{image_ext}"
+        image_path = _eagle_item_media_path(image, base)
 
         normalized_ext = (image_ext or "").lower()
         is_video = normalized_ext in VIDEO_EXTENSIONS
@@ -740,29 +825,24 @@ def get_subfolders_info(folder_id):
     根據指定的 folder_id，取出其 children（子資料夾 id list），
     並組成符合前端展示格式的 list of dict。
     """
-    df = EG.EAGLE_get_folders_df()
-
-    row = df[df["id"] == folder_id]
-    if row.empty:
+    folder, _ = _get_eagle_folder_context(folder_id)
+    if not folder:
         return []
 
-    children_infos = row.iloc[0]["children"]
+    children_infos = folder.get("children") or []
     result = []
+    base = _get_eagle_library_path()
 
     for child_info in children_infos:
         child_id = child_info["id"]
         sub_name = child_info.get("name", f"(unnamed-{child_id})")
         path = f"/EAGLE_folder/{child_id}"
 
-        folder_response = EG.EAGLE_list_items(folders=[child_id])
+        folder_response = EG.EAGLE_list_items(folders=[child_id], limit=1, fields=["id", "name", "ext"])
         thumbnail_route = DEFAULT_THUMBNAIL_ROUTE
         if folder_response.get("status") == "success" and folder_response.get("data"):
             first_img = folder_response["data"][0]
-            image_id = first_img["id"]
-            image_name = first_img["name"]
-            image_ext = first_img["ext"]
-            base = EG.EAGLE_get_current_library_path()
-            thumbnail_route = f"/serve_image/{base}/images/{image_id}.info/{image_name}.{image_ext}"
+            thumbnail_route = _eagle_item_media_path(first_img, base)
 
         result.append(MediaEntry(
             name=sub_name,

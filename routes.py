@@ -87,6 +87,32 @@ def _serialize_payload(metadata, data):
     return meta_dict, items
 
 
+def _eagle_page_args():
+    """Read bounded v2 pagination values used by Eagle browse routes."""
+    try:
+        offset = int(request.args.get("offset", 0))
+        limit = int(request.args.get("limit", 120))
+    except ValueError:
+        abort(400, description="Invalid Eagle pagination")
+    return max(0, offset), max(1, min(limit, 200))
+
+
+def _attach_eagle_pagination_urls(metadata):
+    pagination = metadata.get("pagination")
+    if not pagination:
+        return
+
+    def page_url(offset):
+        if offset is None:
+            return None
+        params = request.args.to_dict(flat=True)
+        params.update({"offset": offset, "limit": pagination["limit"]})
+        return url_for(request.endpoint, **(request.view_args or {}), **params)
+
+    pagination["previous_url"] = page_url(pagination.get("previous_offset"))
+    pagination["next_url"] = page_url(pagination.get("next_offset"))
+
+
 def _serialize_detail(detail):
     return _to_dict(detail)
 
@@ -318,7 +344,7 @@ def _decorate_related_items(items, metadata=None):
         card = _content_card_from_media(
             item,
             source_label="Related",
-            why="同 tag" if tags else "同來源資料夾" if folders else "相鄰項目",
+            why=item.get("description") or ("同 tag" if tags else "同來源資料夾" if folders else "相鄰項目"),
             lane="up-next",
         )
         decorated.append(card)
@@ -717,7 +743,6 @@ def _build_index_context(flags):
 def register_routes_debug(app):
     @app.route('/debug/')
     def debug_print():
-        # df_folders_info = EG.EAGLE_get_folders_df()
         # print(df_folders_info.shape)
         # print(df_folders_info.columns)
         df_to_post = [
@@ -1126,11 +1151,13 @@ def _register_eagle_routes(app):
     @require_feature("eagle")
     def view_eagle_smart_folder(smart_folder_id):
         """Browse items matched by an Eagle v2 smart folder."""
+        offset, limit = _eagle_page_args()
         try:
-            metadata, data = get_eagle_images_by_smart_folder_id(smart_folder_id)
+            metadata, data = get_eagle_images_by_smart_folder_id(smart_folder_id, offset=offset, limit=limit)
         except ExternalServiceError as exc:
             abort(500, description=str(exc))
         metadata_dict, data_list = _serialize_payload(metadata, data)
+        _attach_eagle_pagination_urls(metadata_dict)
         _attach_detail_urls(data_list, _normalize_current_url())
         return render_template('view_both.html', metadata=metadata_dict, data=data_list)
 
@@ -1138,16 +1165,18 @@ def _register_eagle_routes(app):
     @require_feature("eagle")
     def view_eagle_folder(eagle_folder_id):
         """顯示指定 Eagle 資料夾 ID 下的所有圖片"""
+        offset, limit = _eagle_page_args()
         try:
-            metadata, data = get_eagle_images_by_folderid(eagle_folder_id)
-            subfolders = get_subfolders_info(eagle_folder_id)
-            data = subfolders + data
+            metadata, data = get_eagle_images_by_folderid(eagle_folder_id, offset=offset, limit=limit)
+            if offset == 0:
+                data = get_subfolders_info(eagle_folder_id) + data
         except MediaNotFound:
             abort(404)
         except ExternalServiceError as exc:
             abort(500, description=str(exc))
 
         metadata_dict, data_list = _serialize_payload(metadata, data)
+        _attach_eagle_pagination_urls(metadata_dict)
         current_url = _normalize_current_url()
         _attach_detail_urls(data_list, current_url)
 
@@ -1165,11 +1194,13 @@ def _register_eagle_routes(app):
         Returns:
             渲染的 HTML 頁面，顯示所有具有該標籤的圖片。
         """
+        offset, limit = _eagle_page_args()
         try:
-            metadata, data = get_eagle_images_by_tag(target_tag)
+            metadata, data = get_eagle_images_by_tag(target_tag, offset=offset, limit=limit)
         except ExternalServiceError as exc:
             abort(500, description=str(exc))
         metadata_dict, data_list = _serialize_payload(metadata, data)
+        _attach_eagle_pagination_urls(metadata_dict)
 
         current_url = _normalize_current_url()
         _attach_detail_urls(data_list, current_url)
@@ -1184,11 +1215,13 @@ def _register_eagle_routes(app):
         if not keyword:
             return redirect(request.referrer or url_for('index'))
 
+        offset, limit = _eagle_page_args()
         try:
-            metadata, data = search_eagle_items(keyword)
+            metadata, data = search_eagle_items(keyword, offset=offset, limit=limit)
         except ExternalServiceError as exc:
             abort(500, description=str(exc))
         metadata_dict, data_list = _serialize_payload(metadata, data)
+        _attach_eagle_pagination_urls(metadata_dict)
 
         current_url = _normalize_current_url()
         _attach_detail_urls(data_list, current_url)

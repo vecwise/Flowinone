@@ -1,16 +1,16 @@
-"""Flowinone-facing compatibility facade for Eagle Web API v2.
+"""Narrow Flowinone compatibility facade for Eagle Web API v2.
 
-New code may import :class:`EagleClient`; the ``EAGLE_*`` names keep existing
-Flowinone integrations stable while every request now targets ``/api/v2``.
+New code should import the typed clients from :mod:`src.eagle_api.client`.
+These ``EAGLE_*`` helpers remain only while Flowinone's legacy integration is
+migrated; they never expose arbitrary HTTP endpoints.
 """
 
 from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Sequence
 
-import pandas as pd
-
-from .client import EagleClient, default_client
+from .client import EagleAdminClient, EagleClient, default_client
+from .models import EagleAIResult, EagleCapabilities, EaglePage
 
 
 def _error_text(response: Mapping[str, Any]) -> Any:
@@ -32,42 +32,12 @@ def _flatten_page(response: dict[str, Any]) -> dict[str, Any]:
     return response
 
 
-def send_request_to_eagle(endpoint: str, method: str = "GET", payload: dict | None = None) -> dict[str, Any]:
-    return default_client.request(endpoint, method, payload)
-
-
 def EAGLE_get_folders() -> dict[str, Any]:
     return _flatten_page(default_client.all_pages("folder/get"))
 
 
 def EAGLE_get_recent_folders() -> dict[str, Any]:
     return _flatten_page(default_client.get_folders(isRecent=True, limit=1000))
-
-
-def EAGLE_get_folders_df() -> pd.DataFrame:
-    response = EAGLE_get_folders()
-    return pd.DataFrame(response.get("data") or []) if response.get("status") == "success" else pd.DataFrame()
-
-
-def EAGLE_get_folders_df_all(flatten: bool = True) -> pd.DataFrame:
-    response = EAGLE_get_folders()
-    folders = response.get("data") or [] if response.get("status") == "success" else []
-    if not flatten:
-        return pd.DataFrame(folders)
-    rows: list[dict[str, Any]] = []
-
-    def visit(folder: Mapping[str, Any], parent_name: str = "", parent_id: str | None = None) -> None:
-        row = dict(folder)
-        children = row.pop("children", []) or []
-        row["parentName"] = parent_name
-        row["parentId"] = parent_id
-        rows.append(row)
-        for child in children:
-            visit(child, str(folder.get("name") or ""), str(folder.get("id") or "") or None)
-
-    for folder in folders:
-        visit(folder)
-    return pd.DataFrame(rows)
 
 
 def EAGLE_create_folder(folderName: str, parent: str | None = None, **details: Any) -> dict[str, Any]:
@@ -164,15 +134,13 @@ def EAGLE_update_item_tags(itemId: str, tags: Sequence[str]) -> dict[str, Any]:
 def EAGLE_list_items(
     limit: int = 200,
     offset: int = 0,
-    orderBy: Optional[str] = None,
     keyword: Optional[str] = None,
     ext: Optional[str] = None,
     tags: Sequence[str] | None = None,
     folders: Sequence[str] | None = None,
     **filters: Any,
 ) -> dict[str, Any]:
-    # V2 item/get intentionally has no orderBy. Preserve the argument for callers,
-    # and use item/query when they explicitly ask for full-text keywords elsewhere.
+    """List one v2 page; ordering belongs to the Flowinone presentation layer."""
     response = default_client.get_items(limit=limit, offset=offset, keywords=[keyword] if keyword else None, ext=ext, tags=tags, folders=folders, **filters)
     return _flatten_page(response)
 
@@ -203,4 +171,14 @@ def EAGLE_ai_search_similar(item_id: str, limit: int = 8) -> dict[str, Any]:
     return default_client.ai_search_item(item_id, limit)
 
 
-__all__ = [name for name in globals() if name.startswith("EAGLE_")] + ["EagleClient", "send_request_to_eagle"]
+def EAGLE_get_capabilities() -> EagleCapabilities:
+    return default_client.capabilities()
+
+
+__all__ = [name for name in globals() if name.startswith("EAGLE_")] + [
+    "EagleAdminClient",
+    "EagleAIResult",
+    "EagleCapabilities",
+    "EagleClient",
+    "EaglePage",
+]

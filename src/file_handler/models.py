@@ -91,6 +91,7 @@ class PageMetadata:
     focus_modes: Optional[List[Dict[str, Any]]] = None
     focus_mode: Optional[Dict[str, Any]] = None
     focus_stats: Optional[Dict[str, Any]] = None
+    pagination: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict, omitting empty optional values."""
