@@ -2,6 +2,7 @@ import io
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 from flask import Flask
 
 from routes import register_routes
@@ -29,7 +30,14 @@ def resource_app(tmp_path):
 
 def test_resource_pages_and_json_crud(resource_app):
     client = resource_app.test_client()
-    assert client.get("/resources/").status_code == 200
+    resource_page = client.get("/resources/")
+    assert resource_page.status_code == 200
+    global_search = BeautifulSoup(resource_page.data, "html.parser").select_one(
+        "form.search-container"
+    )
+    assert global_search is not None
+    assert global_search.select_one('input[name="scope"]')["value"] == "all"
+
     created = client.post(
         "/api/resources",
         json={"url": "https://example.com/route", "title": "Route Resource", "enqueue": False},

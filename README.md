@@ -1,6 +1,6 @@
 # Flowinone — multi-source resource renderer
 
-Flowinone is a local-first renderer for visual media, bookmarks, and imported web resources. It lets you browse or search across Local files, Eagle, Chrome Bookmarks, and Resources without moving the authoritative source into a new system.
+Flowinone is a local-first renderer for visual media, bookmarks, and imported web resources. Its Navigator lets you browse or search across Local files, Eagle, Chrome Bookmarks, and Resources without moving the authoritative source into a new system.
 
 ```mermaid
 flowchart LR
@@ -8,18 +8,21 @@ flowchart LR
   eagle["Eagle"] --> catalog
   chrome["Chrome Bookmarks"] --> catalog
   resource["Imported URLs"] --> catalog
-  catalog --> gallery["Gallery"]
-  catalog --> search["Search"]
+  catalog --> navigator["Navigator\n素材 · 全部內容"]
   resource --> detail["Resource detail"]
 ```
 
 ## What it does
 
-- **Gallery** — flat Local/Eagle/Bookmark browsing with source multi-select, filters, stable random order, scroll restoration, favorites, and bounded sessions.
-- **Search** — SQLite FTS across Local, Eagle, Bookmarks, and Resources, with source/type/tag facets, tag ANY/ALL, and keyset pagination.
+- **Navigator · 素材** (`/navigator/?scope=gallery`) — flat Local/Eagle/Bookmark browsing with source multi-select, filters, stable random order, scroll restoration, favorites, and bounded sessions.
+- **Navigator · 全部內容** (`/navigator/?scope=all`) — SQLite FTS across Local, Eagle, Bookmarks, and Resources, with source/type/tag facets, tag ANY/ALL, and keyset pagination.
 - **Resources** — import URLs or Chrome bookmarks; render metadata, thumbnail, summary, extracted article/PDF/transcript text, tags, and related resources.
 - **Source-specific pages** — retain Eagle folders/tags/smart folders, Chrome bookmark tree, local folder views, image/video viewers, and maintenance tools.
 - **Local sidecars** — portable `.flowinone.json` metadata import/export/audit for local media.
+
+`/gallery/` and `/search/` are compatibility redirects only. They preserve query parameters and redirect to the Navigator's **素材** and **全部內容** scopes respectively; they are not separate user-facing surfaces.
+
+The global navigation search preserves the current scope when used inside Navigator. From Resources or any other non-Navigator page, it opens Navigator in **全部內容** (`scope=all`), so the “搜尋素材與資源” field includes Resources as advertised.
 
 Flowinone is deliberately **not** a knowledge-workflow application. BUILD, THINK, LEARN, SCAN, RECOVER, WRITE, Entries, Projects, Collections, Notes, and Obsidian export are not part of the running app.
 
@@ -35,17 +38,18 @@ python -m pip install -r requirements.txt
 python run.py
 ```
 
-Visit `http://localhost:5894`; `/` redirects to `/gallery/`.
+Visit `http://localhost:5894`; `/` redirects to the Navigator's **素材** scope at `/navigator/?scope=gallery`.
 
 For headless setup, set valid Local media roots in `config.json` and use `FLOWINONE_HEADLESS=1`. `CHROME_BOOKMARK_PATH` defaults to the platform Chrome profile path and may be overridden in app configuration.
 
 ## Typical use
 
-1. Open **Gallery** to browse Local, Eagle, and Bookmarks visually.
-2. Use **Search** when you do not know which source contains the item.
-3. Open **Resources** for imported URLs and their extracted full text.
-4. Add user tags when they make future search better.
-5. Sync a source after a large change.
+1. Open **Navigator · 素材** to browse Local, Eagle, and Bookmarks visually.
+2. Switch to **全部內容** in the same Navigator when you do not know which source contains the item or want to include Resources.
+3. Use the global search from another page to search **全部內容** by default; when already in Navigator, it keeps the current scope.
+4. Open **Resources** for imported URLs and their extracted full text.
+5. Add user tags when they make future search better.
+6. Sync a source after a large change.
 
 ## Maintenance
 
@@ -65,8 +69,8 @@ conda run -n py3.11 flask --app run sidecars-import
 ## Architecture
 
 - `routes.py` — Flask routes for Local, Eagle, Chrome, source viewers, and app registration.
-- `src/flowinone/gallery/` — Gallery query/read model and HTTP surface.
-- `src/flowinone/catalog/` — rebuildable cross-source Catalog, FTS, facets, cursors, events, sessions, and explainable item relations.
+- `src/flowinone/gallery/` — retained Gallery read model/API, design lab, and `/gallery/` compatibility redirect.
+- `src/flowinone/catalog/` — Navigator HTTP surface plus the rebuildable cross-source Catalog, FTS, facets, cursors, events, sessions, and explainable item relations; it also owns the `/search/` compatibility redirect.
 - `src/flowinone/resource_library/` — imported URL database, extraction jobs, Resource UI/API, and optional AI metadata.
 - `src/file_handler/` — filesystem, Chrome, Eagle adapters, thumbnails, item DB, and sidecars.
 - `migrations/` — Alembic history. `0007_renderer_only_cleanup` and `0008_renderer_resource_schema` remove the former knowledge-workflow tables, fields, and personal-note FTS data.

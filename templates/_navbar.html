@@ -16,7 +16,7 @@
         <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="GET" role="search">
             <label class="sr-only" for="globalSearch">搜尋 Navigator</label>
             <input id="globalSearch" type="search" placeholder="搜尋素材與資源" name="q" value="{{ request.args.get('q', '') if request.endpoint == 'catalog.navigator_page' else '' }}">
-            <input type="hidden" name="scope" value="{{ request.args.get('scope', 'gallery') if request.endpoint == 'catalog.navigator_page' else 'gallery' }}">
+            <input type="hidden" name="scope" value="{{ request.args.get('scope', 'gallery') if request.endpoint == 'catalog.navigator_page' else 'all' }}">
             <button type="submit">搜尋</button>
         </form>
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from bs4 import BeautifulSoup
 from flask import Flask
 
 from routes import register_routes
@@ -157,10 +158,20 @@ def test_new_catalog_routes_render(tmp_path):
     assert gallery.status_code == 200
     assert b"Cross-source navigator" in gallery.data
     assert gallery.data.count(b'type="checkbox" name="source"') == 3
+    gallery_search = BeautifulSoup(gallery.data, "html.parser").select_one(
+        "form.search-container"
+    )
+    assert gallery_search is not None
+    assert gallery_search.select_one('input[name="scope"]')["value"] == "gallery"
 
     all_content = client.get("/navigator/?scope=all")
     assert all_content.status_code == 200
     assert all_content.data.count(b'type="checkbox" name="source"') == 4
+    all_search = BeautifulSoup(all_content.data, "html.parser").select_one(
+        "form.search-container"
+    )
+    assert all_search is not None
+    assert all_search.select_one('input[name="scope"]')["value"] == "all"
 
     gallery_legacy = client.get("/gallery/?source=bookmarks", follow_redirects=False)
     assert gallery_legacy.status_code == 302
