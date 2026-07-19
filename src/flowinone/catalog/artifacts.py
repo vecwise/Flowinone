@@ -66,7 +66,7 @@ class CatalogArtifactService:
             raise ValueError("不支援的 Catalog artifact")
         artifact_id = new_id()
         now = utc_now_text()
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             if conn.execute(text("SELECT 1 FROM catalog_items WHERE id=:id"), {"id": item_id}).first() is None:
                 raise LookupError(item_id)
             conn.execute(text("UPDATE catalog_artifacts SET is_current=0 WHERE catalog_item_id=:item AND artifact_type=:type"), {"item": item_id, "type": artifact_type})
@@ -105,7 +105,7 @@ class PersonService:
     def create(self, display_name: str = "") -> dict[str, Any]:
         person_id = new_id()
         now = utc_now_text()
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             conn.execute(text("INSERT INTO people(id,display_name,status,metadata_json,created_at,updated_at) VALUES(:id,:name,:status,'{}',:now,:now)"), {"id": person_id, "name": display_name.strip() or None, "status": "named" if display_name.strip() else "anonymous", "now": now})
         return self.get(person_id)
 
@@ -122,14 +122,14 @@ class PersonService:
         name = display_name.strip()
         if not name:
             raise ValueError("人物名稱不可空白")
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             result = conn.execute(text("UPDATE people SET display_name=:name,status='named',updated_at=:now WHERE id=:id"), {"id": person_id, "name": name, "now": utc_now_text()})
             if not result.rowcount:
                 raise LookupError(person_id)
         return self.get(person_id)
 
     def link(self, person_id: str, item_id: str, *, confidence: float | None = None, source: str = "user") -> None:
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             conn.execute(text("INSERT OR REPLACE INTO item_people(catalog_item_id,person_id,confidence,source,created_at) VALUES(:item,:person,:confidence,:source,:created)"), {"item": item_id, "person": person_id, "confidence": confidence, "source": source[:24], "created": utc_now_text()})
 
 

@@ -81,7 +81,7 @@ class JobQueue:
         priority: Optional[int] = None,
         force: bool = False,
     ) -> dict:
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             job = self.queue_in_session(
                 session,
                 job_type,
@@ -117,58 +117,56 @@ class JobQueue:
         now = datetime.now(timezone.utc).replace(microsecond=0)
         now_text = now.isoformat()
         lease_until = (now + timedelta(seconds=max(30, lease_seconds))).isoformat()
-        raw = self.database.engine.raw_connection()
-        try:
-            cursor = raw.cursor()
-            cursor.execute("BEGIN IMMEDIATE")
-            rows = cursor.execute(
-                """
-                SELECT * FROM processing_jobs
-                WHERE (
-                    status IN ('pending','retry') AND run_after <= ?
-                ) OR (
-                    status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?
-                )
-                ORDER BY priority ASC, run_after ASC, created_at ASC
-                LIMIT ?
-                """,
-                (now_text, now_text, min(limit, 50)),
-            ).fetchall()
-            columns = [description[0] for description in cursor.description] if cursor.description else []
-            claimed: list[dict] = []
-            for row in rows:
-                data = dict(zip(columns, row))
-                updated = cursor.execute(
+        with self.database.raw_write_connection() as raw:
+            try:
+                cursor = raw.cursor()
+                cursor.execute("BEGIN IMMEDIATE")
+                rows = cursor.execute(
                     """
-                    UPDATE processing_jobs
-                    SET status='running', lease_owner=?, lease_expires_at=?,
-                        started_at=COALESCE(started_at, ?), updated_at=?
-                    WHERE id=? AND (
-                        (status IN ('pending','retry') AND run_after <= ?)
-                        OR (status='running' AND lease_expires_at <= ?)
+                    SELECT * FROM processing_jobs
+                    WHERE (
+                        status IN ('pending','retry') AND run_after <= ?
+                    ) OR (
+                        status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?
                     )
+                    ORDER BY priority ASC, run_after ASC, created_at ASC
+                    LIMIT ?
                     """,
-                    (owner, lease_until, now_text, now_text, data["id"], now_text, now_text),
-                )
-                if updated.rowcount:
-                    data.update(
-                        status="running",
-                        lease_owner=owner,
-                        lease_expires_at=lease_until,
-                        started_at=data.get("started_at") or now_text,
+                    (now_text, now_text, min(limit, 50)),
+                ).fetchall()
+                columns = [description[0] for description in cursor.description] if cursor.description else []
+                claimed: list[dict] = []
+                for row in rows:
+                    data = dict(zip(columns, row))
+                    updated = cursor.execute(
+                        """
+                        UPDATE processing_jobs
+                        SET status='running', lease_owner=?, lease_expires_at=?,
+                            started_at=COALESCE(started_at, ?), updated_at=?
+                        WHERE id=? AND (
+                            (status IN ('pending','retry') AND run_after <= ?)
+                            OR (status='running' AND lease_expires_at <= ?)
+                        )
+                        """,
+                        (owner, lease_until, now_text, now_text, data["id"], now_text, now_text),
                     )
-                    claimed.append(self.serialize(data))
-            raw.commit()
-            return claimed
-        except Exception:
-            raw.rollback()
-            raise
-        finally:
-            raw.close()
+                    if updated.rowcount:
+                        data.update(
+                            status="running",
+                            lease_owner=owner,
+                            lease_expires_at=lease_until,
+                            started_at=data.get("started_at") or now_text,
+                        )
+                        claimed.append(self.serialize(data))
+                raw.commit()
+                return claimed
+            except Exception:
+                raw.rollback()
+                raise
 
     def complete(self, job_id: str) -> None:
         now = utc_now_text()
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             job = session.get(ProcessingJob, job_id)
             if job is None:
                 return
@@ -182,7 +180,7 @@ class JobQueue:
     def fail(self, job_id: str, error: str) -> str:
         """Apply bounded exponential backoff and return the resulting status."""
         now = datetime.now(timezone.utc).replace(microsecond=0)
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             job = session.get(ProcessingJob, job_id)
             if job is None:
                 return "missing"
@@ -202,7 +200,7 @@ class JobQueue:
             return job.status
 
     def list_for_resource(self, resource_id: str) -> list[dict]:
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             jobs = list(
                 session.scalars(
                     select(ProcessingJob)
@@ -213,7 +211,7 @@ class JobQueue:
             return [self.serialize(job) for job in jobs]
 
     def counts(self) -> dict[str, int]:
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             rows = session.execute(
                 select(ProcessingJob.status, func.count(ProcessingJob.id)).group_by(
                     ProcessingJob.status

@@ -34,7 +34,10 @@ class EnrichmentError(RuntimeError):
 
 def _atomic_write(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    # Do not repeat the hash-based destination name in the temporary name.
+    # Deep pytest/user data directories otherwise exceed Windows' traditional
+    # MAX_PATH limit even when the final content path itself is valid.
+    temporary = path.with_name(f".{uuid.uuid4().hex}.tmp")
     try:
         temporary.write_bytes(payload)
         os.replace(temporary, path)
@@ -61,7 +64,7 @@ class EnrichmentService:
         self.ai = OpenAICompatibleClient(self.settings)
 
     def _resource_model(self, resource_id: str) -> Resource:
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             resource = session.get(Resource, resource_id)
             if resource is None:
                 raise ResourceNotFound(resource_id)
@@ -171,7 +174,7 @@ class EnrichmentService:
                 resource.domain or "",
             )
 
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             stored = session.get(Resource, resource_id)
             if stored is None:
                 raise ResourceNotFound(resource_id)
@@ -252,7 +255,7 @@ class EnrichmentService:
             if is_pdf:
                 thumbnail_path = self._render_pdf_thumbnail(resource_id, extracted.raw_bytes)
 
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             stored = session.get(Resource, resource_id)
             if stored is None:
                 raise ResourceNotFound(resource_id)
@@ -320,7 +323,7 @@ class EnrichmentService:
             {"resource_id": resource_id},
             enqueue_missing=True,
         )
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             stored = session.get(Resource, resource_id)
             if stored:
                 stored.thumbnail_media_id = lookup.media_id
@@ -346,7 +349,7 @@ class EnrichmentService:
             "structured": result.structured,
             "tags": result.tags,
         }
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             stored = session.get(Resource, resource_id)
             if stored is None:
                 raise ResourceNotFound(resource_id)
@@ -393,7 +396,7 @@ class EnrichmentService:
             content=content,
             question=question,
         )
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             session.add(
                 AIArtifact(
                     id=new_id(),
@@ -434,7 +437,7 @@ class EnrichmentService:
     def record_failure(self, resource_id: Optional[str], error: str) -> None:
         if not resource_id:
             return
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             resource = session.get(Resource, resource_id)
             if resource is None:
                 return

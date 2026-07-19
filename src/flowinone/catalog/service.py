@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ from src.flowinone.resource_library.canonical import normalize_resource_url
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
+
+LOGGER = logging.getLogger(__name__)
 
 CATALOG_SOURCES = ("local", "eagle", "bookmarks", "resources")
 CATALOG_SORTS = (
@@ -367,7 +370,7 @@ class CatalogSyncService:
         return count
 
     def sync_resource(self, resource_id: str) -> int:
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             return self._sync_resources(conn, resource_id)
 
     def _sync_bookmarks(self, conn) -> int:
@@ -443,8 +446,12 @@ class CatalogSyncService:
             count += 1
         return count
 
-    def sync(self, sources: Iterable[str] = CATALOG_SOURCES) -> dict[str, dict[str, Any]]:
-        selected = [source for source in sources if source in CATALOG_SOURCES]
+    @staticmethod
+    def _database_is_locked(exc: Exception) -> bool:
+        message = str(exc).casefold()
+        return "database is locked" in message or "database table is locked" in message
+
+    def _sync_selected(self, selected: Sequence[str]) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
         loaders = {"resources": self._sync_resources, "bookmarks": self._sync_bookmarks, "local": self._sync_local, "eagle": self._sync_eagle}
         for source in selected:
@@ -452,7 +459,7 @@ class CatalogSyncService:
             with self.database.engine.connect() as conn:
                 previous_count = int(conn.execute(text("SELECT item_count FROM catalog_sync_state WHERE source_kind=:source"), {"source": source}).scalar() or 0)
             try:
-                with self.database.engine.begin() as conn:
+                with self.database.write_transaction() as conn:
                     conn.execute(text("UPDATE catalog_origins SET stale=1 WHERE source_kind=:source"), {"source": source})
                     count = loaders[source](conn)
                     conn.execute(
@@ -461,13 +468,43 @@ class CatalogSyncService:
                     )
                 result[source] = {"status": "complete", "count": count}
             except Exception as exc:
-                with self.database.engine.begin() as conn:
-                    conn.execute(
-                        text("INSERT INTO catalog_sync_state(source_kind,status,item_count,error_message,synced_at) VALUES(:source,'failed',:count,:error,:now) ON CONFLICT(source_kind) DO UPDATE SET status='failed',item_count=:count,error_message=:error,synced_at=:now"),
-                        {"source": source, "count": previous_count, "error": str(exc)[:2000], "now": now},
-                    )
+                # A lock error means another process owns SQLite's writer lock.
+                # Retrying the failure-status INSERT immediately would wait for
+                # the same timeout and used to turn a recoverable sync failure
+                # into the unhandled 500 reported by the Windows app.
+                if not self._database_is_locked(exc):
+                    try:
+                        with self.database.write_transaction() as conn:
+                            conn.execute(
+                                text("INSERT INTO catalog_sync_state(source_kind,status,item_count,error_message,synced_at) VALUES(:source,'failed',:count,:error,:now) ON CONFLICT(source_kind) DO UPDATE SET status='failed',item_count=:count,error_message=:error,synced_at=:now"),
+                                {"source": source, "count": previous_count, "error": str(exc)[:2000], "now": now},
+                            )
+                    except Exception:
+                        LOGGER.warning(
+                            "Unable to record failed Catalog sync for %s",
+                            source,
+                            exc_info=True,
+                        )
                 result[source] = {"status": "failed", "error": str(exc)}
         return result
+
+    def sync(self, sources: Iterable[str] = CATALOG_SOURCES) -> dict[str, dict[str, Any]]:
+        """Synchronize sources without allowing overlapping full projections."""
+        selected = tuple(source for source in sources if source in CATALOG_SOURCES)
+        with self.database.catalog_sync():
+            return self._sync_selected(selected)
+
+    def sync_if_empty(self, sources: Iterable[str] = CATALOG_SOURCES) -> dict[str, dict[str, Any]]:
+        """Run the initial projection once when concurrent pages open together."""
+        selected = tuple(source for source in sources if source in CATALOG_SOURCES)
+        with self.database.catalog_sync():
+            with self.database.engine.connect() as conn:
+                populated = bool(
+                    conn.execute(
+                        text("SELECT 1 FROM catalog_items WHERE is_deleted=0 LIMIT 1")
+                    ).first()
+                )
+            return {} if populated else self._sync_selected(selected)
 
 
 class CatalogService:
@@ -669,7 +706,7 @@ class CatalogService:
         if event_type not in {"open", "view", "favorite", "unfavorite", "hide", "unhide"}:
             raise ValueError("不支援的 Catalog event")
         now = utc_now_text()
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             if conn.execute(text("SELECT 1 FROM catalog_items WHERE id=:id"), {"id": item_id}).first() is None:
                 raise LookupError(item_id)
             conn.execute(text("INSERT INTO catalog_events(id,catalog_item_id,event_type,event_value,session_id,metadata_json,created_at) VALUES(:id,:item,:type,:value,:session,:metadata,:created)"), {"id": new_id(), "item": item_id, "type": event_type, "value": value, "session": session_id, "metadata": json.dumps(metadata or {}, ensure_ascii=False), "created": now})
@@ -687,7 +724,7 @@ class CatalogService:
         now = utc_now_text()
         session_id = session_id or new_id()
         focused = str(payload.get("focused_item_id") or "").strip() or None
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             conn.execute(
                 text(
                     """

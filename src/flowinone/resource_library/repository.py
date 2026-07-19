@@ -294,7 +294,7 @@ class ResourceRepository:
         return resource, created
 
     def get(self, resource_id: str) -> dict:
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             resource = session.scalar(
                 select(Resource).options(*_resource_options()).where(Resource.id == resource_id)
             )
@@ -304,7 +304,7 @@ class ResourceRepository:
 
     def get_by_canonical_url(self, canonical_url: str) -> dict:
         _, url_hash = resource_identity(canonical_url)
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             resource = session.scalar(
                 select(Resource).options(*_resource_options()).where(Resource.url_hash == url_hash)
             )
@@ -324,7 +324,7 @@ class ResourceRepository:
     ) -> ResourcePage:
         page = max(1, page)
         per_page = max(1, min(per_page, 100))
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             conditions = []
             if source_types:
                 conditions.append(Resource.source_type.in_(list(source_types)))
@@ -395,7 +395,7 @@ class ResourceRepository:
             "availability",
             "title",
         }
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             resource = session.get(Resource, resource_id)
             if resource is None:
                 raise ResourceNotFound(resource_id)
@@ -414,7 +414,7 @@ class ResourceRepository:
             for name in names
             if normalize_tag(name)
         }
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             resource = session.get(Resource, resource_id)
             if resource is None:
                 raise ResourceNotFound(resource_id)
@@ -442,7 +442,7 @@ class ResourceRepository:
     def remove_tag(self, resource_id: str, tag_id: str, source: str = "user") -> dict:
         if source not in TAG_SOURCES:
             raise ValueError("無效的 tag source")
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             if session.get(Resource, resource_id) is None:
                 raise ResourceNotFound(resource_id)
             session.execute(
@@ -455,7 +455,7 @@ class ResourceRepository:
         return self.get(resource_id)
 
     def delete(self, resource_id: str) -> None:
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             result = session.execute(delete(Resource).where(Resource.id == resource_id))
             if not result.rowcount:
                 raise ResourceNotFound(resource_id)
@@ -465,7 +465,7 @@ class ResourceRepository:
             )
 
     def stats(self) -> dict:
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             total = int(session.scalar(select(func.count(Resource.id))) or 0)
             source_types = {
                 key: int(value)
@@ -490,7 +490,7 @@ class ResourceRepository:
         }
 
     def latest_content_text(self, resource_id: str) -> str:
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             content = session.scalar(
                 select(ResourceContent)
                 .where(

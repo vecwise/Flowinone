@@ -275,7 +275,7 @@ class CatalogGalleryService:
                 source_counts={source: 0 for source in GALLERY_SOURCES}, source_errors=source_errors,
             )
         if self.catalog.count() == 0:
-            self.sync.sync(("resources", *active_sources))
+            self.sync.sync_if_empty(("resources", *active_sources))
         payload = self.catalog.list(
             CatalogQuery.create(
                 q=query.q, scope="gallery", sources=active_sources,

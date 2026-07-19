@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -48,6 +51,64 @@ def _catalog(tmp_path: Path):
         )
     assert first == merged
     return database, first, second, third
+
+
+def test_initial_catalog_sync_is_single_flight(monkeypatch, tmp_path):
+    database = get_resource_database(tmp_path / "single-flight.db")
+    loader_started = Event()
+    allow_loader_to_finish = Event()
+    calls = 0
+
+    def load_one_bookmark(service, conn):
+        nonlocal calls
+        calls += 1
+        loader_started.set()
+        assert allow_loader_to_finish.wait(timeout=2)
+        service._upsert(
+            conn,
+            identity_key="url:single-flight",
+            source_kind="bookmarks",
+            source_key="https://example.com/single-flight",
+            item_type="bookmark",
+            title="Single flight",
+            detail_uri="https://example.com/single-flight",
+            original_url="https://example.com/single-flight",
+        )
+        return 1
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_bookmarks", load_one_bookmark)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(
+            CatalogSyncService(database).sync_if_empty,
+            ("bookmarks",),
+        )
+        assert loader_started.wait(timeout=2)
+        second = executor.submit(
+            CatalogSyncService(database).sync_if_empty,
+            ("bookmarks",),
+        )
+        allow_loader_to_finish.set()
+        assert first.result(timeout=5)["bookmarks"]["status"] == "complete"
+        assert second.result(timeout=5) == {}
+
+    assert calls == 1
+
+
+def test_catalog_lock_failure_does_not_raise_a_second_operational_error(tmp_path):
+    database = get_resource_database(tmp_path / "locked.db")
+    with database.engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA busy_timeout=50")
+
+    blocker = sqlite3.connect(database.path)
+    blocker.execute("BEGIN IMMEDIATE")
+    try:
+        result = CatalogSyncService(database).sync(("bookmarks",))
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+    assert result["bookmarks"]["status"] == "failed"
+    assert "database is locked" in result["bookmarks"]["error"]
 
 
 def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path):

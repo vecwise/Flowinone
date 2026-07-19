@@ -11,7 +11,7 @@ from .repository import ResourceRepository
 
 def rebuild_fts(database: ResourceDatabase) -> dict:
     repository = ResourceRepository(database)
-    with database.session() as session:
+    with database.session(write=True) as session:
         resource_ids = list(session.scalars(select(Resource.id)))
     rebuilt = 0
     for resource_id in resource_ids:
@@ -25,7 +25,7 @@ def rebuild_fts(database: ResourceDatabase) -> dict:
 
 def retry_failed_jobs(database: ResourceDatabase) -> dict:
     now = utc_now_text()
-    with database.session() as session:
+    with database.session(write=True) as session:
         result = session.execute(
             update(ProcessingJob)
             .where(ProcessingJob.status == "failed")

@@ -83,7 +83,7 @@ class DiscoveryService:
         }
         now = utc_now_text()
         inserted = 0
-        with self.database.engine.begin() as conn:
+        with self.database.write_transaction() as conn:
             conn.execute(text("DELETE FROM item_relations WHERE algorithm_version=:version"), {"version": self.version})
             for source, values in bounded.items():
                 for target, score, reason in values:

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import threading
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy import Connection, Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .settings import PROJECT_ROOT, get_resource_settings
@@ -57,6 +57,12 @@ class ResourceDatabase:
     def __init__(self, path: Path, *, migrate: bool = True):
         self.path = path.expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # SQLite permits concurrent readers but only one writer.  Flowinone has
+        # Flask request threads plus background resource workers, so serialize
+        # their writes in-process instead of making them race until SQLite's
+        # busy timeout expires (which is especially easy to hit on Windows).
+        self._write_lock = threading.RLock()
+        self._catalog_sync_lock = threading.RLock()
         if migrate:
             upgrade_database(self.path)
 
@@ -84,17 +90,46 @@ class ResourceDatabase:
             cursor.close()
 
     @contextmanager
-    def session(self) -> Iterator[Session]:
-        """Commit a unit of work or roll it back before re-raising."""
-        session = self._session_factory()
-        try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
+    def session(self, *, write: bool = True) -> Iterator[Session]:
+        """Commit a unit of work, serializing it when it can write.
+
+        Read-only callers should pass ``write=False`` so WAL-mode reads can
+        continue while a long Catalog projection is being rebuilt.
+        """
+        lock = self._write_lock if write else _NOOP_LOCK
+        with lock:
+            session = self._session_factory()
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+
+    @contextmanager
+    def write_transaction(self) -> Iterator[Connection]:
+        """Open one SQLAlchemy write transaction without competing threads."""
+        with self._write_lock:
+            with self.engine.begin() as connection:
+                yield connection
+
+    @contextmanager
+    def catalog_sync(self) -> Iterator[None]:
+        """Allow only one full Catalog synchronization at a time."""
+        with self._catalog_sync_lock:
+            yield
+
+    @contextmanager
+    def raw_write_connection(self):
+        """Return a pooled DB-API connection guarded for a manual transaction."""
+        with self._write_lock:
+            connection = self.engine.raw_connection()
+            try:
+                yield connection
+            finally:
+                connection.close()
 
     def dispose(self) -> None:
         """Release pooled SQLite connections."""
@@ -102,7 +137,7 @@ class ResourceDatabase:
 
     def sync_fts(self, resource_id: str, *, extracted_text: str = "") -> None:
         """Replace one resource's denormalized FTS row."""
-        with self.engine.begin() as conn:
+        with self.write_transaction() as conn:
             row = conn.execute(
                 text(
                     """
@@ -143,6 +178,17 @@ class ResourceDatabase:
 
 _DATABASES: dict[Path, ResourceDatabase] = {}
 _DATABASES_LOCK = threading.Lock()
+
+
+class _NoopLock:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc_value, _traceback) -> None:
+        return None
+
+
+_NOOP_LOCK = _NoopLock()
 
 
 def get_resource_database(path: Optional[Path] = None) -> ResourceDatabase:

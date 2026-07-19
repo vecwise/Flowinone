@@ -70,7 +70,7 @@ class ResourceService:
             self.link_thumbnail_cache if link_thumbnails is None else link_thumbnails
         )
         summary = ImportSummary(errors=[])
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             for record in records:
                 summary.total += 1
                 try:
@@ -121,7 +121,7 @@ class ResourceService:
         records = load_bookmarks(path, format_hint)
         summary = self.import_records(records, enqueue=enqueue)
         stat = path.expanduser().stat()
-        with self.database.session() as session:
+        with self.database.session(write=True) as session:
             key = f"import:{path.expanduser().resolve()}"
             state = session.get(AppState, key)
             value = f"{stat.st_mtime_ns}:{stat.st_size}:{utc_now_text()}"
@@ -145,7 +145,7 @@ class ResourceService:
         stat = resolved.stat()
         key = f"import:{resolved}"
         signature = f"{stat.st_mtime_ns}:{stat.st_size}"
-        with self.database.session() as session:
+        with self.database.session(write=False) as session:
             state = session.get(AppState, key)
             if state and str(state.value or "").startswith(signature + ":"):
                 return {"changed": False, "path": str(resolved)}

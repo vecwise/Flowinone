@@ -175,7 +175,7 @@ def navigator_page():
     effective_query = CatalogQuery.create(**values)
 
     if service.count() == 0:
-        CatalogSyncService(_database()).sync(effective_query.sources)
+        CatalogSyncService(_database()).sync_if_empty(effective_query.sources)
     try:
         payload = service.list(effective_query) if active_sources else {
             "items": [], "next_cursor": None, "total_estimate": 0,
