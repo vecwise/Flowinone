@@ -94,21 +94,173 @@ def test_initial_catalog_sync_is_single_flight(monkeypatch, tmp_path):
     assert calls == 1
 
 
-def test_catalog_lock_failure_does_not_raise_a_second_operational_error(tmp_path):
+def test_catalog_retries_a_transient_sqlite_lock_with_backoff(monkeypatch, tmp_path):
+    database = get_resource_database(tmp_path / "transient-lock.db")
+    with database.engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA busy_timeout=10")
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_bookmarks", lambda _self, _conn: 2)
+    blocker = sqlite3.connect(database.path)
+    blocker.execute("BEGIN IMMEDIATE")
+    delays = []
+
+    def release_lock(delay):
+        delays.append(delay)
+        blocker.rollback()
+
+    try:
+        result = CatalogSyncService(
+            database,
+            lock_max_retries=2,
+            lock_retry_base_delay=0.01,
+            sleep=release_lock,
+        ).sync(("bookmarks",))
+    finally:
+        blocker.close()
+
+    assert result["bookmarks"] == {
+        "status": "complete",
+        "count": 2,
+        "attempts": 2,
+        "max_attempts": 3,
+        "retry_count": 1,
+        "error": None,
+        "synced_at": result["bookmarks"]["synced_at"],
+    }
+    assert delays == [0.01]
+    assert CatalogService(database).sync_status()["bookmarks"]["status"] == "complete"
+
+
+def test_catalog_lock_failure_is_bounded_and_does_not_raise(tmp_path):
     database = get_resource_database(tmp_path / "locked.db")
     with database.engine.connect() as conn:
-        conn.exec_driver_sql("PRAGMA busy_timeout=50")
+        conn.exec_driver_sql("PRAGMA busy_timeout=10")
 
     blocker = sqlite3.connect(database.path)
     blocker.execute("BEGIN IMMEDIATE")
+    delays = []
     try:
-        result = CatalogSyncService(database).sync(("bookmarks",))
+        result = CatalogSyncService(
+            database,
+            lock_max_retries=2,
+            lock_retry_base_delay=0.01,
+            sleep=delays.append,
+        ).sync(("bookmarks",))
     finally:
         blocker.rollback()
         blocker.close()
 
     assert result["bookmarks"]["status"] == "failed"
+    assert result["bookmarks"]["locked"] is True
+    assert result["bookmarks"]["attempts"] == 3
+    assert result["bookmarks"]["retry_count"] == 2
+    assert delays == [0.01, 0.02]
     assert "database is locked" in result["bookmarks"]["error"]
+    assert CatalogService(database).sync_status()["bookmarks"]["status"] == "failed"
+
+
+def test_catalog_preserves_non_lock_failure_record(monkeypatch, tmp_path):
+    database = get_resource_database(tmp_path / "source-failure.db")
+
+    def fail_source(_service, _conn):
+        raise ValueError("bookmark parser failed")
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_bookmarks", fail_source)
+    result = CatalogSyncService(database, sleep=lambda _delay: None).sync(("bookmarks",))
+
+    assert result["bookmarks"]["status"] == "failed"
+    assert result["bookmarks"]["locked"] is False
+    assert result["bookmarks"]["recorded"] is True
+    assert result["bookmarks"]["retry_count"] == 0
+    with database.engine.connect() as conn:
+        state = conn.exec_driver_sql(
+            "SELECT status,error_message FROM catalog_sync_state WHERE source_kind='bookmarks'"
+        ).mappings().one()
+    assert dict(state) == {
+        "status": "failed",
+        "error_message": "bookmark parser failed",
+    }
+
+
+def test_catalog_exposes_retrying_status_while_backing_off(monkeypatch, tmp_path):
+    database = get_resource_database(tmp_path / "live-retry.db")
+    retrying = Event()
+    continue_retry = Event()
+    calls = 0
+
+    def lock_once(_service, _conn):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return 1
+
+    def wait_during_backoff(_delay):
+        retrying.set()
+        assert continue_retry.wait(timeout=2)
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_bookmarks", lock_once)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            CatalogSyncService(
+                database,
+                lock_max_retries=2,
+                lock_retry_base_delay=0.01,
+                sleep=wait_during_backoff,
+            ).sync,
+            ("bookmarks",),
+        )
+        assert retrying.wait(timeout=2)
+        live = CatalogService(database).sync_status()["bookmarks"]
+        assert live["status"] == "retrying"
+        assert live["next_attempt"] == 2
+        continue_retry.set()
+        assert future.result(timeout=5)["bookmarks"]["status"] == "complete"
+
+
+def test_concurrent_catalog_sync_requests_return_200(monkeypatch, tmp_path):
+    database = get_resource_database(tmp_path / "concurrent-api.db")
+    first_started = Event()
+    allow_first = Event()
+    calls = 0
+
+    def slow_bookmark_sync(_service, _conn):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            assert allow_first.wait(timeout=2)
+        return 0
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_bookmarks", slow_bookmark_sync)
+    app = Flask(
+        "catalog-concurrent",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(
+        TESTING=True,
+        FLOWINONE_RESOURCE_DB_PATH=str(database.path),
+        FLOWINONE_RESOURCE_LINK_THUMBNAILS=False,
+    )
+    register_routes(app)
+
+    def request_sync():
+        with app.test_client() as client:
+            return client.post(
+                "/api/catalog/sync",
+                json={"sources": ["bookmarks"]},
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(request_sync)
+        assert first_started.wait(timeout=2)
+        second = executor.submit(request_sync)
+        allow_first.set()
+        responses = (first.result(timeout=5), second.result(timeout=5))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert all(response.get_json()["bookmarks"]["status"] == "complete" for response in responses)
 
 
 def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path):
@@ -211,6 +363,10 @@ def test_new_catalog_routes_render(tmp_path):
         sync._upsert(conn, identity_key="local:web", source_kind="local", source_key="web", item_type="image", title="Web item", detail_uri="/image/web.jpg")
         sync._upsert(conn, identity_key="url:web", source_kind="bookmarks", source_key="https://example.com/web", item_type="bookmark", title="Web bookmark", detail_uri="https://example.com/web", original_url="https://example.com/web")
         sync._upsert(conn, identity_key="url:web", source_kind="resources", source_key="resource-web", item_type="article", title="Web resource", detail_uri="/resources/resource-web/", original_url="https://example.com/web", prefer=True)
+    database.set_catalog_sync_status("local", status="complete", item_count=1, retry_count=0)
+    database.set_catalog_sync_status("eagle", status="retrying", next_attempt=2, max_attempts=4)
+    database.set_catalog_sync_status("bookmarks", status="failed", error="bookmark source failed")
+    database.set_catalog_sync_status("resources", status="syncing", attempt=1, max_attempts=4)
     app = Flask("catalog-next", template_folder=str(Path(__file__).parents[1] / "templates"), static_folder=str(Path(__file__).parents[1] / "static"))
     app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(tmp_path / "web.db"), FLOWINONE_RESOURCE_LINK_THUMBNAILS=False)
     register_routes(app)
@@ -219,6 +375,22 @@ def test_new_catalog_routes_render(tmp_path):
     assert gallery.status_code == 200
     assert b"Cross-source navigator" in gallery.data
     assert gallery.data.count(b'type="checkbox" name="source"') == 3
+    sync_rows = BeautifulSoup(gallery.data, "html.parser").select("[data-catalog-sync-source]")
+    assert [row["data-status"] for row in sync_rows] == [
+        "complete",
+        "retrying",
+        "failed",
+        "syncing",
+    ]
+    assert [row.select_one("strong").get_text(strip=True) for row in sync_rows] == [
+        "成功",
+        "重試中",
+        "最終失敗",
+        "同步中",
+    ]
+    status_payload = client.get("/api/catalog/sync/status").get_json()["sources"]
+    assert status_payload["eagle"]["status"] == "retrying"
+    assert status_payload["bookmarks"]["error"] == "bookmark source failed"
     gallery_search = BeautifulSoup(gallery.data, "html.parser").select_one(
         "form.search-container"
     )

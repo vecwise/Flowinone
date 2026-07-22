@@ -8,9 +8,11 @@ import json
 import logging
 import os
 import re
+import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 from urllib.parse import quote
 
 from sqlalchemy import text
@@ -27,6 +29,9 @@ from src.flowinone.resource_library.models import new_id, utc_now_text
 LOGGER = logging.getLogger(__name__)
 
 CATALOG_SOURCES = ("local", "eagle", "bookmarks", "resources")
+CATALOG_LOCK_MAX_RETRIES = 3
+CATALOG_LOCK_RETRY_BASE_DELAY = 0.1
+CATALOG_LOCK_RETRY_MAX_DELAY = 1.0
 CATALOG_SORTS = (
     "newest",
     "recently_added",
@@ -167,8 +172,18 @@ class CatalogQuery:
 class CatalogSyncService:
     """Incrementally project source-owned records into the shared Catalog."""
 
-    def __init__(self, database: ResourceDatabase):
+    def __init__(
+        self,
+        database: ResourceDatabase,
+        *,
+        lock_max_retries: int = CATALOG_LOCK_MAX_RETRIES,
+        lock_retry_base_delay: float = CATALOG_LOCK_RETRY_BASE_DELAY,
+        sleep: Callable[[float], None] | None = None,
+    ):
         self.database = database
+        self.lock_max_retries = max(0, int(lock_max_retries))
+        self.lock_retry_base_delay = max(0.0, float(lock_retry_base_delay))
+        self._sleep = sleep or time.sleep
 
     @staticmethod
     def _url_identity(url: str) -> tuple[str, str]:
@@ -448,44 +463,182 @@ class CatalogSyncService:
 
     @staticmethod
     def _database_is_locked(exc: Exception) -> bool:
-        message = str(exc).casefold()
-        return "database is locked" in message or "database table is locked" in message
+        """Return whether an exception chain represents SQLite BUSY/LOCKED."""
+        pending: list[BaseException] = [exc]
+        seen: set[int] = set()
+        while pending:
+            current = pending.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            if isinstance(current, sqlite3.Error):
+                code = getattr(current, "sqlite_errorcode", None)
+                if isinstance(code, int) and (code & 0xFF) in {
+                    sqlite3.SQLITE_BUSY,
+                    sqlite3.SQLITE_LOCKED,
+                }:
+                    return True
+                message = str(current).casefold()
+                if (
+                    "database is locked" in message
+                    or "database table is locked" in message
+                ):
+                    return True
+            for nested in (
+                getattr(current, "orig", None),
+                current.__cause__,
+                current.__context__,
+            ):
+                if isinstance(nested, BaseException):
+                    pending.append(nested)
+        return False
+
+    def _retry_delay(self, retry_number: int) -> float:
+        return min(
+            self.lock_retry_base_delay * (2 ** max(0, retry_number - 1)),
+            CATALOG_LOCK_RETRY_MAX_DELAY,
+        )
+
+    def _publish_status(self, source: str, status: str, **details: Any) -> None:
+        self.database.set_catalog_sync_status(
+            source,
+            status=status,
+            **details,
+        )
+
+    def _record_failure(
+        self,
+        source: str,
+        previous_count: int,
+        error: Exception,
+        now: str,
+    ) -> bool:
+        """Persist a non-lock source error without ever replacing that error."""
+        for attempt in range(1, self.lock_max_retries + 2):
+            try:
+                with self.database.write_transaction() as conn:
+                    conn.execute(
+                        text(
+                            "INSERT INTO catalog_sync_state(source_kind,status,item_count,error_message,synced_at) "
+                            "VALUES(:source,'failed',:count,:error,:now) "
+                            "ON CONFLICT(source_kind) DO UPDATE SET status='failed',item_count=:count,error_message=:error,synced_at=:now"
+                        ),
+                        {
+                            "source": source,
+                            "count": previous_count,
+                            "error": str(error)[:2000],
+                            "now": now,
+                        },
+                    )
+                return True
+            except Exception as record_exc:
+                can_retry = (
+                    self._database_is_locked(record_exc)
+                    and attempt <= self.lock_max_retries
+                )
+                if can_retry:
+                    self._sleep(self._retry_delay(attempt))
+                    continue
+                LOGGER.warning(
+                    "Unable to record failed Catalog sync for %s",
+                    source,
+                    exc_info=True,
+                )
+                return False
+        return False
 
     def _sync_selected(self, selected: Sequence[str]) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
         loaders = {"resources": self._sync_resources, "bookmarks": self._sync_bookmarks, "local": self._sync_local, "eagle": self._sync_eagle}
         for source in selected:
-            now = utc_now_text()
-            with self.database.engine.connect() as conn:
-                previous_count = int(conn.execute(text("SELECT item_count FROM catalog_sync_state WHERE source_kind=:source"), {"source": source}).scalar() or 0)
-            try:
-                with self.database.write_transaction() as conn:
-                    conn.execute(text("UPDATE catalog_origins SET stale=1 WHERE source_kind=:source"), {"source": source})
-                    count = loaders[source](conn)
-                    conn.execute(
-                        text("INSERT INTO catalog_sync_state(source_kind,status,item_count,synced_at) VALUES(:source,'complete',:count,:now) ON CONFLICT(source_kind) DO UPDATE SET status='complete',item_count=:count,error_message=NULL,synced_at=:now"),
-                        {"source": source, "count": count, "now": now},
-                    )
-                result[source] = {"status": "complete", "count": count}
-            except Exception as exc:
-                # A lock error means another process owns SQLite's writer lock.
-                # Retrying the failure-status INSERT immediately would wait for
-                # the same timeout and used to turn a recoverable sync failure
-                # into the unhandled 500 reported by the Windows app.
-                if not self._database_is_locked(exc):
-                    try:
-                        with self.database.write_transaction() as conn:
+            max_attempts = self.lock_max_retries + 1
+            previous_count = 0
+            self._publish_status(
+                source,
+                "syncing",
+                attempt=1,
+                max_attempts=max_attempts,
+                retry_count=0,
+                error=None,
+            )
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    with self.database.engine.connect() as conn:
+                        previous_count = int(
                             conn.execute(
-                                text("INSERT INTO catalog_sync_state(source_kind,status,item_count,error_message,synced_at) VALUES(:source,'failed',:count,:error,:now) ON CONFLICT(source_kind) DO UPDATE SET status='failed',item_count=:count,error_message=:error,synced_at=:now"),
-                                {"source": source, "count": previous_count, "error": str(exc)[:2000], "now": now},
-                            )
-                    except Exception:
-                        LOGGER.warning(
-                            "Unable to record failed Catalog sync for %s",
-                            source,
-                            exc_info=True,
+                                text(
+                                    "SELECT item_count FROM catalog_sync_state "
+                                    "WHERE source_kind=:source"
+                                ),
+                                {"source": source},
+                            ).scalar()
+                            or 0
                         )
-                result[source] = {"status": "failed", "error": str(exc)}
+                    now = utc_now_text()
+                    with self.database.write_transaction() as conn:
+                        conn.execute(text("UPDATE catalog_origins SET stale=1 WHERE source_kind=:source"), {"source": source})
+                        count = loaders[source](conn)
+                        conn.execute(
+                            text("INSERT INTO catalog_sync_state(source_kind,status,item_count,synced_at) VALUES(:source,'complete',:count,:now) ON CONFLICT(source_kind) DO UPDATE SET status='complete',item_count=:count,error_message=NULL,synced_at=:now"),
+                            {"source": source, "count": count, "now": now},
+                        )
+                    completed = {
+                        "status": "complete",
+                        "count": count,
+                        "item_count": count,
+                        "attempts": attempt,
+                        "max_attempts": max_attempts,
+                        "retry_count": attempt - 1,
+                        "error": None,
+                        "synced_at": now,
+                    }
+                    self._publish_status(source, **completed)
+                    result[source] = {
+                        key: value
+                        for key, value in completed.items()
+                        if key != "item_count"
+                    }
+                    break
+                except Exception as exc:
+                    locked = self._database_is_locked(exc)
+                    if locked and attempt < max_attempts:
+                        retry_number = attempt
+                        delay = self._retry_delay(retry_number)
+                        self._publish_status(
+                            source,
+                            "retrying",
+                            attempt=attempt,
+                            next_attempt=attempt + 1,
+                            max_attempts=max_attempts,
+                            retry_count=retry_number,
+                            retry_in_seconds=delay,
+                            error=str(exc),
+                        )
+                        self._sleep(delay)
+                        continue
+
+                    now = utc_now_text()
+                    recorded = False
+                    if not locked:
+                        recorded = self._record_failure(
+                            source,
+                            previous_count,
+                            exc,
+                            now,
+                        )
+                    failed = {
+                        "status": "failed",
+                        "attempts": attempt,
+                        "max_attempts": max_attempts,
+                        "retry_count": attempt - 1,
+                        "error": str(exc),
+                        "locked": locked,
+                        "recorded": recorded,
+                        "synced_at": now,
+                    }
+                    self._publish_status(source, **failed)
+                    result[source] = failed
+                    break
         return result
 
     def sync(self, sources: Iterable[str] = CATALOG_SOURCES) -> dict[str, dict[str, Any]]:
@@ -657,16 +810,47 @@ class CatalogService:
             sources = dict(conn.execute(text("SELECT source_kind,COUNT(DISTINCT catalog_item_id) FROM catalog_origins WHERE stale=0 GROUP BY source_kind")).all())
             types = dict(conn.execute(text("SELECT item_type,COUNT(*) FROM catalog_items WHERE is_deleted=0 GROUP BY item_type")).all())
             tags = [dict(row) for row in conn.execute(text("SELECT t.name,COUNT(DISTINCT it.catalog_item_id) AS count FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id GROUP BY t.id ORDER BY count DESC,t.name LIMIT 100")).mappings()]
-            sync = {
-                row["source_kind"]: {
-                    "status": row["status"], "item_count": row["item_count"],
-                    "error": row["error_message"], "synced_at": row["synced_at"],
+        return {
+            "sources": sources,
+            "types": types,
+            "tags": tags,
+            "sync": self.sync_status(),
+        }
+
+    def sync_status(self) -> dict[str, dict[str, Any]]:
+        """Merge durable results with lock-safe, process-local live progress."""
+        try:
+            with self.database.engine.connect() as conn:
+                sync = {
+                    row["source_kind"]: {
+                        "status": row["status"],
+                        "item_count": row["item_count"],
+                        "error": row["error_message"],
+                        "synced_at": row["synced_at"],
+                    }
+                    for row in conn.execute(
+                        text(
+                            "SELECT source_kind,status,item_count,error_message,synced_at "
+                            "FROM catalog_sync_state"
+                        )
+                    ).mappings()
                 }
-                for row in conn.execute(
-                    text("SELECT source_kind,status,item_count,error_message,synced_at FROM catalog_sync_state")
-                ).mappings()
-            }
-        return {"sources": sources, "types": types, "tags": tags, "sync": sync}
+        except Exception as exc:
+            if not CatalogSyncService._database_is_locked(exc):
+                raise
+            sync = {}
+        for source, runtime_state in self.database.catalog_sync_status().items():
+            durable_state = sync.get(source, {})
+            runtime_is_active = runtime_state.get("status") in {"syncing", "retrying"}
+            runtime_is_current = str(runtime_state.get("synced_at") or "") >= str(
+                durable_state.get("synced_at") or ""
+            )
+            if runtime_is_active or runtime_is_current:
+                sync[source] = {
+                    **durable_state,
+                    **runtime_state,
+                }
+        return sync
 
     def get(self, item_id: str) -> dict[str, Any]:
         with self.database.engine.connect() as conn:

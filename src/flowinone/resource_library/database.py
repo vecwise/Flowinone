@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from alembic import command
 from alembic.config import Config
@@ -63,6 +63,8 @@ class ResourceDatabase:
         # busy timeout expires (which is especially easy to hit on Windows).
         self._write_lock = threading.RLock()
         self._catalog_sync_lock = threading.RLock()
+        self._catalog_sync_status_lock = threading.Lock()
+        self._catalog_sync_status: dict[str, dict[str, Any]] = {}
         if migrate:
             upgrade_database(self.path)
 
@@ -121,6 +123,25 @@ class ResourceDatabase:
         with self._catalog_sync_lock:
             yield
 
+    def set_catalog_sync_status(self, source: str, **state: Any) -> None:
+        """Publish transient per-source progress without requiring a DB write.
+
+        SQLite cannot persist a ``retrying`` row while another process owns the
+        writer lock.  Keeping this small process-local snapshot lets Navigator
+        report the retry immediately and also preserves a final lock failure for
+        the lifetime of the app process.
+        """
+        with self._catalog_sync_status_lock:
+            self._catalog_sync_status[source] = dict(state)
+
+    def catalog_sync_status(self) -> dict[str, dict[str, Any]]:
+        """Return an isolated snapshot of transient Catalog sync progress."""
+        with self._catalog_sync_status_lock:
+            return {
+                source: dict(state)
+                for source, state in self._catalog_sync_status.items()
+            }
+
     @contextmanager
     def raw_write_connection(self):
         """Return a pooled DB-API connection guarded for a manual transaction."""
@@ -134,6 +155,8 @@ class ResourceDatabase:
     def dispose(self) -> None:
         """Release pooled SQLite connections."""
         self.engine.dispose()
+        with self._catalog_sync_status_lock:
+            self._catalog_sync_status.clear()
 
     def sync_fts(self, resource_id: str, *, extracted_text: str = "") -> None:
         """Replace one resource's denormalized FTS row."""

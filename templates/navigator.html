@@ -18,7 +18,31 @@
         <summary>來源管理</summary>
         <div class="navigator-maintenance-panel">
           <button class="action-button" id="catalog-reindex" type="button">重新建立索引</button>
-          <p id="catalog-sync-status" class="muted-text" aria-live="polite">{% for source, state in payload.facets.sync.items() %}{{ source }}：{{ state.status }}{% if not loop.last %} · {% endif %}{% else %}尚未建立索引{% endfor %}</p>
+          <div id="catalog-sync-status" class="catalog-sync-status" aria-live="polite">
+            <ul>
+              {% for source in catalog_sources %}
+              {% set state = payload.facets.sync.get(source.key, {}) %}
+              {% set status = state.get('status', 'idle') %}
+              <li data-catalog-sync-source="{{ source.key }}" data-status="{{ status }}">
+                <span>{{ source.label }}</span>
+                <strong data-catalog-sync-state>
+                  {% if status == 'complete' %}成功
+                  {% elif status == 'retrying' %}重試中
+                  {% elif status == 'failed' %}最終失敗
+                  {% elif status == 'syncing' %}同步中
+                  {% else %}尚未同步{% endif %}
+                </strong>
+                <small data-catalog-sync-detail>
+                  {% if status == 'complete' %}{{ state.get('item_count', 0) }} 筆{% if state.get('retry_count', 0) %} · 重試 {{ state.retry_count }} 次{% endif %}
+                  {% elif status == 'retrying' %}準備第 {{ state.get('next_attempt', 2) }}/{{ state.get('max_attempts', 4) }} 次嘗試
+                  {% elif status == 'failed' %}{{ state.get('error', '同步失敗') }}
+                  {% elif status == 'syncing' %}第 {{ state.get('attempt', 1) }}/{{ state.get('max_attempts', 4) }} 次嘗試
+                  {% else %}—{% endif %}
+                </small>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
         </div>
       </details>
     </div>
@@ -202,18 +226,71 @@
   });
 
   const reindex = document.getElementById('catalog-reindex');
-  const syncStatus = document.getElementById('catalog-sync-status');
+  const syncRows = new Map(
+    [...document.querySelectorAll('[data-catalog-sync-source]')]
+      .map((row) => [row.dataset.catalogSyncSource, row])
+  );
+  const renderSyncState = (source, state = {}) => {
+    const row = syncRows.get(source);
+    if (!row) return;
+    const status = state.status || 'idle';
+    const label = row.querySelector('[data-catalog-sync-state]');
+    const detail = row.querySelector('[data-catalog-sync-detail]');
+    row.dataset.status = status;
+    if (status === 'complete') {
+      label.textContent = '成功';
+      const count = state.count ?? state.item_count ?? 0;
+      detail.textContent = `${count} 筆${state.retry_count ? ` · 重試 ${state.retry_count} 次` : ''}`;
+    } else if (status === 'retrying') {
+      label.textContent = '重試中';
+      detail.textContent = `SQLite 暫時忙碌；準備第 ${state.next_attempt || 2}/${state.max_attempts || 4} 次嘗試`;
+    } else if (status === 'failed') {
+      label.textContent = '最終失敗';
+      detail.textContent = state.error || '同步失敗';
+    } else if (status === 'syncing') {
+      label.textContent = '同步中';
+      detail.textContent = `第 ${state.attempt || 1}/${state.max_attempts || 4} 次嘗試`;
+    } else {
+      label.textContent = '尚未同步';
+      detail.textContent = '—';
+    }
+  };
+  const renderSyncStates = (states = {}) => {
+    Object.entries(states).forEach(([source, state]) => renderSyncState(source, state));
+  };
   if (reindex) reindex.addEventListener('click', async () => {
+    const sources = [...syncRows.keys()];
     reindex.disabled = true;
-    syncStatus.textContent = '正在同步 Local、Eagle、Bookmarks、Resources…';
+    sources.forEach((source) => renderSyncState(source, {status: 'syncing', attempt: 1, max_attempts: 4}));
+    let pollInFlight = false;
+    const poll = async () => {
+      if (pollInFlight) return;
+      pollInFlight = true;
+      try {
+        const response = await fetch('/api/catalog/sync/status');
+        if (response.ok) renderSyncStates((await response.json()).sources);
+      } catch (_error) {
+        // The POST result remains authoritative if a progress poll is missed.
+      } finally {
+        pollInFlight = false;
+      }
+    };
+    const pollTimer = window.setInterval(poll, 100);
     try {
-      const response = await fetch('/api/catalog/sync', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sources: ['local', 'eagle', 'bookmarks', 'resources']})});
+      const response = await fetch('/api/catalog/sync', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sources})});
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '同步失敗');
-      syncStatus.textContent = Object.entries(result).map(([source, value]) => `${source}: ${value.status}${value.count === undefined ? '' : ` (${value.count})`}`).join(' · ');
-      window.setTimeout(() => window.location.reload(), 600);
+      renderSyncStates(result);
+      const failed = Object.values(result).some((state) => state.status === 'failed');
+      if (!failed) window.setTimeout(() => window.location.reload(), 800);
     } catch (error) {
-      syncStatus.textContent = error.message;
+      sources.forEach((source) => {
+        if (syncRows.get(source)?.dataset.status === 'syncing') {
+          renderSyncState(source, {status: 'failed', error: error.message});
+        }
+      });
+    } finally {
+      window.clearInterval(pollTimer);
       reindex.disabled = false;
     }
   });

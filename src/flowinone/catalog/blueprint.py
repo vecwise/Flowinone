@@ -207,6 +207,10 @@ def navigator_page():
             }
             for source in scope_sources
         ],
+        catalog_sources=[
+            {"key": source, "label": SOURCE_LABELS[source]}
+            for source in CATALOG_SOURCES
+        ],
         next_url=next_url,
         reset_url=_navigator_url(reset_query),
         random_url=_navigator_url(CatalogQuery.create(**random_values)),
@@ -316,6 +320,12 @@ def api_sync():
     payload = request.get_json(silent=True) or {}
     sources = payload.get("sources") or CATALOG_SOURCES
     return jsonify(CatalogSyncService(_database()).sync(sources))
+
+
+@bp.get("/api/catalog/sync/status")
+def api_sync_status():
+    """Expose per-source live retry progress to Navigator polling."""
+    return jsonify({"sources": CatalogService(_database()).sync_status()})
 
 
 def register_catalog(app: Flask) -> None:

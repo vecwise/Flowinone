@@ -263,7 +263,33 @@
     box-shadow: var(--fo-shadow-md);
 }
 
-.navigator-maintenance-panel p { margin: 0; line-height: 1.5; }
+.catalog-sync-status ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.catalog-sync-status li {
+    display: grid;
+    grid-template-columns: minmax(78px, 1fr) auto;
+    gap: 2px 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--fo-border);
+}
+
+.catalog-sync-status li > span,
+.catalog-sync-status li > strong { font-size: .82rem; }
+.catalog-sync-status li > strong { color: var(--fo-muted-text); }
+.catalog-sync-status li > small {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
+    color: var(--fo-muted-text);
+}
+.catalog-sync-status li[data-status="complete"] > strong { color: var(--fo-success, #2f7d4a); }
+.catalog-sync-status li[data-status="retrying"] > strong { color: var(--fo-warning, #a35b00); }
+.catalog-sync-status li[data-status="failed"] > strong { color: var(--fo-danger, #b42318); }
 
 .navigator-scope {
     display: grid;
