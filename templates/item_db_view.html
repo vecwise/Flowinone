@@ -12,9 +12,9 @@
             </p>
         </div>
         <div class="action-row">
-            <a class="action-button" href="{{ url_for('content_library') }}">返回來源總覽</a>
-            <a class="action-button {% if stale_count %}warning{% endif %}" href="{{ url_for('update_item_db_route') }}">同步索引</a>
-            {% if available_count %}<a class="action-button" href="{{ url_for('update_thumbnails_route') }}">補縮圖</a>{% endif %}
+            <a class="action-button" href="{{ url_for('local.content_library') }}">返回來源總覽</a>
+            <a class="action-button {% if stale_count %}warning{% endif %}" href="{{ url_for('local.update_item_db_route') }}">同步索引</a>
+            {% if available_count %}<a class="action-button" href="{{ url_for('local.update_thumbnails_route') }}">補縮圖</a>{% endif %}
         </div>
     </header>
 
@@ -67,7 +67,7 @@
                     <td>
                         <div class="tag-row">
                             {% for tag in item.tags[:4] %}
-                            <a class="tag-chip" href="{{ url_for('view_item_db', tag=tag) }}">#{{ tag }}</a>
+                            <a class="tag-chip" href="{{ url_for('local.view_item_db', tag=tag) }}">#{{ tag }}</a>
                             {% else %}
                             <span class="meta-chip">缺 tags</span>
                             {% endfor %}

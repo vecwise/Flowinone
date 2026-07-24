@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from flask import Flask, jsonify
 
 import routes
+from src.flowinone.web.eagle import attach_pagination_urls
 import src.eagle_api as eagle
 from src.eagle_api.client import EagleAdminClient, EagleClient
 from src.eagle_api.models import EagleCapabilities
@@ -197,7 +198,7 @@ def test_eagle_pagination_urls_preserve_existing_query_arguments():
                 "next_offset": 240,
             }
         }
-        routes._attach_eagle_pagination_urls(metadata)
+        attach_pagination_urls(metadata)
         return jsonify(metadata)
 
     response = app.test_client().get("/search?query=orange+cat&offset=120&limit=120")

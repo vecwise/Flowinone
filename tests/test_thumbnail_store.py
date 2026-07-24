@@ -119,3 +119,16 @@ def test_claim_jobs_honors_domain_filter(tmp_path):
 
     claimed = store.claim_jobs("test-worker", 4, domain_filter="example.com")
     assert [job["media_id"] for job in claimed] == [wanted.media_id]
+
+
+def test_runtime_lease_can_be_released_only_by_its_owner(tmp_path):
+    store = ThumbnailStore(str(tmp_path / "cache.db"), str(tmp_path / "thumbs"))
+    first = f"{os.getpid()}:first"
+    second = f"{os.getpid()}:second"
+
+    assert store.acquire_runtime_lease("thumbnail-worker", first)
+    assert not store.acquire_runtime_lease("thumbnail-worker", second)
+    store.release_runtime_lease("thumbnail-worker", second)
+    assert not store.acquire_runtime_lease("thumbnail-worker", second)
+    store.release_runtime_lease("thumbnail-worker", first)
+    assert store.acquire_runtime_lease("thumbnail-worker", second)

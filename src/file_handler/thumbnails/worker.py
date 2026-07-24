@@ -392,10 +392,16 @@ class ThumbnailWorker:
         return completed
 
     def run_forever(self) -> None:
-        self._run_loop(stop_when_idle=False)
+        try:
+            self._run_loop(stop_when_idle=False)
+        finally:
+            self.store.release_runtime_lease("thumbnail-worker", self.owner)
 
     def run_until_idle(self, max_jobs: Optional[int] = None) -> int:
-        return self._run_loop(stop_when_idle=True, max_jobs=max_jobs)
+        try:
+            return self._run_loop(stop_when_idle=True, max_jobs=max_jobs)
+        finally:
+            self.store.release_runtime_lease("thumbnail-worker", self.owner)
 
     def stop(self) -> None:
         self.stop_event.set()

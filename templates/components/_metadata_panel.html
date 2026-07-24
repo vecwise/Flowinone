@@ -92,7 +92,7 @@
       {% if compact_metadata %}
       <span class="tag-chip">#{{ tag }}</span>
       {% else %}
-      <a href="{{ url_for('view_images_by_tag', target_tag=tag) }}" class="tag-chip">#{{ tag }}</a>
+      <a href="{{ url_for('eagle.view_images_by_tag', target_tag=tag) }}" class="tag-chip">#{{ tag }}</a>
       {% endif %}
       {% endfor %}
     </div>
@@ -114,7 +114,7 @@
   <div class="metadata-field">
     <span>Filesystem path</span>
     <code>{{ metadata.filesystem_path }}</code>
-    <a class="action-button" href="{{ url_for('open_filesystem_path') }}?path={{ metadata.filesystem_path | urlencode }}">Open folder</a>
+    <a class="action-button" href="{{ url_for('local.open_filesystem_path') }}?path={{ metadata.filesystem_path | urlencode }}">Open folder</a>
   </div>
   {% endif %}
 {% if compact_metadata %}

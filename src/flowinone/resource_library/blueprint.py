@@ -12,7 +12,6 @@ from flask import (
     Flask,
     abort,
     current_app,
-    jsonify,
     redirect,
     render_template,
     request,
@@ -31,6 +30,30 @@ from .repository import ResourceNotFound
 from .service import ResourceService
 from .settings import get_resource_settings
 from .worker import ResourceWorker
+from src.flowinone.web.api import (
+    api_error,
+    parse_json,
+    parse_payload,
+    parse_query,
+    validated_json,
+)
+from src.flowinone.web.schemas import (
+    EnrichmentRequest,
+    ChromeImportFormRequest,
+    ImportSummaryOutput,
+    JobsOutput,
+    ResourceCreateOutput,
+    ResourceCreateRequest,
+    ResourceItemsOutput,
+    ResourceListQuery,
+    ResourceListOutput,
+    ResourceOutput,
+    ResourcePatchRequest,
+    ResourceSearchRequest,
+    ResourceTagDeleteQuery,
+    ResourceTagsRequest,
+    LimitQuery,
+)
 
 
 bp = Blueprint("resource_library", __name__)
@@ -85,7 +108,7 @@ def _thumbnail_url(resource: dict) -> str:
         )
     media_id = resource.get("thumbnail_media_id")
     if media_id and get_thumbnail_store().get_thumbnail_path(media_id):
-        return url_for("serve_bookmark_thumbnail", media_id=media_id)
+        return url_for("chrome.serve_bookmark_thumbnail", media_id=media_id)
     return url_for("static", filename="default_thumbnail.svg")
 
 
@@ -276,57 +299,61 @@ def resource_asset(resource_id: str, kind: str):
 
 @bp.get("/api/resources")
 def api_resources_list():
-    page = _service().repository.list(**_list_params())
-    return jsonify(
+    query = parse_query(ResourceListQuery, list_fields=("source_type",))
+    page = _service().repository.list(**_list_params(query.model_dump()))
+    return validated_json(
         {
             "items": [decorate_resource(item) for item in page.items],
             "total": page.total,
             "page": page.page,
             "per_page": page.per_page,
-        }
+        },
+        ResourceListOutput,
     )
 
 
 @bp.post("/api/resources")
 def api_resources_create():
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json(ResourceCreateRequest)
     try:
         result = _service().create_url(
-            str(payload.get("url") or ""),
-            title=str(payload.get("title") or ""),
-            enqueue=bool(payload.get("enqueue", True)),
+            payload.url,
+            title=payload.title,
+            enqueue=payload.enqueue,
         )
     except (ValueError, RuntimeError) as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
     result["resource"] = decorate_resource(result["resource"])
-    return jsonify(result), 201 if result["import"]["created"] else 200
+    return validated_json(
+        result,
+        ResourceCreateOutput,
+        201 if result["import"]["created"] else 200,
+    )
 
 
 @bp.get("/api/resources/<resource_id>")
 def api_resource_get(resource_id: str):
     try:
-        return jsonify(decorate_resource(_service().repository.get(resource_id)))
+        return validated_json(
+            decorate_resource(_service().repository.get(resource_id)), ResourceOutput
+        )
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
+        return api_error("not_found", 404)
 
 
 @bp.patch("/api/resources/<resource_id>")
 def api_resource_patch(resource_id: str):
-    payload = request.get_json(silent=True) or {}
-    changes = {
-        key: payload[key]
-        for key in ("title", "availability")
-        if key in payload
-    }
+    payload = parse_json(ResourcePatchRequest)
+    changes = payload.model_dump(exclude_none=True)
     if not changes:
-        return jsonify({"error": "Only title and availability are editable"}), 400
+        return api_error("Only title and availability are editable", 400)
     try:
         resource = _service().update_resource(resource_id, changes)
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
+        return api_error("not_found", 404)
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify(decorate_resource(resource))
+        return api_error(str(exc), 400)
+    return validated_json(decorate_resource(resource), ResourceOutput)
 
 
 @bp.delete("/api/resources/<resource_id>")
@@ -334,98 +361,103 @@ def api_resource_delete(resource_id: str):
     try:
         _service().repository.delete(resource_id)
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
+        return api_error("not_found", 404)
     return "", 204
 
 
 @bp.post("/api/resources/<resource_id>/tags")
 def api_resource_tags(resource_id: str):
-    payload = request.get_json(silent=True) or {}
-    tags = payload.get("tags") or []
-    if not isinstance(tags, list):
-        return jsonify({"error": "tags must be a list"}), 400
+    payload = parse_json(ResourceTagsRequest)
     try:
-        return jsonify(_service().replace_tags(resource_id, [str(tag) for tag in tags]))
+        return validated_json(
+            _service().replace_tags(resource_id, payload.tags), ResourceOutput
+        )
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
+        return api_error("not_found", 404)
 
 
 @bp.delete("/api/resources/<resource_id>/tags/<tag_id>")
 def api_resource_tag_delete(resource_id: str, tag_id: str):
+    query = parse_query(ResourceTagDeleteQuery)
     try:
         resource = _service().repository.remove_tag(
             resource_id,
             tag_id,
-            source=request.args.get("source", "user"),
+            source=query.source,
         )
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
+        return api_error("not_found", 404)
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify(resource)
+        return api_error(str(exc), 400)
+    return validated_json(resource, ResourceOutput)
 
 
 @bp.post("/api/resources/<resource_id>/enrich")
 def api_resource_enrich(resource_id: str):
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json(EnrichmentRequest)
     try:
         jobs = _service().enqueue_enrichment(
             resource_id,
-            include_ai=bool(payload.get("include_ai")),
-            force=bool(payload.get("force")),
+            include_ai=payload.include_ai,
+            force=payload.force,
         )
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
-    return jsonify({"jobs": jobs}), 202
+        return api_error("not_found", 404)
+    return validated_json({"jobs": jobs}, JobsOutput, 202)
 
 
 @bp.post("/api/resources/<resource_id>/retry")
 def api_resource_retry(resource_id: str):
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json(EnrichmentRequest)
     try:
         jobs = _service().enqueue_enrichment(
             resource_id,
-            include_ai=bool(payload.get("include_ai")),
+            include_ai=payload.include_ai,
             force=True,
         )
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
-    return jsonify({"jobs": jobs}), 202
+        return api_error("not_found", 404)
+    return validated_json({"jobs": jobs}, JobsOutput, 202)
 
 
 @bp.get("/api/resources/<resource_id>/similar")
 def api_resource_similar(resource_id: str):
+    query = parse_query(LimitQuery)
     try:
         items = _service().repository.find_similar(
             resource_id,
-            limit=request.args.get("limit", 8, type=int),
+            limit=query.limit,
         )
     except ResourceNotFound:
-        return jsonify({"error": "not_found"}), 404
-    return jsonify({"items": [decorate_resource(item) for item in items]})
+        return api_error("not_found", 404)
+    return validated_json(
+        {"items": [decorate_resource(item) for item in items]}, ResourceItemsOutput
+    )
 
 
 @bp.post("/api/search")
 def api_search():
-    payload = request.get_json(silent=True) or {}
-    page = _service().repository.list(**_list_params(payload))
-    return jsonify(
-        {"items": [decorate_resource(item) for item in page.items], "total": page.total}
+    payload = parse_json(ResourceSearchRequest)
+    page = _service().repository.list(**_list_params(payload.model_dump()))
+    return validated_json(
+        {"items": [decorate_resource(item) for item in page.items], "total": page.total},
+        ResourceListOutput,
     )
 
 
 @bp.post("/api/imports/chrome")
 def api_import_chrome():
     service = _service()
+    options = parse_payload(ChromeImportFormRequest, request.form.to_dict(flat=True))
     upload = request.files.get("file")
     if upload is None:
         path = Path(current_app.config.get("CHROME_BOOKMARK_PATH", CHROME_BOOKMARK_PATH))
         try:
             summary = service.import_file(path, format_hint="json", enqueue=True)
         except Exception as exc:
-            return jsonify({"error": str(exc)}), 400
-        return jsonify(summary.to_dict())
-    format_hint = request.form.get("format") or Path(upload.filename or "").suffix.lstrip(".")
+            return api_error(str(exc), 400)
+        return validated_json(summary.to_dict(), ImportSummaryOutput)
+    format_hint = options.format or Path(upload.filename or "").suffix.lstrip(".")
     suffix = ".html" if format_hint.lower() in {"html", "htm"} else ".json"
     temporary_path = None
     try:
@@ -439,9 +471,9 @@ def api_import_chrome():
             format_hint=format_hint,
             enqueue=True,
         )
-        return jsonify(summary.to_dict())
+        return validated_json(summary.to_dict(), ImportSummaryOutput)
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
     finally:
         if temporary_path:
             temporary_path.unlink(missing_ok=True)

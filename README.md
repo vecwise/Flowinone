@@ -40,6 +40,17 @@ python run.py
 
 Visit `http://localhost:5894`; `/` redirects to the Navigator's **素材** scope at `/navigator/?scope=gallery`.
 
+Run background enrichment and bookmark-thumbnail processing in a second terminal:
+
+```bash
+conda run -n py3.11 python -m src.flowinone.workers
+```
+
+The Flask application factory never starts workers. This keeps Werkzeug reloads
+and multi-process WSGI servers from creating duplicate worker sets. The web app
+remains browsable without the worker process, but queued thumbnails and Resource
+enrichment wait until it is running.
+
 For headless setup, set valid Local media roots in `config.json` and use `FLOWINONE_HEADLESS=1`. `CHROME_BOOKMARK_PATH` defaults to the platform Chrome profile path and may be overridden in app configuration.
 
 ## Typical use
@@ -68,7 +79,11 @@ conda run -n py3.11 flask --app run sidecars-import
 
 ## Architecture
 
-- `routes.py` — Flask routes for Local, Eagle, Chrome, source viewers, and app registration.
+- `run.py` — `create_app()` application factory and development-server entry point.
+- `routes.py` — compatibility registration entry point only.
+- `src/flowinone/web/` — namespaced Local, Chrome, Eagle, and media Blueprints,
+  shared Pydantic API contracts, and response validation.
+- `src/flowinone/workers.py` — dedicated background-worker process runtime.
 - `src/flowinone/gallery/` — retained Gallery read model/API, design lab, and `/gallery/` compatibility redirect.
 - `src/flowinone/catalog/` — Navigator HTTP surface plus the rebuildable cross-source Catalog, FTS, facets, cursors, events, sessions, and explainable item relations; it also owns the `/search/` compatibility redirect.
 - `src/flowinone/resource_library/` — imported URL database, extraction jobs, Resource UI/API, and optional AI metadata.

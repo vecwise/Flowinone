@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from urllib.parse import urlencode
 
-from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Flask, abort, current_app, redirect, render_template, request, url_for
 
 from .models import GALLERY_SOURCES, GalleryItem, GalleryQuery
 from .service import CatalogGalleryService, GalleryService, InvalidGalleryCursor
 from src.flowinone.resource_library.database import get_resource_database
 from pathlib import Path
+from src.flowinone.web.api import api_error, parse_query, validated_json
+from src.flowinone.web.schemas import (
+    GalleryItemsOutput,
+    GalleryListQuery,
+    GallerySourcesOutput,
+)
 
 
 bp = Blueprint("gallery", __name__)
@@ -93,10 +99,14 @@ def _detail_url(item: GalleryItem, return_to: str) -> str:
         return item.detail_uri
     if item.source == "eagle":
         item_id = item.id.split(":", 1)[1]
-        endpoint = "view_eagle_video" if item.media_type == "video" else "view_eagle_image"
+        endpoint = (
+            "eagle.view_eagle_video"
+            if item.media_type == "video"
+            else "eagle.view_eagle_image"
+        )
         return url_for(endpoint, item_id=item_id, return_to=return_to)
     if item.source == "local" and item.relative_path:
-        endpoint = "view_video" if item.media_type == "video" else "view_image"
+        endpoint = "media.view_video" if item.media_type == "video" else "media.view_image"
         return url_for(endpoint, **{f"{item.media_type}_path": item.relative_path, "src": "external"})
     return item.original_url or "#"
 
@@ -181,13 +191,33 @@ def gallery_lab_variant(variant_slug: str):
 
 @bp.get("/api/gallery/items")
 def api_gallery_items():
-    query = _query()
+    values = parse_query(
+        GalleryListQuery, list_fields=("source", "tags")
+    ).model_dump()
+    query = GalleryQuery.create(
+        q=values["q"],
+        sources=values["source"],
+        media_type=values["type"],
+        tags=values["tags"],
+        tag_mode=values["tag_mode"],
+        favorite=values["favorite"],
+        unviewed=values["unviewed"],
+        duration_min=values["duration_min"],
+        duration_max=values["duration_max"],
+        added_from=values["added_from"],
+        added_to=values["added_to"],
+        sort=values["sort"],
+        seed=values["seed"],
+        view=values["view"],
+        limit=values["limit"],
+        cursor=values["cursor"],
+    )
     try:
         page = _service().list_items(query)
     except InvalidGalleryCursor as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
     return_to = f"{url_for('gallery.gallery_index')}?{urlencode(_query_pairs(query))}"
-    return jsonify(_page_payload(page, return_to))
+    return validated_json(_page_payload(page, return_to), GalleryItemsOutput)
 
 
 @bp.get("/api/gallery/sources")
@@ -195,7 +225,7 @@ def api_gallery_sources():
     query = GalleryQuery.create(sources=GALLERY_SOURCES, limit=1)
     page = _service().list_items(query)
     labels = {"local": "本機", "eagle": "EAGLE", "bookmarks": "書籤"}
-    return jsonify(
+    return validated_json(
         {
             "items": [
                 {
@@ -207,7 +237,8 @@ def api_gallery_sources():
                 }
                 for source in GALLERY_SOURCES
             ]
-        }
+        },
+        GallerySourcesOutput,
     )
 
 

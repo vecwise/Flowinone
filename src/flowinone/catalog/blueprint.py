@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import click
-from flask import Blueprint, Flask, abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Flask, abort, current_app, redirect, render_template, request, url_for
 
 from src.flowinone.resource_library.database import get_resource_database
 from src.file_handler.eagle_integration import is_eagle_available
@@ -16,6 +16,27 @@ from src.flowinone.gallery.models import GALLERY_SOURCES
 from .service import CATALOG_SOURCES, CatalogQuery, CatalogService, CatalogSyncService
 from .discovery import DiscoveryService
 from .artifacts import CatalogArtifactService, PersonService
+from src.flowinone.web.api import api_error, parse_json, parse_query, validated_json
+from src.flowinone.web.schemas import (
+    CatalogEventRequest,
+    CatalogFacetsOutput,
+    CatalogItemOutput,
+    CatalogItemsOutput,
+    CatalogListOutput,
+    CatalogListQuery,
+    CatalogSessionOutput,
+    CatalogSessionRequest,
+    CatalogSessionsOutput,
+    CatalogSyncOutput,
+    CatalogSyncRequest,
+    CatalogSyncStatusOutput,
+    PersonLinkRequest,
+    PersonNameRequest,
+    PersonOutput,
+    RelationsRebuildOutput,
+    RelatedLimitQuery,
+    SessionLimitQuery,
+)
 
 
 bp = Blueprint("catalog", __name__)
@@ -231,101 +252,173 @@ def search_page():
 @bp.get("/api/catalog/items")
 def api_items():
     try:
-        return jsonify(CatalogService(_database()).list(_query()))
+        return validated_json(
+            CatalogService(_database()).list(_validated_api_query()),
+            CatalogListOutput,
+        )
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
 
 
 @bp.get("/api/catalog/items/<item_id>")
 def api_item(item_id: str):
     try:
-        return jsonify(CatalogService(_database()).get(item_id))
+        return validated_json(
+            CatalogService(_database()).get(item_id), CatalogItemOutput
+        )
     except LookupError:
-        return jsonify({"error": "Catalog item not found"}), 404
+        return api_error("Catalog item not found", 404)
 
 
 @bp.get("/api/catalog/facets")
 def api_facets():
-    return jsonify(CatalogService(_database()).facets(_query()))
+    return validated_json(
+        CatalogService(_database()).facets(_validated_api_query()),
+        CatalogFacetsOutput,
+    )
+
+
+def _validated_api_query() -> CatalogQuery:
+    query = parse_query(CatalogListQuery, list_fields=("source", "tags"))
+    values = query.model_dump()
+    values["sources"] = values.pop("source")
+    values["item_type"] = values.pop("type")
+    return CatalogQuery.create(**values)
 
 
 @bp.post("/api/catalog/items/<item_id>/events")
 def api_event(item_id: str):
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json(CatalogEventRequest)
     try:
-        return jsonify(CatalogService(_database()).record_event(item_id, str(payload.get("event_type") or ""), value=payload.get("event_value"), session_id=payload.get("session_id"), metadata=payload.get("metadata")))
+        return validated_json(
+            CatalogService(_database()).record_event(
+                item_id,
+                payload.event_type,
+                value=payload.event_value,
+                session_id=payload.session_id,
+                metadata=payload.metadata,
+            ),
+            CatalogItemOutput,
+        )
     except LookupError:
-        return jsonify({"error": "Catalog item not found"}), 404
+        return api_error("Catalog item not found", 404)
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
 
 
 @bp.get("/api/catalog/items/<item_id>/related")
 def api_related(item_id: str):
-    return jsonify({"items": DiscoveryService(_database()).related_items(item_id, limit=request.args.get("limit", 18, type=int))})
+    query = parse_query(RelatedLimitQuery)
+    return validated_json(
+        {
+            "items": DiscoveryService(_database()).related_items(
+                item_id, limit=query.limit
+            )
+        },
+        CatalogItemsOutput,
+    )
 
 
 @bp.post("/api/catalog/relations/rebuild")
 def api_rebuild_relations():
-    return jsonify(DiscoveryService(_database()).rebuild_item_relations())
+    return validated_json(
+        DiscoveryService(_database()).rebuild_item_relations(),
+        RelationsRebuildOutput,
+    )
 
 
 @bp.get("/api/catalog/sessions")
 def api_sessions():
-    return jsonify({"items": CatalogService(_database()).recent_sessions(request.args.get("limit", 3, type=int))})
+    query = parse_query(SessionLimitQuery)
+    return validated_json(
+        {
+            "items": CatalogService(_database()).recent_sessions(
+                query.limit
+            )
+        },
+        CatalogSessionsOutput,
+    )
 
 
 @bp.post("/api/catalog/sessions")
 def api_session_create():
-    return jsonify(CatalogService(_database()).save_session(request.get_json(silent=True) or {})), 201
+    payload = _session_payload(parse_json(CatalogSessionRequest))
+    return validated_json(
+        CatalogService(_database()).save_session(payload), CatalogSessionOutput, 201
+    )
 
 
 @bp.patch("/api/catalog/sessions/<session_id>")
 def api_session_update(session_id: str):
+    payload = _session_payload(parse_json(CatalogSessionRequest))
     try:
-        return jsonify(CatalogService(_database()).save_session(request.get_json(silent=True) or {}, session_id))
+        return validated_json(
+            CatalogService(_database()).save_session(payload, session_id),
+            CatalogSessionOutput,
+        )
     except LookupError:
-        return jsonify({"error": "session_not_found"}), 404
+        return api_error("session_not_found", 404)
+
+
+def _session_payload(payload: CatalogSessionRequest) -> dict:
+    values = payload.model_dump(exclude_none=True)
+    query = values["query"]
+    if query.get("type") and not query.get("item_type"):
+        query["item_type"] = query["type"]
+    query.pop("type", None)
+    query.pop("view", None)
+    return values
 
 
 @bp.post("/api/people")
 def api_person_create():
-    payload = request.get_json(silent=True) or {}
-    return jsonify(PersonService(_database()).create(str(payload.get("display_name") or ""))), 201
+    payload = parse_json(PersonNameRequest)
+    return validated_json(
+        PersonService(_database()).create(payload.display_name), PersonOutput, 201
+    )
 
 
 @bp.patch("/api/people/<person_id>")
 def api_person_rename(person_id: str):
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json(PersonNameRequest)
     try:
-        return jsonify(PersonService(_database()).rename(person_id, str(payload.get("display_name") or "")))
+        return validated_json(
+            PersonService(_database()).rename(person_id, payload.display_name),
+            PersonOutput,
+        )
     except LookupError:
-        return jsonify({"error": "person_not_found"}), 404
+        return api_error("person_not_found", 404)
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
 
 
 @bp.post("/api/people/<person_id>/items/<item_id>")
 def api_person_link(person_id: str, item_id: str):
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json(PersonLinkRequest)
     try:
-        PersonService(_database()).link(person_id, item_id, confidence=payload.get("confidence"), source="user")
+        PersonService(_database()).link(
+            person_id, item_id, confidence=payload.confidence, source="user"
+        )
         return "", 204
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        return api_error(str(exc), 400)
 
 
 @bp.post("/api/catalog/sync")
 def api_sync():
-    payload = request.get_json(silent=True) or {}
-    sources = payload.get("sources") or CATALOG_SOURCES
-    return jsonify(CatalogSyncService(_database()).sync(sources))
+    payload = parse_json(CatalogSyncRequest)
+    return validated_json(
+        CatalogSyncService(_database()).sync(payload.sources), CatalogSyncOutput
+    )
 
 
 @bp.get("/api/catalog/sync/status")
 def api_sync_status():
     """Expose per-source live retry progress to Navigator polling."""
-    return jsonify({"sources": CatalogService(_database()).sync_status()})
+    return validated_json(
+        {"sources": CatalogService(_database()).sync_status()},
+        CatalogSyncStatusOutput,
+    )
 
 
 def register_catalog(app: Flask) -> None:

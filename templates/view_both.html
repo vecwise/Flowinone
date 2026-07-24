@@ -56,10 +56,10 @@
       <h1 class="detail-title">{{ metadata.name }}</h1>
     </div>
     <div class="action-row">
-      <a class="action-button" href="{{ url_for('index') }}">Home</a>
+      <a class="action-button" href="{{ url_for('local.index') }}">Home</a>
       {% if feature_flags.eagle %}
-      <a class="action-button" href="{{ url_for('list_eagle_tags') }}">Tags</a>
-      <a class="action-button" href="{{ url_for('list_eagle_smart_folders') }}">Smart Folders</a>
+      <a class="action-button" href="{{ url_for('eagle.list_eagle_tags') }}">Tags</a>
+      <a class="action-button" href="{{ url_for('eagle.list_eagle_smart_folders') }}">Smart Folders</a>
       {% endif %}
     </div>
   </header>

@@ -29,7 +29,7 @@ Folders are never items in the **素材** scope. They may appear as source metad
 
 1. Add a URL or incrementally import Chrome under `/resources/`.
 2. The Resource database deduplicates by canonical URL and retains every bookmark placement in `resource_origins`.
-3. Run `resources-worker` to fetch metadata, make a thumbnail, and extract text. AI summaries are optional.
+3. Keep `python -m src.flowinone.workers` running to fetch metadata, make a thumbnail, and extract text. Use `resources-worker --limit N` only for a bounded one-shot maintenance run. AI summaries are optional.
 4. The Resource is synchronized into Catalog, where it can be found alongside all other sources in Navigator's **全部內容** scope.
 
 ## Catalog and sidecar maintenance

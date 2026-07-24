@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-23
+
+### Changed
+
+- Replaced the import-time Flask singleton with a `create_app()` application factory.
+- Split Local, Chrome, Eagle, and media HTTP adapters into namespaced Blueprints.
+- Added strict Pydantic request/query contracts and validated response schemas for JSON APIs.
+- Moved continuous thumbnail and Resource processing into a dedicated worker runtime.
+
+### Fixed
+
+- Prevented Werkzeug reloads and multi-process web servers from starting duplicate worker sets.
+- Released the thumbnail worker's SQLite runtime lease on clean shutdown so it can restart immediately.
+
 ## 2026-07-18
 
 ### Changed

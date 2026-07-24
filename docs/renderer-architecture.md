@@ -14,13 +14,17 @@
 ## Operational commands
 
 ```bash
+conda run -n py3.11 python -m src.flowinone.workers
 conda run -n py3.11 flask --app run resources-db-upgrade
 conda run -n py3.11 flask --app run catalog-sync --source all
 conda run -n py3.11 flask --app run resources-worker --limit 20
 conda run -n py3.11 flask --app run catalog-relations-rebuild
 ```
 
-`resources-worker` handles local metadata, thumbnail, content extraction, and optional AI summary jobs. It does not export notes or write to Obsidian.
+The dedicated worker process continuously handles bookmark thumbnails plus
+Resource metadata, content extraction, and optional AI summary jobs.
+`resources-worker --limit` remains a one-shot maintenance command. Neither path
+exports notes or writes to Obsidian.
 
 ## What Flowinone deliberately does not do
 

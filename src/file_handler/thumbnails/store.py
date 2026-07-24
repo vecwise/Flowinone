@@ -595,6 +595,15 @@ class ThumbnailStore:
         finally:
             conn.close()
 
+    def release_runtime_lease(self, name: str, owner: str) -> None:
+        """Release only the lease still owned by this worker process."""
+        with self.connect() as conn:
+            conn.execute(
+                "DELETE FROM runtime_leases WHERE name=? AND owner=?",
+                (name, owner),
+            )
+            conn.commit()
+
     def get_state(self, key: str) -> Optional[str]:
         with self.connect() as conn:
             row = conn.execute("SELECT value FROM thumbnail_state WHERE key=?", (key,)).fetchone()

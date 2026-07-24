@@ -1,10 +1,13 @@
 import json
+from pathlib import Path
 
 from flask import Flask
 
 import routes
 from src.file_handler import chrome_bookmarks, media_cache
 from src.file_handler.thumbnails.store import ThumbnailStore
+from src.flowinone.web import chrome as chrome_routes
+from src.flowinone.web import common as web_common
 
 
 def test_chrome_page_never_fetches_remote_http(monkeypatch, tmp_path):
@@ -31,8 +34,8 @@ def test_chrome_page_never_fetches_remote_http(monkeypatch, tmp_path):
 
     monkeypatch.setattr(chrome_bookmarks, "CHROME_BOOKMARK_PATH", str(bookmarks_path))
     monkeypatch.setattr(media_cache, "get_thumbnail_store", lambda: store)
-    monkeypatch.setattr(routes, "get_thumbnail_store", lambda: store)
-    monkeypatch.setattr(routes, "_compute_feature_flags", lambda: {
+    monkeypatch.setattr(chrome_routes, "get_thumbnail_store", lambda: store)
+    monkeypatch.setattr(web_common, "compute_feature_flags", lambda: {
         "eagle": False,
         "chrome": True,
         "youtube": True,
@@ -45,7 +48,9 @@ def test_chrome_page_never_fetches_remote_http(monkeypatch, tmp_path):
     monkeypatch.setattr("requests.sessions.Session.get", fail_network)
     monkeypatch.setattr("requests.get", fail_network)
 
-    app = Flask(__name__, template_folder=str(routes.os.path.join(routes.os.path.dirname(__file__), "..", "templates")))
+    app = Flask(
+        __name__, template_folder=str(Path(__file__).resolve().parents[1] / "templates")
+    )
     app.config.update(TESTING=True)
     routes.register_routes(app)
 

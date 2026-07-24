@@ -52,3 +52,20 @@ The global navigation search always submits to `/navigator/`. On a Navigator pag
 ## Intentional boundary
 
 There are no BUILD, THINK, LEARN, SCAN, RECOVER, WRITE, Entry, Project, Collection, Draft Note, or Obsidian routes in the running app. Existing source folders remain source metadata or source-specific views; they are not Navigator cards themselves.
+
+## Web and worker runtime
+
+`run.create_app()` constructs only the Flask web application. Local, Chrome,
+Eagle, and local-media HTTP adapters are separate namespaced Blueprints under
+`src/flowinone/web/`; `routes.py` remains a small compatibility registrar.
+
+Every JSON `/api/*` handler validates request bodies or query parameters and
+validates its public response with Pydantic contracts before serialization.
+Binary thumbnail responses validate their path identifier and then use Flask's
+conditional file response.
+
+Long-running thumbnail and Resource enrichment workers are owned by the separate
+`python -m src.flowinone.workers` process. They are never started by the
+application factory or Werkzeug debug server. The worker runtime stops as a unit
+if either worker exits; the thumbnail worker's SQLite runtime lease prevents a
+second worker runtime from remaining active.

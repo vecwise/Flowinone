@@ -10,8 +10,8 @@
       <p class="shelf-kicker">以 tag 進入主題、來源與相鄰素材。</p>
     </div>
     <div class="action-row">
-      <a class="action-button" href="{{ url_for('index') }}">Home</a>
-      <a class="action-button" href="{{ url_for('list_all_eagle_folder') }}">Folders</a>
+      <a class="action-button" href="{{ url_for('local.index') }}">Home</a>
+      <a class="action-button" href="{{ url_for('eagle.list_all_eagle_folder') }}">Folders</a>
     </div>
   </header>
 
@@ -20,7 +20,7 @@
   {% if tags %}
   <section class="tag-cloud" aria-label="Eagle tags">
     {% for tag in tags %}
-    <a class="tag-chip" href="{{ url_for('view_images_by_tag', target_tag=tag.name) }}">
+    <a class="tag-chip" href="{{ url_for('eagle.view_images_by_tag', target_tag=tag.name) }}">
       #{{ tag.name }}{% if tag.count is not none %}<span>&nbsp;{{ tag.count }}</span>{% endif %}
     </a>
     {% endfor %}

@@ -23,19 +23,19 @@
         <details class="nav-tools">
             <summary>來源</summary>
             <div class="nav-tools-menu">
-                <a href="{{ url_for('content_library') }}">來源總覽</a>
-                {% if feature_flags.eagle %}<a href="{{ url_for('eagle_stream') }}">Eagle 串流</a>{% endif %}
-                {% if feature_flags.eagle %}<a href="{{ url_for('list_all_eagle_folder') }}">Eagle Folders</a>{% endif %}
-                {% if feature_flags.eagle %}<a href="{{ url_for('list_eagle_tags') }}">Eagle Tags</a>{% endif %}
-                {% if feature_flags.eagle %}<a href="{{ url_for('list_eagle_smart_folders') }}">Eagle Smart Folders</a>{% endif %}
-                {% if feature_flags.chrome %}<a href="{{ url_for('view_chrome_root') }}">Chrome 書籤</a>{% endif %}
-                {% if feature_flags.youtube %}<a href="{{ url_for('view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
-                {% if feature_flags.db %}<a href="{{ url_for('view_item_db') }}">本機索引</a>{% endif %}
-                {% if feature_flags.db %}<a href="{{ url_for('view_source_folders') }}">本機資料夾</a>{% endif %}
+                <a href="{{ url_for('local.content_library') }}">來源總覽</a>
+                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.eagle_stream') }}">Eagle 串流</a>{% endif %}
+                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.list_all_eagle_folder') }}">Eagle Folders</a>{% endif %}
+                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.list_eagle_tags') }}">Eagle Tags</a>{% endif %}
+                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.list_eagle_smart_folders') }}">Eagle Smart Folders</a>{% endif %}
+                {% if feature_flags.chrome %}<a href="{{ url_for('chrome.view_chrome_root') }}">Chrome 書籤</a>{% endif %}
+                {% if feature_flags.youtube %}<a href="{{ url_for('chrome.view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
+                {% if feature_flags.db %}<a href="{{ url_for('local.view_item_db') }}">本機索引</a>{% endif %}
+                {% if feature_flags.db %}<a href="{{ url_for('local.view_source_folders') }}">本機資料夾</a>{% endif %}
                 {% if feature_flags.db %}
                 <span class="nav-menu-label">Maintenance</span>
-                <a href="{{ url_for('update_item_db_route') }}">同步本機索引</a>
-                <a href="{{ url_for('update_thumbnails_route') }}">補齊縮圖</a>
+                <a href="{{ url_for('local.update_item_db_route') }}">同步本機索引</a>
+                <a href="{{ url_for('local.update_thumbnails_route') }}">補齊縮圖</a>
                 {% endif %}
             </div>
         </details>
