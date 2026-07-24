@@ -12,12 +12,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 from urllib.parse import urlsplit
 
+from src.flowinone.paths import data_dir, thumbnail_cache_database_path
+
 from .urls import canonicalize_url, provider_name_for_url
 
 
-DEFAULT_DATA_DIR = os.path.abspath("data")
+DEFAULT_DATA_DIR = str(data_dir())
 DEFAULT_CACHE_DIR = os.path.join(DEFAULT_DATA_DIR, "thumbnails")
-DEFAULT_CACHE_DB = os.path.join(DEFAULT_DATA_DIR, "cache.db")
+DEFAULT_CACHE_DB = str(thumbnail_cache_database_path())
 THUMBNAIL_ROUTE_PREFIX = "/api/bookmark-thumbnails"
 
 PRIORITY_VISIBLE = 0

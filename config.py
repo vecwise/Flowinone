@@ -24,12 +24,8 @@ def _detect_chrome_bookmark_path() -> str:
 
 
 def _load_config() -> Dict[str, str]:
-    """Load config.json or create it with defaults."""
+    """Load config.json without creating or mutating files."""
     if not CONFIG_JSON_PATH.exists():
-        CONFIG_JSON_PATH.write_text(
-            json.dumps(DEFAULT_CONFIG, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
         return DEFAULT_CONFIG.copy()
 
     try:
@@ -47,8 +43,12 @@ def _load_config() -> Dict[str, str]:
 
 
 _CONFIG_DATA = _load_config()
-DB_route_external = _CONFIG_DATA.get("DB_route_external", "")
-DB_route_internal = _CONFIG_DATA.get("DB_route_internal", "")
+DB_route_external = os.environ.get(
+    "FLOWINONE_DB_ROUTE_EXTERNAL", _CONFIG_DATA.get("DB_route_external", "")
+)
+DB_route_internal = os.environ.get(
+    "FLOWINONE_DB_ROUTE_INTERNAL", _CONFIG_DATA.get("DB_route_internal", "")
+)
 
 
 def _update_config_json(external: str, internal: str) -> None:
@@ -98,7 +98,7 @@ def _prompt_for_directory(title: str, initial: Optional[str] = None) -> str:
     return os.path.normpath(directory)
 
 
-def _ensure_db_routes() -> None:
+def ensure_db_routes(*, interactive: bool = True) -> None:
     """Make sure DB routes exist, prompting the user once if needed.
 
     External/internal default to the same place; users can still edit config.json manually
@@ -112,7 +112,7 @@ def _ensure_db_routes() -> None:
     if _is_valid_directory(external) and _is_valid_directory(internal):
         return
 
-    if os.environ.get("FLOWINONE_HEADLESS", "").lower() in {"1", "true"}:
+    if not interactive or os.environ.get("FLOWINONE_HEADLESS", "").lower() in {"1", "true"}:
         raise RuntimeError(
             "DB 路徑尚未完整設定，且目前為 headless 模式。"
             "請直接修改 config.json 或設定環境變數後再啟動。"
@@ -129,4 +129,10 @@ def _ensure_db_routes() -> None:
     _update_config_json(DB_route_external, DB_route_internal)
 
 
-_ensure_db_routes()
+__all__ = [
+    "CHROME_BOOKMARK_PATH",
+    "CONFIG_JSON_PATH",
+    "DB_route_external",
+    "DB_route_internal",
+    "ensure_db_routes",
+]

@@ -214,3 +214,53 @@ test('retry leaves a returned final error visible and retryable', async () => {
   assert.equal(bookmarkRetry.disabled, false);
   assert.equal(bookmarkRetry.textContent, '重試');
 });
+
+test('queued sync follows its durable job and renders the final source state', async () => {
+  const row = makeRow('bookmarks', 'idle', '—');
+  const requests = [];
+  const request = async (url) => {
+    requests.push(url);
+    if (url === '/api/catalog/sync') {
+      return {
+        ok: true,
+        json: async () => ({job: {id: 'job-1', status: 'pending'}}),
+      };
+    }
+    if (url === '/api/catalog/sync/jobs/job-1') {
+      return {
+        ok: true,
+        json: async () => ({job: {id: 'job-1', status: 'complete'}}),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({sources: {bookmarks: {status: 'complete', item_count: 9}}}),
+    };
+  };
+  const root = {
+    getElementById: () => null,
+    querySelectorAll: (selector) => (
+      selector === '[data-catalog-sync-source]' ? [row] : []
+    ),
+  };
+  const timers = {
+    setInterval: () => 1,
+    clearInterval: () => {},
+    setTimeout(callback) { callback(); },
+  };
+  const context = {window: {document: null, fetch: request, location: {}, ...timers}};
+  vm.runInNewContext(controllerSource, context);
+  const controller = context.window.FlowinoneCatalogSync.createCatalogSyncController({
+    root, request, timers, location: {},
+  });
+
+  await controller.runSync(['bookmarks']);
+
+  assert.deepEqual(requests, [
+    '/api/catalog/sync',
+    '/api/catalog/sync/jobs/job-1',
+    '/api/catalog/sync/status',
+  ]);
+  assert.equal(row.dataset.status, 'complete');
+  assert.equal(row.querySelector('[data-catalog-sync-detail]').textContent, '9 筆');
+});

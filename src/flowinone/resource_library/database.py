@@ -5,11 +5,13 @@ from __future__ import annotations
 import sqlite3
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -49,6 +51,59 @@ def upgrade_database(path: Path) -> None:
                     )
                     connection.commit()
     command.upgrade(config, "head")
+
+
+def backup_database(path: Path) -> Path | None:
+    """Create and integrity-check a consistent SQLite backup before migration."""
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        return None
+    backup_dir = resolved.parent / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    backup_path = backup_dir / f"{resolved.stem}-{timestamp}{resolved.suffix}.bak"
+    with sqlite3.connect(resolved) as source:
+        if source.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+            raise RuntimeError("Source database failed PRAGMA integrity_check")
+        with sqlite3.connect(backup_path) as destination:
+            source.backup(destination)
+            if destination.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Database backup failed PRAGMA integrity_check")
+    return backup_path
+
+
+class DatabaseUpgradeRequired(RuntimeError):
+    """Raised when runtime access finds an absent or out-of-date schema."""
+
+
+def _alembic_config(path: Path) -> Config:
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(PROJECT_ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", sqlite_url(path))
+    return config
+
+
+def ensure_database_current(path: Path) -> None:
+    """Fail closed instead of changing schema during an HTTP request."""
+    resolved = path.expanduser().resolve()
+    expected = ScriptDirectory.from_config(_alembic_config(resolved)).get_current_head()
+    current = None
+    if resolved.is_file():
+        with sqlite3.connect(resolved) as connection:
+            has_version = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+            ).fetchone()
+            if has_version:
+                row = connection.execute(
+                    "SELECT version_num FROM alembic_version LIMIT 1"
+                ).fetchone()
+                current = str(row[0]) if row else None
+    if not current or current != expected:
+        raise DatabaseUpgradeRequired(
+            "Resource database schema is not current "
+            f"(found {current or 'none'}, expected {expected}). "
+            "Run `flask --app run resources-db-upgrade` before starting the app."
+        )
 
 
 class ResourceDatabase:
@@ -214,15 +269,20 @@ class _NoopLock:
 _NOOP_LOCK = _NoopLock()
 
 
-def get_resource_database(path: Optional[Path] = None) -> ResourceDatabase:
-    """Return one migrated database instance per absolute path."""
+def get_resource_database(
+    path: Optional[Path] = None, *, migrate: bool = True
+) -> ResourceDatabase:
+    """Return one database instance per path, migrating only when requested."""
     settings = get_resource_settings()
-    settings.ensure_directories()
+    if path is None:
+        settings.ensure_directories()
     resolved = (path or settings.database_path).expanduser().resolve()
     with _DATABASES_LOCK:
         database = _DATABASES.get(resolved)
         if database is None:
-            database = ResourceDatabase(resolved)
+            if not migrate:
+                ensure_database_current(resolved)
+            database = ResourceDatabase(resolved, migrate=migrate)
             _DATABASES[resolved] = database
         return database
 
@@ -237,8 +297,11 @@ def clear_database_cache() -> None:
 
 __all__ = [
     "ResourceDatabase",
+    "DatabaseUpgradeRequired",
+    "backup_database",
     "clear_database_cache",
     "get_resource_database",
+    "ensure_database_current",
     "sqlite_url",
     "upgrade_database",
 ]

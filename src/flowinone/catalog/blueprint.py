@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import secrets
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -10,6 +12,8 @@ import click
 from flask import Blueprint, Flask, abort, current_app, redirect, render_template, request, url_for
 
 from src.flowinone.resource_library.database import get_resource_database
+from src.flowinone.resource_library.jobs import JobQueue
+from src.flowinone.resource_library.canonical import hash_text
 from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.gallery.models import GALLERY_SOURCES
 
@@ -28,6 +32,7 @@ from src.flowinone.web.schemas import (
     CatalogSessionRequest,
     CatalogSessionsOutput,
     CatalogSyncOutput,
+    CatalogSyncJobEnvelope,
     CatalogSyncRequest,
     CatalogSyncStatusOutput,
     PersonLinkRequest,
@@ -51,11 +56,29 @@ SOURCE_LABELS = {
     "bookmarks": "書籤",
     "resources": "Resources",
 }
+ITEM_TYPE_LABELS = {
+    "image": "圖片",
+    "video": "影片",
+    "bookmark": "書籤",
+    "article": "文章",
+    "web_page": "網頁",
+    "pdf": "PDF",
+    "github": "GitHub",
+    "social_post": "社群貼文",
+    "file": "檔案",
+    "folder": "資料夾",
+    "unknown": "其他",
+}
 
 
 def _database():
     configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-    return get_resource_database(Path(configured) if configured else None)
+    return get_resource_database(
+        Path(configured) if configured else None,
+        migrate=bool(
+            current_app.config.get("FLOWINONE_AUTO_MIGRATE", current_app.testing)
+        ),
+    )
 
 
 def _query(scope: str | None = None) -> CatalogQuery:
@@ -133,15 +156,19 @@ def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
 def _visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -> list[dict]:
     """Decorate canonical rows with a source-specific, usable launch target."""
     visible_items = []
+    origins_by_item = service.get_origins_for_items(
+        item["id"] for item in payload["items"]
+    )
     for item in payload["items"]:
+        available = origins_by_item.get(item["id"], {})
         origins = []
         for source in query.sources:
-            origin = service.get_origin(item["id"], source)
+            origin = available.get(source)
             if origin:
                 origins.append(origin)
         if not origins:
             for source in item.get("sources") or []:
-                origin = service.get_origin(item["id"], source)
+                origin = available.get(source)
                 if origin:
                     origins.append(origin)
         chosen = origins[0] if origins else None
@@ -163,8 +190,8 @@ def _visible_items(service: CatalogService, payload: dict, query: CatalogQuery) 
 
 
 def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
-    sessions = service.recent_sessions(3)
-    for session in sessions:
+    sessions = []
+    for session in service.recent_sessions(12):
         saved_query = dict(session.get("query") or {})
         scope = saved_query.get("scope") or "gallery"
         if scope not in NAVIGATOR_SCOPE_SOURCES:
@@ -175,8 +202,30 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
             if source in NAVIGATOR_SCOPE_SOURCES[scope]
         ) or NAVIGATOR_SCOPE_SOURCES[scope]
         session_query = CatalogQuery.create(**saved_query)
+        meaningful = bool(
+            session_query.q
+            or session_query.item_type
+            or session_query.tags
+            or session_query.favorite
+            or session_query.unviewed
+            or session_query.duration_min is not None
+            or session_query.duration_max is not None
+            or session_query.sources != NAVIGATOR_SCOPE_SOURCES[scope]
+            or session_query.sort != "recently_added"
+        )
+        if not meaningful:
+            continue
         session["url"] = _navigator_url(session_query)
         session["scope_label"] = "素材" if scope == "gallery" else "全部內容"
+        try:
+            session["updated_display"] = datetime.fromisoformat(
+                str(session.get("updated_at") or "").replace("Z", "+00:00")
+            ).astimezone().strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            session["updated_display"] = session.get("updated_at") or ""
+        sessions.append(session)
+        if len(sessions) == 3:
+            break
     return sessions
 
 
@@ -195,7 +244,9 @@ def navigator_page():
     values["sources"] = active_sources
     effective_query = CatalogQuery.create(**values)
 
-    if service.count() == 0:
+    if service.count() == 0 and current_app.config.get(
+        "FLOWINONE_CATALOG_SYNC_INLINE", False
+    ):
         CatalogSyncService(_database()).sync_if_empty(effective_query.sources)
     try:
         payload = service.list(effective_query) if active_sources else {
@@ -238,6 +289,7 @@ def navigator_page():
         scope_urls={scope: _navigator_url(_with_scope(query, scope)) for scope in NAVIGATOR_SCOPE_SOURCES},
         recent_sessions=_navigator_recent_sessions(service),
         eagle_available=eagle_available,
+        item_type_labels=ITEM_TYPE_LABELS,
     )
 
 
@@ -407,12 +459,39 @@ def api_person_link(person_id: str, item_id: str):
 @bp.post("/api/catalog/sync")
 def api_sync():
     payload = parse_json(CatalogSyncRequest)
+    if not current_app.config.get("FLOWINONE_CATALOG_SYNC_INLINE", False):
+        selected_sources = [
+            source for source in CATALOG_SOURCES if source in payload.sources
+        ]
+        job_payload = {
+            "sources": selected_sources,
+            "full_rescan": payload.full_rescan,
+        }
+        job = JobQueue(_database()).queue(
+            "catalog_sync",
+            resource_id=None,
+            payload=job_payload,
+            input_hash=hash_text(
+                json.dumps(job_payload, ensure_ascii=False, sort_keys=True)
+            )[:16],
+            priority=5,
+            force=True,
+        )
+        return validated_json({"job": job}, CatalogSyncJobEnvelope, 202)
     return validated_json(
         CatalogSyncService(_database()).sync(
             payload.sources, full_rescan=payload.full_rescan
         ),
         CatalogSyncOutput,
     )
+
+
+@bp.get("/api/catalog/sync/jobs/<job_id>")
+def api_sync_job(job_id: str):
+    job = JobQueue(_database()).get(job_id)
+    if job is None or job.get("job_type") != "catalog_sync":
+        return api_error("catalog_sync_job_not_found", 404)
+    return validated_json({"job": job}, CatalogSyncJobEnvelope)
 
 
 @bp.get("/api/catalog/sync/status")
@@ -425,6 +504,9 @@ def api_sync_status():
 
 
 def register_catalog(app: Flask) -> None:
+    app.config.setdefault(
+        "FLOWINONE_CATALOG_SYNC_INLINE", bool(app.config.get("TESTING"))
+    )
     app.register_blueprint(bp)
 
     @app.cli.command("catalog-sync")

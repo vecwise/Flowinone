@@ -1,5 +1,8 @@
 # Renderer workflows
 
+This file is a compact domain-flow reference. For setup, commands, data
+freshness, and troubleshooting, use the [Flowinone 使用手冊](renderer-architecture.md).
+
 ## Navigator: 素材
 
 1. Open `/navigator/` or `/navigator/?scope=gallery`; **素材** is the default scope.
@@ -17,10 +20,10 @@ Folders are never items in the **素材** scope. They may appear as source metad
 3. Facets narrow by source, type, and tag; same-URL Records merge only at the canonical item level.
 4. The app chooses an available requested origin. Bookmark origins use their original URL; Local/Eagle use controlled server routes; Resource uses Resource detail.
 
-## Global navigation search
+## Search entry points
 
-1. From a Navigator page, submit the global search to keep the active **素材** or **全部內容** scope.
-2. From Resources or any other non-Navigator page, submit the same field to open Navigator with `scope=all`.
+1. From a Navigator page, use its single page search to keep the active **素材** or **全部內容** scope.
+2. From Resources or any other non-Navigator page, use the navigation search to open Navigator with `scope=all`.
 3. The non-Navigator default therefore searches Local, Eagle, Bookmarks, and Resources, matching the “搜尋素材與資源” label.
 
 `/gallery/` and `/search/` are compatibility redirects only: they preserve query parameters and map to **素材** (`scope=gallery`) and **全部內容** (`scope=all`) respectively.
@@ -35,5 +38,6 @@ Folders are never items in the **素材** scope. They may appear as source metad
 ## Catalog and sidecar maintenance
 
 - `catalog-sync --source all` rebuilds/updates source projections independently.
+- Navigator's source manager enqueues the same operation as a durable job; `python -m src.flowinone.workers` must be running to process it.
 - `catalog-relations-rebuild` computes bounded, explainable related-item edges from title, tags, and source metadata.
 - `sidecars-export`, `sidecars-import`, and `sidecars-audit` keep portable local-media metadata in `.flowinone.json`; absolute paths and caches are excluded.

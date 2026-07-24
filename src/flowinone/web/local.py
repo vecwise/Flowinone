@@ -220,7 +220,14 @@ def _build_index_context(flags: dict[str, bool]) -> dict:
 
         configured_resource_db = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
         resource_service = ResourceService(
-            get_resource_database(Path(configured_resource_db))
+            get_resource_database(
+                Path(configured_resource_db),
+                migrate=bool(
+                    current_app.config.get(
+                        "FLOWINONE_AUTO_MIGRATE", current_app.testing
+                    )
+                ),
+            )
             if configured_resource_db
             else None
         )
@@ -311,6 +318,7 @@ def _build_index_context(flags: dict[str, bool]) -> dict:
                 "label": "同步本機索引",
                 "description": f"{context['stale_db_count']} 筆來源已移動或刪除，先清掉失效入口。",
                 "url": url_for("local.update_item_db_route"),
+                "method": "post",
                 "enabled": True,
                 "tone": "warning",
             }
@@ -361,9 +369,9 @@ def content_library():
     return render_template("index.html", **_build_index_context(get_feature_flags()))
 
 
-@bp.get("/open_path/")
+@bp.post("/open_path/")
 def open_filesystem_path():
-    raw_path = request.args.get("path")
+    raw_path = request.form.get("path")
     if not raw_path:
         abort(400)
     decoded_path = os.path.abspath(unquote(raw_path))
@@ -378,7 +386,7 @@ def open_filesystem_path():
         _open_in_file_manager(target_directory)
     except Exception as exc:
         abort(500, description=f"Failed to open path: {exc}")
-    return redirect(request.referrer or url_for("local.index"))
+    return redirect(url_for("local.content_library"))
 
 
 @bp.get("/both/<path:folder_path>/")
@@ -413,11 +421,11 @@ def view_source_folders():
     return render_template("view_both.html", metadata=metadata_dict, data=data_list)
 
 
-@bp.get("/update_db")
+@bp.post("/update_db")
 @require_feature("db")
 def update_item_db_route():
     try:
-        result = update_item_database(request.args.get("base") or DB_route_external)
+        result = update_item_database(request.form.get("base") or DB_route_external)
     except FileNotFoundError:
         abort(404, description="指定的資料夾不存在，請確認 DB_route_external。")
     except Exception as exc:
@@ -427,13 +435,13 @@ def update_item_db_route():
     return render_template("update_db_result.html", title="Update Item DB", result=result)
 
 
-@bp.get("/update_thumbnails")
+@bp.post("/update_thumbnails")
 @require_feature("db")
 def update_thumbnails_route():
-    force = request.args.get("force", "").lower() in {"1", "true", "yes", "y"}
+    force = request.form.get("force", "").lower() in {"1", "true", "yes", "y"}
     try:
         result = update_missing_thumbnails(
-            request.args.get("base") or DB_route_external, force=force
+            request.form.get("base") or DB_route_external, force=force
         )
     except FileNotFoundError:
         abort(404, description="指定的資料夾不存在，請確認 DB_route_external。")
@@ -449,11 +457,11 @@ def update_thumbnails_route():
     )
 
 
-@bp.get("/clear_thumbnails")
+@bp.post("/clear_thumbnails")
 @require_feature("db")
 def clear_thumbnails_route():
     try:
-        result = clear_thumbnails(request.args.get("base"))
+        result = clear_thumbnails(request.form.get("base"))
     except Exception as exc:
         abort(500, description=f"清除 thumbnails 失敗: {exc}")
     if _wants_json():

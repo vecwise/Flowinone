@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-import os
+import json
 import logging
+import os
 import threading
 import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Optional
 
+from sqlalchemy import text
+
 from .database import ResourceDatabase, get_resource_database
 from .enrichment import EnrichmentService
 from .jobs import JobQueue
+from .models import utc_now_text
 
 
 LOGGER = logging.getLogger(__name__)
@@ -28,11 +32,49 @@ class ResourceWorker:
         self.max_workers = max(1, min(max_workers, 4))
         self.owner = f"{os.getpid()}:{uuid.uuid4().hex}"
         self.stop_event = threading.Event()
+        self._last_heartbeat = 0.0
+
+    def _heartbeat(self) -> None:
+        now = time.monotonic()
+        if now - self._last_heartbeat < 10:
+            return
+        with self.database.write_transaction() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO runtime_state(component,heartbeat_at,metadata_json) "
+                    "VALUES('worker',:now,:metadata) "
+                    "ON CONFLICT(component) DO UPDATE SET "
+                    "heartbeat_at=:now,metadata_json=:metadata"
+                ),
+                {
+                    "now": utc_now_text(),
+                    "metadata": json.dumps(
+                        {"owner": self.owner, "max_workers": self.max_workers}
+                    ),
+                },
+            )
+        self._last_heartbeat = now
 
     def _process(self, job: dict) -> None:
         started = time.monotonic()
         try:
-            self.enrichment.process_job(job)
+            if job.get("job_type") == "catalog_sync":
+                from src.flowinone.catalog.service import CatalogSyncService
+
+                payload = job.get("payload") or {}
+                result = CatalogSyncService(self.database).sync(
+                    payload.get("sources") or (),
+                    full_rescan=bool(payload.get("full_rescan")),
+                )
+                failures = [
+                    f"{source}: {state.get('error') or 'sync failed'}"
+                    for source, state in result.items()
+                    if state.get("status") == "failed"
+                ]
+                if failures:
+                    raise RuntimeError("; ".join(failures))
+            else:
+                self.enrichment.process_job(job)
         except Exception as exc:
             status = self.queue.fail(str(job["id"]), str(exc))
             self.enrichment.record_failure(job.get("resource_id"), str(exc))
@@ -70,6 +112,10 @@ class ResourceWorker:
             thread_name_prefix="flowinone-resource",
         ) as executor:
             while not self.stop_event.is_set():
+                try:
+                    self._heartbeat()
+                except Exception:
+                    LOGGER.warning("worker heartbeat failed", exc_info=True)
                 for future, job in list(futures.items()):
                     if not future.done():
                         continue

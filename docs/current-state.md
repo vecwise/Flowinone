@@ -1,6 +1,10 @@
 # Current state
 
-Updated: 2026-07-19
+Updated: 2026-07-24
+
+This page is the concise product-state snapshot. For the actual runtime,
+storage, route, and authority model, use [Flowinone 現況架構](architecture.md);
+for setup and daily operation, use the [使用手冊](renderer-architecture.md).
 
 ## Product boundary
 
@@ -17,7 +21,9 @@ Flowinone is a multi-source resource renderer. The root route redirects to `/nav
 
 `/gallery/` and `/search/` remain only as compatibility redirects. They preserve incoming query parameters and send users to `/navigator/` with `scope=gallery` (**素材**) and `scope=all` (**全部內容**) respectively.
 
-The global navigation search keeps the active scope on Navigator pages. On every non-Navigator page it defaults to `scope=all`, matching its “搜尋素材與資源” label by including Resources.
+Navigator uses one page-level, scope-aware search. The navigation search is hidden there to remove duplication; on every non-Navigator page it defaults to `scope=all`.
+
+The web app now enqueues UI-triggered Catalog synchronization as durable leased jobs. The standalone worker processes them and publishes a persisted heartbeat; production HTTP requests never apply Alembic migrations implicitly.
 
 Last audit observed approximately 7,630 canonical Catalog items and 14,800 origins, including roughly 7,128 Resources and 7,193 Chrome bookmarks. Catalog is used because request-time flattening at this size is no longer appropriate.
 

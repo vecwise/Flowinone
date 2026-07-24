@@ -22,11 +22,16 @@ flowchart LR
 
 `/gallery/` and `/search/` are compatibility redirects only. They preserve query parameters and redirect to the Navigator's **素材** and **全部內容** scopes respectively; they are not separate user-facing surfaces.
 
-The global navigation search preserves the current scope when used inside Navigator. From Resources or any other non-Navigator page, it opens Navigator in **全部內容** (`scope=all`), so the “搜尋素材與資源” field includes Resources as advertised.
+Navigator uses one scope-aware page search instead of duplicating a global search field. From Resources or any other non-Navigator page, the navigation search opens Navigator in **全部內容** (`scope=all`).
 
 Flowinone is deliberately **not** a knowledge-workflow application. BUILD, THINK, LEARN, SCAN, RECOVER, WRITE, Entries, Projects, Collections, Notes, and Obsidian export are not part of the running app.
 
-Read [architecture](docs/architecture.md), [how to use it](docs/renderer-architecture.md), [schema](docs/schema.md), and [operational workflows](docs/workflows.md).
+文件入口：
+
+- [現況架構](docs/architecture.md) — runtime、模組、資料權威、資料流與 routes。
+- [使用手冊](docs/renderer-architecture.md) — 安裝、啟動、日常流程、同步與故障排除。
+- [架構與 UI 修正計畫](docs/migration-plan.md) — 稽核問題、優先級、驗收標準與分階段計畫。
+- [資料 schema](docs/schema.md) 與 [操作流程](docs/workflows.md) — 專題參考。
 
 ## Start
 
@@ -35,10 +40,16 @@ Use the existing Conda environment:
 ```bash
 conda activate py3.11
 python -m pip install -r requirements.txt
+flask --app run resources-db-upgrade
+flask --app run flowinone-doctor
 python run.py
 ```
 
 Visit `http://localhost:5894`; `/` redirects to the Navigator's **素材** scope at `/navigator/?scope=gallery`.
+
+> Safety boundary: Flowinone enforces loopback hosts, same-origin writes, form
+> CSRF, media-root containment, and a `127.0.0.1` bind. It still has no
+> multi-user authentication, so do not expose it through a LAN, proxy, or tunnel.
 
 Run background enrichment and bookmark-thumbnail processing in a second terminal:
 
@@ -48,8 +59,8 @@ conda run -n py3.11 python -m src.flowinone.workers
 
 The Flask application factory never starts workers. This keeps Werkzeug reloads
 and multi-process WSGI servers from creating duplicate worker sets. The web app
-remains browsable without the worker process, but queued thumbnails and Resource
-enrichment wait until it is running.
+remains browsable without the worker process, but queued thumbnails, Resource
+enrichment, and UI-triggered Catalog sync wait until it is running.
 
 For headless setup, set valid Local media roots in `config.json` and use `FLOWINONE_HEADLESS=1`. `CHROME_BOOKMARK_PATH` defaults to the platform Chrome profile path and may be overridden in app configuration.
 
@@ -57,7 +68,7 @@ For headless setup, set valid Local media roots in `config.json` and use `FLOWIN
 
 1. Open **Navigator · 素材** to browse Local, Eagle, and Bookmarks visually.
 2. Switch to **全部內容** in the same Navigator when you do not know which source contains the item or want to include Resources.
-3. Use the global search from another page to search **全部內容** by default; when already in Navigator, it keeps the current scope.
+3. Use Navigator's page search to keep its current scope; navigation search from another page opens **全部內容**.
 4. Open **Resources** for imported URLs and their extracted full text.
 5. Add user tags when they make future search better.
 6. Sync a source after a large change.
@@ -66,6 +77,7 @@ For headless setup, set valid Local media roots in `config.json` and use `FLOWIN
 
 ```bash
 conda run -n py3.11 flask --app run resources-db-upgrade
+conda run -n py3.11 flask --app run flowinone-doctor
 conda run -n py3.11 flask --app run catalog-sync --source all
 conda run -n py3.11 flask --app run catalog-sync --source eagle --full-rescan
 conda run -n py3.11 flask --app run resources-worker --limit 20

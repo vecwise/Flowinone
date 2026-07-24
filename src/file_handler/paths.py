@@ -4,6 +4,8 @@ import hashlib
 import os
 from urllib.parse import quote
 
+from src.flowinone.paths import data_dir
+
 from .models import AccessDenied, FolderNotFound
 
 
@@ -11,7 +13,7 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v"}
 DEFAULT_THUMBNAIL_ROUTE = "/static/default_thumbnail.svg"
 DEFAULT_VIDEO_THUMBNAIL_ROUTE = "/static/default_video_thumbnail.svg"
-GENERATED_THUMBNAIL_DIR = os.path.join("data", "thumbnails", "items")
+GENERATED_THUMBNAIL_DIR = str(data_dir() / "thumbnails" / "items")
 
 
 def _normalize_source(src):

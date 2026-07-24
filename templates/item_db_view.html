@@ -13,8 +13,16 @@
         </div>
         <div class="action-row">
             <a class="action-button" href="{{ url_for('local.content_library') }}">返回來源總覽</a>
-            <a class="action-button {% if stale_count %}warning{% endif %}" href="{{ url_for('local.update_item_db_route') }}">同步索引</a>
-            {% if available_count %}<a class="action-button" href="{{ url_for('local.update_thumbnails_route') }}">補縮圖</a>{% endif %}
+            <form method="post" action="{{ url_for('local.update_item_db_route') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="action-button {% if stale_count %}warning{% endif %}" type="submit">同步索引</button>
+            </form>
+            {% if available_count %}
+            <form method="post" action="{{ url_for('local.update_thumbnails_route') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="action-button" type="submit">補縮圖</button>
+            </form>
+            {% endif %}
         </div>
     </header>
 
@@ -86,7 +94,13 @@
                     </td>
                     <td class="date-cell">{{ item.updated_at }}</td>
                     <td>
-                        {% if card.url %}
+                        {% if card.open_path %}
+                        <form method="post" action="{{ url_for('local.open_filesystem_path') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="path" value="{{ card.open_path }}">
+                            <button class="action-button" type="submit">在檔案管理器開啟</button>
+                        </form>
+                        {% elif card.url %}
                         <a class="action-button" href="{{ card.url }}">開啟</a>
                         {% else %}
                         <span class="action-button is-disabled" aria-disabled="true">無法開啟</span>

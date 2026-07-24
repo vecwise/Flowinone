@@ -1421,6 +1421,37 @@ class CatalogService:
         result["stale"] = bool(result.get("stale"))
         return result
 
+    def get_origins_for_items(
+        self, item_ids: Iterable[str], *, include_stale: bool = False
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        """Load the newest origin for every item/source pair in one query."""
+        selected = tuple(dict.fromkeys(str(item_id) for item_id in item_ids if item_id))
+        if not selected:
+            return {}
+        placeholders = ",".join(f":item_{index}" for index in range(len(selected)))
+        stale_clause = "" if include_stale else "AND stale=0"
+        statement = text(
+            f"SELECT * FROM catalog_origins WHERE catalog_item_id IN ({placeholders}) "
+            f"{stale_clause} ORDER BY catalog_item_id, source_kind, last_seen_at DESC"
+        )
+        with self.database.engine.connect() as conn:
+            rows = conn.execute(
+                statement,
+                {f"item_{index}": item_id for index, item_id in enumerate(selected)},
+            ).mappings()
+            grouped: dict[str, dict[str, dict[str, Any]]] = {}
+            for row in rows:
+                item_id = str(row["catalog_item_id"])
+                source = str(row["source_kind"])
+                item_origins = grouped.setdefault(item_id, {})
+                if source in item_origins:
+                    continue
+                result = dict(row)
+                result["metadata"] = _json(result.pop("metadata_json", "{}"), {})
+                result["stale"] = bool(result.get("stale"))
+                item_origins[source] = result
+        return grouped
+
     def record_event(self, item_id: str, event_type: str, *, value: float | None = None, session_id: str | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         if event_type not in {"open", "view", "favorite", "unfavorite", "hide", "unhide"}:
             raise ValueError("不支援的 Catalog event")

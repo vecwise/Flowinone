@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from config import DB_route_external
+from src.flowinone.paths import data_dir, item_database_path
 from .paths import (
     DEFAULT_THUMBNAIL_ROUTE,
     DEFAULT_VIDEO_THUMBNAIL_ROUTE,
@@ -22,8 +23,8 @@ from .paths import (
 )
 
 
-ITEM_DB_PATH = os.path.join("data", "item_db.db")
-THUMBNAIL_DIR = os.path.join("data", "thumbnails", "items")
+ITEM_DB_PATH = str(item_database_path())
+THUMBNAIL_DIR = str(data_dir() / "thumbnails" / "items")
 
 
 @dataclass

@@ -160,8 +160,6 @@ def content_card_from_db_item(
             item_url = url_for("media.view_video", video_path=relative_path, src=source)
         elif item_type == "image":
             item_url = url_for("media.view_image", image_path=relative_path, src=source)
-        else:
-            item_url = url_for("local.open_filesystem_path", path=absolute_path)
 
     ext = item.get("ext")
     tags = item.get("tags") or []
@@ -175,6 +173,7 @@ def content_card_from_db_item(
         "name": item.get("name") or "Untitled",
         "url": item_url,
         "path": item_url,
+        "open_path": absolute_path if is_allowed and not item_url else None,
         "thumbnail_route": item.get("thumbnail_route")
         if is_allowed and item.get("thumbnail_route")
         else url_for("static", filename="default_thumbnail.svg"),
@@ -300,7 +299,14 @@ def catalog_related_for_origin(
         from src.flowinone.resource_library.database import get_resource_database
 
         configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-        database = get_resource_database(Path(configured) if configured else None)
+        database = get_resource_database(
+            Path(configured) if configured else None,
+            migrate=bool(
+                current_app.config.get(
+                    "FLOWINONE_AUTO_MIGRATE", current_app.testing
+                )
+            ),
+        )
         with database.engine.connect() as conn:
             item_id = conn.execute(
                 text(
@@ -369,8 +375,10 @@ def build_detail_actions(media_kind: str, metadata: dict | None) -> list[dict]:
                 "description": "查看原始檔案位置。",
                 "kind": "secondary",
                 "url": url_for(
-                    "local.open_filesystem_path", path=metadata["filesystem_path"]
+                    "local.open_filesystem_path"
                 ),
+                "method": "post",
+                "path": metadata["filesystem_path"],
             }
         )
     return actions

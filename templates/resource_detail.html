@@ -20,6 +20,7 @@
       <div class="resource-card-actions">
         <a class="action-button primary" href="{{ resource.original_url }}" target="_blank" rel="noopener noreferrer">開啟原文</a>
         <form method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="force" value="1">
           <button class="action-button" type="submit">重新擷取</button>
         </form>
@@ -70,6 +71,7 @@
         <h2>Tags</h2>
         <div class="resource-tags">{% for tag in resource.tags %}<span>{{ tag.name }} · {{ tag.source }}</span>{% else %}<span>尚無 tags</span>{% endfor %}</div>
         <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_tags', resource_id=resource.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label for="resource-tags">使用者 Tags（逗號分隔）</label>
           <input id="resource-tags" name="tags" value="{{ resource.tags|selectattr('source', 'equalto', 'user')|map(attribute='name')|join(', ') }}">
           <button class="action-button" type="submit">更新 Tags</button>
@@ -79,6 +81,7 @@
       <section class="resource-surface">
         <h2>擷取設定</h2>
         <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label class="resource-check"><input type="checkbox" name="include_ai" value="1" {% if not ai_available %}disabled{% endif %}> 同時更新 AI 摘要</label>
           <input type="hidden" name="force" value="1">
           <button class="action-button" type="submit">執行擷取</button>

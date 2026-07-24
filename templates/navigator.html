@@ -69,21 +69,6 @@
   <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
   {% endif %}
 
-  {% if recent_sessions %}
-  <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">
-    <div class="gallery-results-heading"><div><p class="eyebrow">Continue browsing</p><h2 id="navigator-sessions-heading">最近的瀏覽</h2></div></div>
-    <div class="navigator-session-grid">
-      {% for session in recent_sessions %}
-      <a class="navigator-session-card" href="{{ session.url }}">
-        <span class="navigator-session-meta">{{ session.scope_label }} · {{ session.updated_at }}</span>
-        <h3>{{ session.query.q or '未命名瀏覽' }}</h3>
-        <p>{{ session.query.sources|join(' · ') }} · {{ session.query.sort }}</p>
-      </a>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
   <form class="gallery-query navigator-query" method="get" role="search" aria-label="Navigator 搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
     <div class="gallery-search-field">
@@ -106,25 +91,12 @@
     <div class="gallery-select-field">
       <label for="navigator-type">類型</label>
       <select id="navigator-type" name="type">
-        <option value="">全部 item</option>
+        <option value="">全部類型</option>
         {% for item_type, count in payload.facets.types.items() %}
-        <option value="{{ item_type }}" {% if query.item_type == item_type %}selected{% endif %}>{{ item_type }} ({{ count }})</option>
+        <option value="{{ item_type }}" {% if query.item_type == item_type %}selected{% endif %}>{{ item_type_labels.get(item_type, item_type) }} ({{ count }})</option>
         {% endfor %}
       </select>
     </div>
-
-    <div class="gallery-search-field">
-      <label for="navigator-tags">Tags（逗號分隔）</label>
-      <input id="navigator-tags" name="tags" value="{{ query.tags|join(',') }}" placeholder="例如：reference, motion">
-    </div>
-    <div class="gallery-select-field">
-      <label for="navigator-tag-mode">Tag 規則</label>
-      <select id="navigator-tag-mode" name="tag_mode"><option value="any" {% if query.tag_mode == 'any' %}selected{% endif %}>符合任一</option><option value="all" {% if query.tag_mode == 'all' %}selected{% endif %}>符合全部</option></select>
-    </div>
-    <label class="source-option"><input type="checkbox" name="favorite" value="1" {% if query.favorite %}checked{% endif %}><span><strong>只看最愛</strong></span></label>
-    <label class="source-option"><input type="checkbox" name="unviewed" value="1" {% if query.unviewed %}checked{% endif %}><span><strong>尚未瀏覽</strong></span></label>
-    <div class="gallery-select-field"><label for="navigator-duration-min">最短秒數</label><input id="navigator-duration-min" type="number" min="0" name="duration_min" value="{{ query.duration_min if query.duration_min is not none else '' }}"></div>
-    <div class="gallery-select-field"><label for="navigator-duration-max">最長秒數</label><input id="navigator-duration-max" type="number" min="0" name="duration_max" value="{{ query.duration_max if query.duration_max is not none else '' }}"></div>
     <div class="gallery-select-field">
       <label for="navigator-sort">排序</label>
       <select id="navigator-sort" name="sort">
@@ -139,8 +111,27 @@
       </select>
     </div>
     {% if query.seed %}<input type="hidden" name="seed" value="{{ query.seed }}">{% endif %}
-    <button class="action-button primary" type="submit">套用</button>
-    <a class="action-button" href="{{ reset_url }}">重設</a>
+    <div class="navigator-query-actions">
+      <button class="action-button primary" type="submit">套用</button>
+      <a class="action-button" href="{{ reset_url }}">重設</a>
+    </div>
+    <details class="navigator-advanced" {% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
+      <summary>進階篩選{% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
+      <div class="navigator-advanced-grid">
+        <div class="gallery-search-field">
+          <label for="navigator-tags">Tags（逗號分隔）</label>
+          <input id="navigator-tags" name="tags" value="{{ query.tags|join(',') }}" placeholder="例如：reference, motion">
+        </div>
+        <div class="gallery-select-field">
+          <label for="navigator-tag-mode">Tag 規則</label>
+          <select id="navigator-tag-mode" name="tag_mode"><option value="any" {% if query.tag_mode == 'any' %}selected{% endif %}>符合任一</option><option value="all" {% if query.tag_mode == 'all' %}selected{% endif %}>符合全部</option></select>
+        </div>
+        <label class="source-option"><input type="checkbox" name="favorite" value="1" {% if query.favorite %}checked{% endif %}><span><strong>只看最愛</strong></span></label>
+        <label class="source-option"><input type="checkbox" name="unviewed" value="1" {% if query.unviewed %}checked{% endif %}><span><strong>尚未瀏覽</strong></span></label>
+        <div class="gallery-select-field"><label for="navigator-duration-min">最短秒數</label><input id="navigator-duration-min" type="number" min="0" name="duration_min" value="{{ query.duration_min if query.duration_min is not none else '' }}"></div>
+        <div class="gallery-select-field"><label for="navigator-duration-max">最長秒數</label><input id="navigator-duration-max" type="number" min="0" name="duration_max" value="{{ query.duration_max if query.duration_max is not none else '' }}"></div>
+      </div>
+    </details>
   </form>
 
   <section aria-labelledby="navigator-results-heading">
@@ -154,14 +145,14 @@
       <article class="gallery-card" data-navigator-item="{{ item.id }}">
         <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="開啟 {{ item.title }}">
           <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async">
-          <span class="gallery-type-badge">{{ item.item_type }}</span>
+          <span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>
           {% if item.duration_seconds %}<span class="gallery-type-badge" style="left:auto;right:.6rem">{{ item.duration_seconds|int }}s</span>{% endif %}
         </a>
         <div class="gallery-card-body">
           <div class="gallery-card-source"><span>{{ item.launch_source_label }}</span>{% if item.duration_seconds %}<span>{{ item.duration_seconds|int }}s</span>{% endif %}</div>
           <h3><a href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
           {% if item.tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.tags[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
-          <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
+          <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
         </div>
       </article>
       {% endfor %}
@@ -172,6 +163,22 @@
   </section>
 
   {% if next_url %}<nav class="gallery-pagination" aria-label="Navigator 批次載入"><a class="action-button primary" href="{{ next_url }}">載入下一批</a></nav>{% endif %}
+
+  {% if recent_sessions %}
+  <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">
+    <div class="gallery-results-heading"><div><p class="eyebrow">Continue browsing</p><h2 id="navigator-sessions-heading">最近的瀏覽</h2></div></div>
+    <div class="navigator-session-grid">
+      {% for session in recent_sessions %}
+      <a class="navigator-session-card" href="{{ session.url }}">
+        <span class="navigator-session-meta">{{ session.scope_label }} · {{ session.updated_display }}</span>
+        <h3>{{ session.query.q or '篩選瀏覽' }}</h3>
+        <p>{{ session.query.sources|map('upper')|join(' · ') }} · {{ session.query.sort }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  <p id="navigator-action-status" class="sr-only" aria-live="polite"></p>
 </main>
 
 <script>
@@ -194,23 +201,37 @@
       sessionStorage.setItem(sessionKey, value.id);
     }
   });
-  saveSession({query, scroll_position: Number(saved || 0)});
+  const meaningfulQuery = Boolean(
+    query.q || query.type || query.tags.length || query.favorite || query.unviewed ||
+    query.duration_min != null || query.duration_max != null || query.sort !== 'recently_added'
+  );
+  if (meaningfulQuery) saveSession({query, scroll_position: Number(saved || 0)});
 
   document.querySelectorAll('[data-navigator-item] a').forEach((link) => link.addEventListener('click', () => {
     sessionStorage.setItem(stateKey, String(window.scrollY));
     const item = link.closest('[data-navigator-item]');
     if (!item) return;
-    if (browseSession) saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
+    saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
     navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: 'open'})], {type: 'application/json'}));
   }));
 
   document.querySelectorAll('.navigator-favorite').forEach((button) => button.addEventListener('click', async () => {
     const item = button.closest('[data-navigator-item]');
     const enabled = button.dataset.favorite === '1';
-    const response = await fetch(`/api/catalog/items/${item.dataset.navigatorItem}/events`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({event_type: enabled ? 'unfavorite' : 'favorite'})});
-    if (response.ok) {
-      button.dataset.favorite = enabled ? '0' : '1';
-      button.textContent = enabled ? '收藏' : '已收藏';
+    const status = document.getElementById('navigator-action-status');
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/catalog/items/${item.dataset.navigatorItem}/events`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({event_type: enabled ? 'unfavorite' : 'favorite'})});
+      if (!response.ok) throw new Error('無法更新收藏');
+      const next = !enabled;
+      button.dataset.favorite = next ? '1' : '0';
+      button.setAttribute('aria-pressed', String(next));
+      button.textContent = next ? '已收藏' : '收藏';
+      status.textContent = next ? `已收藏 ${item.querySelector('h3').textContent}` : '已移除收藏';
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
     }
   }));
 
@@ -222,16 +243,6 @@
       if (browseSession) saveSession({query, scroll_position: window.scrollY});
     }, 500);
   }, {passive: true});
-
-  let searchTimer;
-  const search = document.getElementById('navigator-q');
-  if (search) search.addEventListener('input', () => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => search.form.requestSubmit(), 350);
-  });
-  document.querySelectorAll('.navigator-query input[type="checkbox"], .navigator-query select').forEach((control) => {
-    control.addEventListener('change', () => control.form.requestSubmit());
-  });
 
 })();
 </script>

@@ -15,47 +15,54 @@
       <h1>網頁資源</h1>
       <p>顯示已擷取的網頁 metadata、摘要、全文與 tags。跨 Local、Eagle、Bookmarks、Resources 的查找請使用 Navigator。</p>
     </div>
-    <div class="resource-hero-actions">
-      <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='all') }}">在 Navigator 搜尋</a>
+    <div class="resource-hero-side">
+      <div class="resource-hero-actions">
+        <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='all') }}">在 Navigator 搜尋</a>
+      </div>
+      <section class="resource-stats" aria-label="資源統計">
+        <article><strong>{{ stats.total }}</strong><span>全部資源</span></article>
+        <article><strong>{{ stats.source_types|length }}</strong><span>資源類型</span></article>
+        <article><strong>{{ stats.pending_jobs }}</strong><span>待處理 · {{ 'worker 線上' if stats.worker_online else 'worker 離線' }}</span></article>
+      </section>
     </div>
   </header>
 
-  <section class="resource-stats" aria-label="資源統計">
-    <article><strong>{{ stats.total }}</strong><span>全部資源</span></article>
-    <article><strong>{{ stats.source_types|length }}</strong><span>資源類型</span></article>
-    <article><strong>{{ stats.pending_jobs }}</strong><span>背景處理</span></article>
-  </section>
-
-  <section class="resource-command-grid" aria-label="新增與同步資源">
-    <details class="resource-panel" {% if stats.total == 0 %}open{% endif %}>
-      <summary>新增單一網址</summary>
+  <details class="resource-operations" {% if stats.total == 0 or error %}open{% endif %}>
+    <summary>新增或同步資源 <span>URL、Chrome、JSON／HTML</span></summary>
+    <div class="resource-command-grid" aria-label="新增與同步資源">
+    <section class="resource-panel">
+      <h2>新增單一網址</h2>
       <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="new-resource-url">URL</label>
         <input id="new-resource-url" name="url" type="url" required placeholder="https://example.com/article">
         <label for="new-resource-title">自訂標題（可留空）</label>
         <input id="new-resource-title" name="title" type="text">
         <button class="action-button primary" type="submit">加入 Resources</button>
       </form>
-    </details>
+    </section>
 
-    <details class="resource-panel">
-      <summary>同步 Chrome 到 Resources</summary>
+    <section class="resource-panel">
+      <h2>同步 Chrome 到 Resources</h2>
       <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_import_chrome') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <p class="resource-helper">增量讀取目前 Chrome Profile；同一 canonical URL 只保留一筆 Resource。</p>
         <label class="resource-check"><input type="checkbox" name="enqueue" value="1" checked> 擷取 metadata、縮圖與內容</label>
         <button class="action-button primary" type="submit">增量同步</button>
       </form>
-    </details>
+    </section>
 
-    <details class="resource-panel">
-      <summary>匯入 JSON／HTML</summary>
+    <section class="resource-panel">
+      <h2>匯入 JSON／HTML</h2>
       <form class="resource-form" method="post" enctype="multipart/form-data" action="{{ url_for('resource_library.resource_import_upload') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="bookmark-file">Chrome 匯出檔</label>
         <input id="bookmark-file" type="file" name="file" accept=".json,.html,.htm" required>
         <button class="action-button primary" type="submit">匯入檔案</button>
       </form>
-    </details>
-  </section>
+    </section>
+    </div>
+  </details>
 
   <form class="resource-filter" method="get" role="search">
     <div class="resource-filter-search">
@@ -67,7 +74,7 @@
       <select id="source-type" name="source_type">
         <option value="">全部</option>
         {% for value in ['article','web_page','video','pdf','github','image','social_post','unknown'] %}
-        <option value="{{ value }}" {% if value in filters.source_types %}selected{% endif %}>{{ value }}</option>
+        <option value="{{ value }}" {% if value in filters.source_types %}selected{% endif %}>{{ resource_type_labels.get(value, value) }}</option>
         {% endfor %}
       </select>
     </div>
@@ -87,7 +94,7 @@
       <article class="resource-card">
         <a class="resource-cover" href="{{ resource.detail_url }}" aria-label="查看 {{ resource.title }}">
           <img src="{{ resource.thumbnail_url }}" alt="" width="640" height="360" loading="lazy" decoding="async">
-          <span class="resource-type">{{ resource.source_type }}</span>
+          <span class="resource-type">{{ resource_type_labels.get(resource.source_type, resource.source_type) }}</span>
         </a>
         <div class="resource-card-body">
           <div class="resource-card-meta"><span>{{ resource.domain or '未知來源' }}</span><span>{{ resource.captured_at[:10] if resource.captured_at else '' }}</span></div>

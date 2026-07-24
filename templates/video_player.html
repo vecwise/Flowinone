@@ -60,6 +60,16 @@
         <h2>可用操作</h2>
         <div class="rail-actions">
           {% for action in recommended_actions %}
+          {% if action.url and action.method == 'post' %}
+          <form method="post" action="{{ action.url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="path" value="{{ action.path }}">
+            <button class="rail-action" type="submit">
+              <strong>{{ action.label }}</strong>
+              <span>{{ action.description }}</span>
+            </button>
+          </form>
+          {% else %}
           {% if action.url %}
           <a class="rail-action" href="{{ action.url }}">
           {% elif action.id == 'back' %}
@@ -70,6 +80,7 @@
             <strong>{{ action.label }}</strong>
             <span>{{ action.description }}</span>
           </a>
+          {% endif %}
           {% endfor %}
         </div>
       </section>

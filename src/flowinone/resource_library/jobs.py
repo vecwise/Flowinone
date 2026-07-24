@@ -60,7 +60,9 @@ class JobQueue:
                 run_after=now,
             )
             session.add(job)
-        elif force or job.status in {"failed", "cancelled"}:
+        elif (
+            force and job.status not in {"pending", "retry", "running"}
+        ) or job.status in {"failed", "cancelled"}:
             job.status = "pending"
             job.attempts = 0
             job.run_after = now
@@ -209,6 +211,11 @@ class JobQueue:
                 )
             )
             return [self.serialize(job) for job in jobs]
+
+    def get(self, job_id: str) -> dict | None:
+        with self.database.session(write=False) as session:
+            job = session.get(ProcessingJob, job_id)
+            return self.serialize(job) if job is not None else None
 
     def counts(self) -> dict[str, int]:
         with self.database.session(write=False) as session:

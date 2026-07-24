@@ -464,9 +464,9 @@ def test_new_catalog_routes_render(tmp_path):
     status_payload = client.get("/api/catalog/sync/status").get_json()["sources"]
     assert status_payload["eagle"]["status"] == "retrying"
     assert status_payload["bookmarks"]["error"] == "bookmark source failed"
-    gallery_search = BeautifulSoup(gallery.data, "html.parser").select_one(
-        "form.search-container"
-    )
+    parsed_gallery = BeautifulSoup(gallery.data, "html.parser")
+    assert parsed_gallery.select_one("form.search-container") is None
+    gallery_search = parsed_gallery.select_one("form.navigator-query")
     assert gallery_search is not None
     assert gallery_search.select_one('input[name="scope"]')["value"] == "gallery"
 
@@ -474,7 +474,7 @@ def test_new_catalog_routes_render(tmp_path):
     assert all_content.status_code == 200
     assert all_content.data.count(b'type="checkbox" name="source"') == 4
     all_search = BeautifulSoup(all_content.data, "html.parser").select_one(
-        "form.search-container"
+        "form.navigator-query"
     )
     assert all_search is not None
     assert all_search.select_one('input[name="scope"]')["value"] == "all"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
@@ -483,10 +484,27 @@ class ResourceRepository:
                 )
                 or 0
             )
+            heartbeat = session.execute(
+                text(
+                    "SELECT heartbeat_at FROM runtime_state "
+                    "WHERE component='worker'"
+                )
+            ).scalar_one_or_none()
+        worker_online = False
+        if heartbeat:
+            try:
+                seen = datetime.fromisoformat(str(heartbeat).replace("Z", "+00:00"))
+                if seen.tzinfo is None:
+                    seen = seen.replace(tzinfo=timezone.utc)
+                worker_online = (datetime.now(timezone.utc) - seen).total_seconds() <= 30
+            except ValueError:
+                pass
         return {
             "total": total,
             "source_types": source_types,
             "pending_jobs": pending_jobs,
+            "worker_online": worker_online,
+            "worker_last_seen": heartbeat,
         }
 
     def latest_content_text(self, resource_id: str) -> str:

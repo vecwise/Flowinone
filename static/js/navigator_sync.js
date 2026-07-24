@@ -1,7 +1,7 @@
 (function initializeNavigatorCatalogSync(global) {
   'use strict';
 
-  const ACTIVE_STATUSES = new Set(['syncing', 'retrying']);
+  const ACTIVE_STATUSES = new Set(['queued', 'running', 'syncing', 'retrying']);
 
   function createCatalogSyncController(options = {}) {
     const root = options.root || global.document;
@@ -55,6 +55,9 @@
         label.textContent = '同步中';
         const progress = state.total == null ? '' : `${state.processed || 0}/${state.total} 筆 · `;
         detail.textContent = `${progress}第 ${state.attempt || 1}/${state.max_attempts || 4} 次嘗試`;
+      } else if (status === 'queued' || status === 'running') {
+        label.textContent = status === 'queued' ? '已排程' : '處理中';
+        detail.textContent = '由背景 worker 執行；離開頁面也不會中斷';
       } else {
         label.textContent = '尚未同步';
         detail.textContent = '—';
@@ -87,21 +90,24 @@
       updateActions();
 
       let pollInFlight = false;
-      const poll = async () => {
+      const refreshStates = async (activeOnly = true) => {
+        const response = await request('/api/catalog/sync/status');
+        if (response.ok) {
+          renderSelectedStates((await response.json()).sources, sources, activeOnly);
+        }
+      };
+      const poll = async (activeOnly = true) => {
         if (pollInFlight) return;
         pollInFlight = true;
         try {
-          const response = await request('/api/catalog/sync/status');
-          if (response.ok) {
-            renderSelectedStates((await response.json()).sources, sources, true);
-          }
+          await refreshStates(activeOnly);
         } catch (_error) {
           // The POST result remains authoritative if a progress poll is missed.
         } finally {
           pollInFlight = false;
         }
       };
-      const pollTimer = timers.setInterval(poll, 100);
+      const pollTimer = timers.setInterval(poll, 1000);
 
       try {
         const response = await request('/api/catalog/sync', {
@@ -111,6 +117,34 @@
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || '同步失敗');
+        if (result.job) {
+          sources.forEach((source) => renderSyncState(source, {status: 'queued'}));
+          let job = result.job;
+          while (['pending', 'retry', 'running'].includes(job.status)) {
+            await new Promise((resolve) => timers.setTimeout(resolve, 1000));
+            const jobResponse = await request(`/api/catalog/sync/jobs/${job.id}`);
+            const jobResult = await jobResponse.json();
+            if (!jobResponse.ok) throw new Error(jobResult.error || '無法讀取同步工作');
+            job = jobResult.job;
+            const visibleStatus = job.status === 'pending'
+              ? 'queued'
+              : job.status === 'retry' ? 'retrying' : job.status;
+            sources.forEach((source) => renderSyncState(source, {
+              status: visibleStatus,
+              error: job.error_message,
+            }));
+          }
+          if (job.status !== 'complete') {
+            throw new Error(job.error_message || '同步工作失敗');
+          }
+          try {
+            await refreshStates(false);
+          } catch (_error) {
+            sources.forEach((source) => renderSyncState(source, {status: 'complete'}));
+          }
+          if (reloadOnSuccess) timers.setTimeout(() => location.reload(), 800);
+          return job;
+        }
         renderSelectedStates(result, sources);
         const failed = sources.some((source) => result[source]?.status === 'failed');
         if (reloadOnSuccess && !failed) {

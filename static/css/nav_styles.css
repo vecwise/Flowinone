@@ -81,6 +81,32 @@
     font-weight: 720;
 }
 
+.nav-action-form {
+    margin: 0;
+}
+
+.nav-action-form button {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--fo-muted-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: .86rem;
+    font-weight: 720;
+    padding: 0 10px;
+}
+
+.nav-action-form button:hover,
+.nav-action-form button:focus-visible {
+    background: var(--fo-muted);
+    color: var(--fo-text);
+}
+
 .nav-links a,
 .nav-tools summary {
     position: relative;

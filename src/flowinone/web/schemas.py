@@ -333,6 +333,17 @@ class CatalogSyncStatusOutput(ApiOutput):
     sources: dict[str, SyncStateOutput]
 
 
+class CatalogSyncJobOutput(ApiOutput):
+    id: str
+    job_type: Literal["catalog_sync"]
+    status: str
+    error_message: str | None = None
+
+
+class CatalogSyncJobEnvelope(ApiOutput):
+    job: CatalogSyncJobOutput
+
+
 class GallerySourceOutput(ApiOutput):
     key: str
     name: str

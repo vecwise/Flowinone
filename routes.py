@@ -6,7 +6,10 @@ small so existing ``from routes import register_routes`` callers keep working.
 
 from __future__ import annotations
 
-from flask import Blueprint, Flask, render_template
+from pathlib import Path
+
+import click
+from flask import Blueprint, Flask, current_app, render_template
 
 from src.flowinone.catalog.blueprint import register_catalog
 from src.flowinone.gallery.blueprint import register_gallery
@@ -14,6 +17,7 @@ from src.flowinone.resource_library.blueprint import register_resource_library
 from src.flowinone.web import chrome, eagle, local, media
 from src.flowinone.web.api import register_api_error_handlers
 from src.flowinone.web.common import get_feature_flags
+from src.flowinone.web.security import register_request_security
 
 
 debug_bp = Blueprint("debug", __name__)
@@ -42,6 +46,7 @@ def register_routes(app: Flask) -> None:
     """Register source blueprints, domain blueprints, and CLI commands."""
 
     register_api_error_handlers(app)
+    register_request_security(app)
 
     @app.context_processor
     def inject_feature_flags():
@@ -57,6 +62,37 @@ def register_routes(app: Flask) -> None:
     register_resource_library(app)
     register_gallery(app)
     register_catalog(app)
+
+    @app.cli.command("flowinone-doctor")
+    def flowinone_doctor() -> None:
+        """Check configuration and runtime dependencies without changing them."""
+        import config
+        from src.flowinone.resource_library.database import ensure_database_current
+
+        checks = [
+            ("external media root", config.DB_route_external),
+            ("internal media root", config.DB_route_internal),
+            (
+                "resource database",
+                current_app.config["FLOWINONE_RESOURCE_DB_PATH"],
+            ),
+        ]
+        failed = False
+        for label, raw_path in checks[:2]:
+            path = Path(raw_path) if raw_path else None
+            available = bool(path and path.is_dir())
+            failed = failed or not available
+            click.echo(f"{'OK' if available else 'FAIL'}  {label}: {path or '(unset)'}")
+        database_path = Path(checks[2][1])
+        try:
+            ensure_database_current(database_path)
+        except Exception as exc:
+            failed = True
+            click.echo(f"FAIL  resource database: {exc}")
+        else:
+            click.echo(f"OK  resource database: {database_path}")
+        if failed:
+            raise click.ClickException("Flowinone has configuration errors")
 
 
 def register_routes_debug(app: Flask) -> None:

@@ -92,6 +92,18 @@
       <div class="queue-panel">
         {% for action in action_queue %}
         {% if action.enabled %}
+        {% if action.method == 'post' %}
+        <form method="post" action="{{ action.url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="queue-item tone-{{ action.tone }}" type="submit">
+            <span class="queue-order">0{{ loop.index }}</span>
+            <span>
+              <strong>{{ action.label }}</strong>
+              <small>{{ action.description }}</small>
+            </span>
+          </button>
+        </form>
+        {% else %}
         <a class="queue-item tone-{{ action.tone }}" href="{{ action.url }}">
           <span class="queue-order">0{{ loop.index }}</span>
           <span>
@@ -99,6 +111,7 @@
             <small>{{ action.description }}</small>
           </span>
         </a>
+        {% endif %}
         {% else %}
         <div class="queue-item is-disabled" aria-disabled="true">
           <span class="queue-order">0{{ loop.index }}</span>

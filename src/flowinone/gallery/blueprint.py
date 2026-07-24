@@ -39,7 +39,16 @@ def _service() -> GalleryService:
     if callable(factory):
         return factory()
     configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-    return CatalogGalleryService(get_resource_database(Path(configured) if configured else None))
+    return CatalogGalleryService(
+        get_resource_database(
+            Path(configured) if configured else None,
+            migrate=bool(
+                current_app.config.get(
+                    "FLOWINONE_AUTO_MIGRATE", current_app.testing
+                )
+            ),
+        )
+    )
 
 
 def _query() -> GalleryQuery:
@@ -140,6 +149,8 @@ def gallery_index():
 @bp.get("/gallery/lab", strict_slashes=False)
 def gallery_lab_index():
     """Numbered comparison surface for the retained gallery design studies."""
+    if not current_app.config.get("FLOWINONE_DEV_TOOLS", current_app.testing):
+        abort(404)
     return render_template(
         "gallery_lab_index.html",
         title="Gallery Lab · Flowinone",
@@ -150,6 +161,8 @@ def gallery_lab_index():
 @bp.get("/gallery/lab/<variant_slug>")
 def gallery_lab_variant(variant_slug: str):
     """Render one design study with the production Gallery query and item data."""
+    if not current_app.config.get("FLOWINONE_DEV_TOOLS", current_app.testing):
+        abort(404)
     variant = next((item for item in GALLERY_LAB_VARIANTS if item["slug"] == variant_slug), None)
     if variant is None:
         abort(404)

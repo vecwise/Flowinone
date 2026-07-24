@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import os
 import platform
+from pathlib import Path
 from urllib.parse import unquote
 
-from flask import Blueprint, abort, render_template, request, send_file, send_from_directory
+from flask import Blueprint, abort, current_app, render_template, request, send_file
+
+import config
+from src.file_handler.paths import IMAGE_EXTENSIONS
+from src.flowinone.paths import data_dir
 
 from src.file_handler import (
     AccessDenied,
@@ -27,25 +32,44 @@ from .common import (
 
 
 bp = Blueprint("media", __name__)
-IS_MACOS = platform.system() == "Darwin"
-IS_WINDOWS = platform.system() == "Windows"
+
+
+def _allowed_media_roots() -> list[Path]:
+    roots = [
+        Path(value).expanduser()
+        for value in (config.DB_route_external, config.DB_route_internal)
+        if value
+    ]
+    roots.append(data_dir())
+    configured = current_app.config.get("FLOWINONE_MEDIA_ROOTS", ())
+    if isinstance(configured, str):
+        configured = configured.split(os.pathsep)
+    roots.extend(Path(value).expanduser() for value in configured if value)
+    try:
+        from src.file_handler.eagle_integration import _get_eagle_library_path
+
+        roots.append(Path(_get_eagle_library_path()).expanduser())
+    except Exception:
+        # Eagle is optional; its root is only relevant when the local API is live.
+        pass
+    return [root.resolve() for root in roots]
 
 
 @bp.get("/serve_image/<path:image_path>")
 def serve_image_by_full_path(image_path: str):
-    decoded = unquote(image_path)
-    if IS_WINDOWS:
-        decoded_path = os.path.abspath(decoded)
-    else:
-        if not decoded.startswith("/"):
-            decoded = "/" + decoded
-        decoded_path = os.path.abspath(decoded)
-    if not os.path.isfile(decoded_path):
+    decoded = unquote(image_path).replace("\\", os.sep)
+    if platform.system() != "Windows" and not decoded.startswith("/"):
+        decoded = "/" + decoded
+    candidate = Path(decoded).expanduser().resolve()
+    if candidate.suffix.lower().lstrip(".") not in IMAGE_EXTENSIONS:
         abort(404)
-    if IS_MACOS:
-        directory, filename = os.path.split(decoded_path)
-        return send_from_directory(directory, filename)
-    return send_file(decoded_path)
+    if not candidate.is_file():
+        abort(404)
+    if not any(candidate.is_relative_to(root) for root in _allowed_media_roots()):
+        abort(403)
+    response = send_file(candidate, conditional=True, max_age=3600)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def _render_local_detail(path: str, media_kind: str):

@@ -13,12 +13,14 @@
     </div>
 
     <div class="nav-actions">
+        {% if request.endpoint != 'catalog.navigator_page' %}
         <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="GET" role="search">
             <label class="sr-only" for="globalSearch">搜尋 Navigator</label>
             <input id="globalSearch" type="search" placeholder="搜尋素材與資源" name="q" value="{{ request.args.get('q', '') if request.endpoint == 'catalog.navigator_page' else '' }}">
             <input type="hidden" name="scope" value="{{ request.args.get('scope', 'gallery') if request.endpoint == 'catalog.navigator_page' else 'all' }}">
             <button type="submit">搜尋</button>
         </form>
+        {% endif %}
 
         <details class="nav-tools">
             <summary>來源</summary>
@@ -34,8 +36,14 @@
                 {% if feature_flags.db %}<a href="{{ url_for('local.view_source_folders') }}">本機資料夾</a>{% endif %}
                 {% if feature_flags.db %}
                 <span class="nav-menu-label">Maintenance</span>
-                <a href="{{ url_for('local.update_item_db_route') }}">同步本機索引</a>
-                <a href="{{ url_for('local.update_thumbnails_route') }}">補齊縮圖</a>
+                <form class="nav-action-form" method="post" action="{{ url_for('local.update_item_db_route') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">同步本機索引</button>
+                </form>
+                <form class="nav-action-form" method="post" action="{{ url_for('local.update_thumbnails_route') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">補齊縮圖</button>
+                </form>
                 {% endif %}
             </div>
         </details>

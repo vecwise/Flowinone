@@ -114,7 +114,11 @@
   <div class="metadata-field">
     <span>Filesystem path</span>
     <code>{{ metadata.filesystem_path }}</code>
-    <a class="action-button" href="{{ url_for('local.open_filesystem_path') }}?path={{ metadata.filesystem_path | urlencode }}">Open folder</a>
+    <form method="post" action="{{ url_for('local.open_filesystem_path') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="path" value="{{ metadata.filesystem_path }}">
+      <button class="action-button" type="submit">Open folder</button>
+    </form>
   </div>
   {% endif %}
 {% if compact_metadata %}

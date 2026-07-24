@@ -23,7 +23,7 @@ from config import CHROME_BOOKMARK_PATH
 from src.file_handler.thumbnails.store import get_thumbnail_store
 
 from .canonical import ensure_within
-from .database import get_resource_database, upgrade_database
+from .database import backup_database, get_resource_database, upgrade_database
 from .enrichment import EnrichmentService
 from .maintenance import rebuild_fts, retry_failed_jobs
 from .repository import ResourceNotFound
@@ -57,11 +57,26 @@ from src.flowinone.web.schemas import (
 
 
 bp = Blueprint("resource_library", __name__)
+RESOURCE_TYPE_LABELS = {
+    "article": "文章",
+    "web_page": "網頁",
+    "video": "影片",
+    "pdf": "PDF",
+    "github": "GitHub",
+    "image": "圖片",
+    "social_post": "社群貼文",
+    "unknown": "其他",
+}
 
 
 def _database():
     configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-    return get_resource_database(Path(configured) if configured else None)
+    return get_resource_database(
+        Path(configured) if configured else None,
+        migrate=bool(
+            current_app.config.get("FLOWINONE_AUTO_MIGRATE", current_app.testing)
+        ),
+    )
 
 
 def _service() -> ResourceService:
@@ -140,6 +155,7 @@ def resource_index():
         filters=params,
         notice=request.args.get("notice"),
         error=request.args.get("error"),
+        resource_type_labels=RESOURCE_TYPE_LABELS,
     )
 
 
@@ -512,7 +528,11 @@ def register_resource_library(app: Flask) -> None:
     @app.cli.command("resources-db-upgrade")
     def resources_db_upgrade():
         """Apply all database migrations."""
-        upgrade_database(Path(current_app.config["FLOWINONE_RESOURCE_DB_PATH"]))
+        database_path = Path(current_app.config["FLOWINONE_RESOURCE_DB_PATH"])
+        backup_path = backup_database(database_path)
+        if backup_path:
+            click.echo(f"backup={backup_path}")
+        upgrade_database(database_path)
         click.echo("resource database is at head")
 
     @app.cli.command("resources-rebuild-fts")
