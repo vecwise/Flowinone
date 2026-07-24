@@ -263,6 +263,60 @@ def test_concurrent_catalog_sync_requests_return_200(monkeypatch, tmp_path):
     assert all(response.get_json()["bookmarks"]["status"] == "complete" for response in responses)
 
 
+def test_catalog_sync_route_retries_only_the_requested_failed_source(monkeypatch, tmp_path):
+    database = get_resource_database(tmp_path / "single-source-retry.db")
+    database.set_catalog_sync_status(
+        "bookmarks", status="failed", error="bookmark source failed"
+    )
+    database.set_catalog_sync_status(
+        "resources", status="failed", error="resource source failed"
+    )
+    calls = []
+
+    def sync_bookmarks(_service, _conn):
+        calls.append("bookmarks")
+        return 7
+
+    def unexpected_sync(source):
+        def fail_if_called(_service, _conn):
+            calls.append(source)
+            raise AssertionError(f"{source} must not be synchronized")
+
+        return fail_if_called
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_bookmarks", sync_bookmarks)
+    for source in ("local", "eagle", "resources"):
+        monkeypatch.setattr(
+            CatalogSyncService, f"_sync_{source}", unexpected_sync(source)
+        )
+
+    app = Flask(
+        "catalog-single-source-retry",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(
+        TESTING=True,
+        FLOWINONE_RESOURCE_DB_PATH=str(database.path),
+        FLOWINONE_RESOURCE_LINK_THUMBNAILS=False,
+    )
+    register_routes(app)
+    response = app.test_client().post(
+        "/api/catalog/sync", json={"sources": ["bookmarks"]}
+    )
+
+    assert response.status_code == 200
+    assert calls == ["bookmarks"]
+    assert set(response.get_json()) == {"bookmarks"}
+    assert response.get_json()["bookmarks"]["status"] == "complete"
+    assert response.get_json()["bookmarks"]["count"] == 7
+    status = CatalogService(database).sync_status()
+    assert status["bookmarks"]["status"] == "complete"
+    assert status["bookmarks"]["item_count"] == 7
+    assert status["resources"]["status"] == "failed"
+    assert status["resources"]["error"] == "resource source failed"
+
+
 def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path):
     database, first, second, third = _catalog(tmp_path)
     service = CatalogService(database)
@@ -388,6 +442,25 @@ def test_new_catalog_routes_render(tmp_path):
         "最終失敗",
         "同步中",
     ]
+    retry_buttons = [
+        row.select_one("[data-catalog-sync-retry]") for row in sync_rows
+    ]
+    assert [button["data-catalog-sync-retry"] for button in retry_buttons] == [
+        "local",
+        "eagle",
+        "bookmarks",
+        "resources",
+    ]
+    assert [button.has_attr("hidden") for button in retry_buttons] == [
+        True,
+        True,
+        False,
+        True,
+    ]
+    assert retry_buttons[2]["aria-label"] == "重試書籤同步"
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        'script[src$="/static/js/navigator_sync.js"]'
+    )
     status_payload = client.get("/api/catalog/sync/status").get_json()["sources"]
     assert status_payload["eagle"]["status"] == "retrying"
     assert status_payload["bookmarks"]["error"] == "bookmark source failed"
