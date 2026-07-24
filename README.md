@@ -67,6 +67,7 @@ For headless setup, set valid Local media roots in `config.json` and use `FLOWIN
 ```bash
 conda run -n py3.11 flask --app run resources-db-upgrade
 conda run -n py3.11 flask --app run catalog-sync --source all
+conda run -n py3.11 flask --app run catalog-sync --source eagle --full-rescan
 conda run -n py3.11 flask --app run resources-worker --limit 20
 conda run -n py3.11 flask --app run resources-rebuild-fts
 conda run -n py3.11 flask --app run catalog-relations-rebuild
@@ -74,6 +75,9 @@ conda run -n py3.11 flask --app run sidecars-audit
 conda run -n py3.11 flask --app run sidecars-export
 conda run -n py3.11 flask --app run sidecars-import
 ```
+
+Catalog sync uses resumable incremental Eagle batches by default. Use
+`--full-rescan` when the saved checkpoint or projection needs to be rebuilt.
 
 `resources-worker` performs metadata, thumbnail, content extraction, and optional AI-summary work. It never writes notes or exports to Obsidian.
 

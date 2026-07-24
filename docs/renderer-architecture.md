@@ -17,6 +17,7 @@
 conda run -n py3.11 python -m src.flowinone.workers
 conda run -n py3.11 flask --app run resources-db-upgrade
 conda run -n py3.11 flask --app run catalog-sync --source all
+conda run -n py3.11 flask --app run catalog-sync --source eagle --full-rescan
 conda run -n py3.11 flask --app run resources-worker --limit 20
 conda run -n py3.11 flask --app run catalog-relations-rebuild
 ```

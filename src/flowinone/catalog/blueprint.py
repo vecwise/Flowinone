@@ -408,7 +408,10 @@ def api_person_link(person_id: str, item_id: str):
 def api_sync():
     payload = parse_json(CatalogSyncRequest)
     return validated_json(
-        CatalogSyncService(_database()).sync(payload.sources), CatalogSyncOutput
+        CatalogSyncService(_database()).sync(
+            payload.sources, full_rescan=payload.full_rescan
+        ),
+        CatalogSyncOutput,
     )
 
 
@@ -426,9 +429,18 @@ def register_catalog(app: Flask) -> None:
 
     @app.cli.command("catalog-sync")
     @click.option("--source", "sources", multiple=True, type=click.Choice((*CATALOG_SOURCES, "all")), default=("all",))
-    def catalog_sync(sources: tuple[str, ...]) -> None:
+    @click.option(
+        "--full-rescan",
+        is_flag=True,
+        help="Discard any Eagle checkpoint and rebuild every Eagle projection.",
+    )
+    def catalog_sync(sources: tuple[str, ...], full_rescan: bool) -> None:
         selected = CATALOG_SOURCES if "all" in sources else sources
-        click.echo(CatalogSyncService(_database()).sync(selected))
+        click.echo(
+            CatalogSyncService(_database()).sync(
+                selected, full_rescan=full_rescan
+            )
+        )
 
     @app.cli.command("catalog-relations-rebuild")
     def catalog_relations_rebuild() -> None:

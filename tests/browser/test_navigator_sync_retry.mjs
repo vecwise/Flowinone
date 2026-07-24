@@ -94,8 +94,51 @@ function createHarness() {
     setTimeout(callback) { callback(); },
   };
   vm.runInNewContext(controllerSource, {window});
-  return {rows, reindex, requests, intervals, resolvePost, location};
+  return {
+    rows,
+    reindex,
+    requests,
+    intervals,
+    resolvePost,
+    location,
+    controller: window.FlowinoneCatalogSync.controller,
+  };
 }
+
+test('live Eagle progress renders processed and total counts', () => {
+  const harness = createHarness();
+  const localRow = harness.rows[0];
+  harness.controller.renderSyncState('local', {
+    status: 'syncing',
+    attempt: 1,
+    max_attempts: 4,
+    processed: 125,
+    total: 1000,
+  });
+  assert.equal(
+    localRow.querySelector('[data-catalog-sync-detail]').textContent,
+    '125/1000 筆 · 第 1/4 次嘗試',
+  );
+});
+
+test('full rescan action requests the explicit fallback mode', async () => {
+  const harness = createHarness();
+  const syncPromise = harness.reindex.trigger('click');
+  assert.deepEqual(
+    JSON.parse(harness.requests.find(({url}) => url === '/api/catalog/sync').options.body),
+    {sources: ['local', 'bookmarks', 'resources'], full_rescan: true},
+  );
+  harness.resolvePost({
+    ok: true,
+    json: async () => ({
+      local: {status: 'complete', count: 11},
+      bookmarks: {status: 'complete', count: 7},
+      resources: {status: 'complete', count: 5},
+    }),
+  });
+  await syncPromise;
+  assert.equal(harness.location.reloadCount, 1);
+});
 
 test('retry posts and polls only one failed source while preserving filters', async () => {
   const harness = createHarness();

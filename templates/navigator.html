@@ -17,7 +17,8 @@
       <details class="navigator-maintenance">
         <summary>來源管理</summary>
         <div class="navigator-maintenance-panel">
-          <button class="action-button" id="catalog-reindex" type="button">重新建立索引</button>
+          <button class="action-button" id="catalog-incremental-sync" type="button">同步變更</button>
+          <button class="action-button" id="catalog-reindex" type="button">完整重掃</button>
           <div id="catalog-sync-status" class="catalog-sync-status" aria-live="polite">
             <ul>
               {% for source in catalog_sources %}
@@ -40,10 +41,10 @@
                   {% if status != 'failed' %}hidden{% endif %}
                 >重試</button>
                 <small data-catalog-sync-detail>
-                  {% if status == 'complete' %}{{ state.get('item_count', 0) }} 筆{% if state.get('retry_count', 0) %} · 重試 {{ state.retry_count }} 次{% endif %}
-                  {% elif status == 'retrying' %}準備第 {{ state.get('next_attempt', 2) }}/{{ state.get('max_attempts', 4) }} 次嘗試
-                  {% elif status == 'failed' %}{{ state.get('error', '同步失敗') }}
-                  {% elif status == 'syncing' %}第 {{ state.get('attempt', 1) }}/{{ state.get('max_attempts', 4) }} 次嘗試
+                  {% if status == 'complete' %}{{ state.get('item_count', 0) }} 筆{% if state.get('changed') is not none %} · 更新 {{ state.changed }} · 略過 {{ state.get('skipped', 0) }}{% endif %}{% if state.get('retry_count', 0) %} · 重試 {{ state.retry_count }} 次{% endif %}
+                  {% elif status == 'retrying' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}準備第 {{ state.get('next_attempt', 2) }}/{{ state.get('max_attempts', 4) }} 次嘗試
+                  {% elif status == 'failed' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}{{ state.get('error', '同步失敗') }}
+                  {% elif status == 'syncing' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}第 {{ state.get('attempt', 1) }}/{{ state.get('max_attempts', 4) }} 次嘗試
                   {% else %}—{% endif %}
                 </small>
               </li>

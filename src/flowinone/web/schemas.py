@@ -98,6 +98,7 @@ class PersonLinkRequest(ApiInput):
 
 class CatalogSyncRequest(ApiInput):
     sources: list[CatalogSource] = Field(default=list(CatalogSource.__args__), min_length=1)
+    full_rescan: StrictBool = False
 
 
 class ChromeImportFormRequest(ApiInput):

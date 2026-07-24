@@ -8,6 +8,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 import src.eagle_api as EG
+from src.eagle_api.models import EaglePage
 from .models import ExternalServiceError, MediaDetail, MediaEntry, MediaNotFound, PageMetadata
 from .paths import (
     DEFAULT_THUMBNAIL_ROUTE,
@@ -336,6 +337,107 @@ def get_eagle_stream_items(offset=0, limit=30):
 
     raw_items = response.get("data", []) or []
     return _format_eagle_items(raw_items, sort_by="modificationTime", reverse=True)
+
+
+def get_eagle_catalog_source(*, force=False):
+    """Return stable and mutable identifiers for the active Eagle library."""
+    response = _get_eagle_library_info(force=force)
+    if response.get("status") != "success":
+        raise ExternalServiceError(
+            f"Failed to fetch Eagle library info: {response.get('data')}"
+        )
+    data = response.get("data") or {}
+    identity = data.get("id") or data.get("libraryId") or data.get("path")
+    if not identity:
+        raise ExternalServiceError("Eagle v2 library identity is unavailable")
+    version = (
+        data.get("modifiedAt")
+        or data.get("modificationTime")
+        or data.get("updatedAt")
+        or ""
+    )
+    return {"identity": str(identity), "version": str(version)}
+
+
+def get_eagle_catalog_page(offset=0, limit=1000):
+    """Load one lightweight, ordered Eagle page for Catalog synchronization."""
+    try:
+        response = EG.EAGLE_list_items(
+            limit=limit,
+            offset=offset,
+            fields=[
+                "id",
+                "name",
+                "ext",
+                "url",
+                "website",
+                "tags",
+                "folders",
+                "annotation",
+                "importedAt",
+                "modifiedAt",
+                "modificationTime",
+            ],
+        )
+    except Exception as exc:
+        raise ExternalServiceError(
+            f"Failed to fetch Eagle catalog page: {exc}"
+        ) from exc
+    if response.get("status") != "success":
+        raise ExternalServiceError(
+            f"Failed to fetch Eagle catalog page: {response.get('data')}"
+        )
+    pagination = response.get("pagination") or {}
+    raw_items = response.get("data") or []
+    try:
+        total = int(pagination["total"])
+        page_offset = int(pagination.get("offset") or 0)
+        page_limit = int(pagination.get("limit") or limit)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ExternalServiceError("Eagle catalog page is missing pagination") from exc
+
+    library_path = _get_eagle_library_path()
+    items = []
+    for raw in raw_items:
+        item = dict(raw)
+        item_id = str(item.get("id") or "")
+        name = str(item.get("name") or "Untitled")
+        ext = str(item.get("ext") or "jpg").lower()
+        if not item_id:
+            # Retain malformed records in the page length so offset pagination
+            # never skips a following valid record.  The Catalog layer will
+            # reject the record and refuse deletion cleanup if totals diverge.
+            items.append({"id": "", "name": name, "ext": ext})
+            continue
+        media_path = _eagle_item_media_path(item, library_path)
+        thumbnail = (
+            f"/serve_image/{library_path}/images/{item_id}.info/{name}_thumbnail.png"
+            if ext == "mp4"
+            else media_path
+        )
+        items.append(
+            {
+                "id": item_id,
+                "name": name,
+                "ext": ext,
+                "media_type": "video" if ext in VIDEO_EXTENSIONS else "image",
+                "thumbnail_route": thumbnail,
+                "original_url": item.get("website") or item.get("url") or "",
+                "tags": list(item.get("tags") or []),
+                "folders": list(item.get("folders") or []),
+                "description": str(item.get("annotation") or ""),
+                "captured_at": str(item.get("importedAt") or ""),
+                "modified_at": str(
+                    item.get("modifiedAt") or item.get("modificationTime") or ""
+                ),
+            }
+        )
+    return EaglePage(
+        items=items,
+        total=total,
+        offset=page_offset,
+        limit=page_limit,
+    )
 
 
 def _extract_folder_ids(raw_folders):

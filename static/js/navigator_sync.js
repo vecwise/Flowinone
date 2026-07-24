@@ -9,6 +9,7 @@
     const timers = options.timers || global;
     const location = options.location || global.location;
     const reindex = root.getElementById('catalog-reindex');
+    const incrementalSync = root.getElementById('catalog-incremental-sync');
     const syncRows = new Map(
       [...root.querySelectorAll('[data-catalog-sync-source]')]
         .map((row) => [row.dataset.catalogSyncSource, row]),
@@ -27,6 +28,7 @@
         button.textContent = isActiveRetry ? '重試中…' : '重試';
       });
       if (reindex) reindex.disabled = syncRunning;
+      if (incrementalSync) incrementalSync.disabled = syncRunning;
     };
 
     const renderSyncState = (source, state = {}) => {
@@ -39,16 +41,20 @@
       if (status === 'complete') {
         label.textContent = '成功';
         const count = state.count ?? state.item_count ?? 0;
-        detail.textContent = `${count} 筆${state.retry_count ? ` · 重試 ${state.retry_count} 次` : ''}`;
+        const changes = state.changed == null ? '' : ` · 更新 ${state.changed} · 略過 ${state.skipped || 0}`;
+        detail.textContent = `${count} 筆${changes}${state.retry_count ? ` · 重試 ${state.retry_count} 次` : ''}`;
       } else if (status === 'retrying') {
         label.textContent = '重試中';
-        detail.textContent = `SQLite 暫時忙碌；準備第 ${state.next_attempt || 2}/${state.max_attempts || 4} 次嘗試`;
+        const progress = state.total == null ? '' : `${state.processed || 0}/${state.total} 筆 · `;
+        detail.textContent = `${progress}SQLite 暫時忙碌；準備第 ${state.next_attempt || 2}/${state.max_attempts || 4} 次嘗試`;
       } else if (status === 'failed') {
         label.textContent = '最終失敗';
-        detail.textContent = state.error || '同步失敗';
+        const progress = state.total == null ? '' : `${state.processed || 0}/${state.total} 筆 · `;
+        detail.textContent = `${progress}${state.error || '同步失敗'}`;
       } else if (status === 'syncing') {
         label.textContent = '同步中';
-        detail.textContent = `第 ${state.attempt || 1}/${state.max_attempts || 4} 次嘗試`;
+        const progress = state.total == null ? '' : `${state.processed || 0}/${state.total} 筆 · `;
+        detail.textContent = `${progress}第 ${state.attempt || 1}/${state.max_attempts || 4} 次嘗試`;
       } else {
         label.textContent = '尚未同步';
         detail.textContent = '—';
@@ -65,7 +71,11 @@
       });
     };
 
-    const runSync = async (sources, {singleSource = null, reloadOnSuccess = false} = {}) => {
+    const runSync = async (sources, {
+      singleSource = null,
+      reloadOnSuccess = false,
+      fullRescan = false,
+    } = {}) => {
       if (syncRunning || !sources.length) return null;
       syncRunning = true;
       retrySource = singleSource;
@@ -97,7 +107,7 @@
         const response = await request('/api/catalog/sync', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({sources}),
+          body: JSON.stringify({sources, ...(fullRescan ? {full_rescan: true} : {})}),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || '同步失敗');
@@ -123,6 +133,12 @@
 
     if (reindex) {
       reindex.addEventListener('click', () => runSync(
+        [...syncRows.keys()],
+        {reloadOnSuccess: true, fullRescan: true},
+      ));
+    }
+    if (incrementalSync) {
+      incrementalSync.addEventListener('click', () => runSync(
         [...syncRows.keys()],
         {reloadOnSuccess: true},
       ));

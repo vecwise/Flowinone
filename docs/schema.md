@@ -32,7 +32,10 @@ catalog_items
   └── item_people → people  optional anonymous/manual person clusters
 ```
 
-`catalog_sync_state` records freshness/errors per source. A failed source leaves its previous projection intact and does not suppress results from healthy sources.
+`catalog_sync_state` records freshness/errors per source. Eagle additionally keeps a
+versioned, batch-committed cursor so an interrupted large-library scan can resume
+without treating unseen pages as deletions. A failed source leaves its previous
+projection intact and does not suppress results from healthy sources.
 
 ## Migration history
 
