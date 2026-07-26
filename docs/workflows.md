@@ -26,7 +26,7 @@ Folders are never items in the **素材** scope. They may appear as source metad
 2. From Resources or any other non-Navigator page, use the navigation search to open Navigator with `scope=all`.
 3. The non-Navigator default therefore searches Local, Eagle, Bookmarks, and Resources, matching the “搜尋素材與資源” label.
 
-`/gallery/` and `/search/` are compatibility redirects only: they preserve query parameters and map to **素材** (`scope=gallery`) and **全部內容** (`scope=all`) respectively.
+`/gallery/` and `/search/` are temporary compatibility redirects only: they preserve query parameters, map to **素材** (`scope=gallery`) and **全部內容** (`scope=all`) respectively, log usage, and sunset after 2026-12-31. There is no separate Gallery API or read model.
 
 ## Import and enrich web resources
 

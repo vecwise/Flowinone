@@ -19,8 +19,6 @@ from src.file_handler import item_db
 from src.file_handler.sidecars import SidecarService
 from src.flowinone.catalog.discovery import DiscoveryService
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
-from src.flowinone.gallery.models import GalleryQuery
-from src.flowinone.gallery.service import CatalogGalleryService
 from src.flowinone.resource_library.database import get_resource_database
 
 
@@ -359,23 +357,6 @@ def test_item_relations_are_explainable_renderer_recommendations(tmp_path):
     assert related
     assert all(item["id"] != first for item in related)
     assert all(item["reason"] for item in related)
-
-
-def test_gallery_uses_selected_origin_and_hides_unavailable_eagle(monkeypatch, tmp_path):
-    database, first, second, _ = _catalog(tmp_path)
-    gallery = CatalogGalleryService(database)
-
-    bookmark_page = gallery.list_items(GalleryQuery.create(sources=["bookmarks"], limit=10))
-    selected = next(item for item in bookmark_page.items if item.id == first)
-    assert selected.source == "bookmarks"
-    assert selected.detail_uri == "https://example.com/one"
-    assert selected.original_url == "https://example.com/one"
-
-    monkeypatch.setattr("src.flowinone.gallery.service.is_eagle_available", lambda: False)
-    eagle_page = gallery.list_items(GalleryQuery.create(sources=["eagle"], limit=10))
-    assert eagle_page.items == []
-    assert "eagle" in eagle_page.source_errors
-    assert second
 
 
 def test_sidecar_roundtrip_preserves_portable_identity(monkeypatch, tmp_path):

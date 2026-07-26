@@ -1,6 +1,6 @@
 # Current state
 
-Updated: 2026-07-24
+Updated: 2026-07-26
 
 This page is the concise product-state snapshot. For the actual runtime,
 storage, route, and authority model, use [Flowinone 現況架構](architecture.md);
@@ -19,7 +19,7 @@ Flowinone is a multi-source resource renderer. The root route redirects to `/nav
 | Item relations | Active | Explainable metadata-based related items; no opaque recommendation feed |
 | OCR/People | Foundation only | Artifact/person data interfaces remain optional; no provider is required for normal browsing |
 
-`/gallery/` and `/search/` remain only as compatibility redirects. They preserve incoming query parameters and send users to `/navigator/` with `scope=gallery` (**素材**) and `scope=all` (**全部內容**) respectively.
+`/gallery/` and `/search/` remain temporarily as compatibility redirects. They preserve incoming query parameters, force `scope=gallery` (**素材**) and `scope=all` (**全部內容**) respectively, log each use, and advertise a 2026-12-31 sunset. The duplicate Gallery read model, `/api/gallery/*` API, and Gallery Lab have been removed; all browser reads use Catalog.
 
 Navigator uses one page-level, scope-aware search. The navigation search is hidden there to remove duplication; on every non-Navigator page it defaults to `scope=all`.
 

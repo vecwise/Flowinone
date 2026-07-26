@@ -121,9 +121,6 @@ def test_json_api_success_responses_satisfy_declared_contracts(tmp_path):
         json={"display_name": "Researcher"},
     ).status_code == 200
 
-    assert client.get("/api/gallery/items?source=resources").status_code == 400
-    assert client.get("/api/gallery/items?source=local").status_code == 200
-    assert client.get("/api/gallery/sources").status_code == 200
     assert client.get("/api/bookmark-thumbnails/status").status_code == 200
     assert client.post(
         "/api/bookmark-thumbnails/enqueue", json={"ids": [], "force": False}

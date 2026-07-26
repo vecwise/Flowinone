@@ -20,7 +20,7 @@ flowchart LR
 - **Source-specific pages** — retain Eagle folders/tags/smart folders, Chrome bookmark tree, local folder views, image/video viewers, and maintenance tools.
 - **Local sidecars** — portable `.flowinone.json` metadata import/export/audit for local media.
 
-`/gallery/` and `/search/` are compatibility redirects only. They preserve query parameters and redirect to the Navigator's **素材** and **全部內容** scopes respectively; they are not separate user-facing surfaces.
+`/gallery/` and `/search/` are temporary compatibility redirects only. They preserve query parameters and redirect to the Navigator's **素材** and **全部內容** scopes respectively; they are logged and scheduled for removal after 2026-12-31. The former Gallery read model and `/api/gallery/*` API no longer exist.
 
 Navigator uses one scope-aware page search instead of duplicating a global search field. From Resources or any other non-Navigator page, the navigation search opens Navigator in **全部內容** (`scope=all`).
 
@@ -100,8 +100,7 @@ Catalog sync uses resumable incremental Eagle batches by default. Use
 - `src/flowinone/web/` — namespaced Local, Chrome, Eagle, and media Blueprints,
   shared Pydantic API contracts, and response validation.
 - `src/flowinone/workers.py` — dedicated background-worker process runtime.
-- `src/flowinone/gallery/` — retained Gallery read model/API, design lab, and `/gallery/` compatibility redirect.
-- `src/flowinone/catalog/` — Navigator HTTP surface plus the rebuildable cross-source Catalog, FTS, facets, cursors, events, sessions, and explainable item relations; it also owns the `/search/` compatibility redirect.
+- `src/flowinone/catalog/` — Navigator HTTP surface plus the single rebuildable cross-source Catalog read model, FTS, facets, cursors, events, sessions, explainable item relations, and the temporary `/gallery/` and `/search/` compatibility redirects.
 - `src/flowinone/resource_library/` — imported URL database, extraction jobs, Resource UI/API, and optional AI metadata.
 - `src/file_handler/` — filesystem, Chrome, Eagle adapters, thumbnails, item DB, and sidecars.
 - `migrations/` — Alembic history. `0007_renderer_only_cleanup` and `0008_renderer_resource_schema` remove the former knowledge-workflow tables, fields, and personal-note FTS data.

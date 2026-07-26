@@ -168,35 +168,6 @@ class CatalogListQuery(ApiQuery):
     cursor: str = Field(default="", max_length=500)
 
 
-class GalleryListQuery(ApiQuery):
-    q: str = Field(default="", max_length=300)
-    source: list[Literal["local", "eagle", "bookmarks"]] = []
-    type: Literal["image", "video", "bookmark"] | None = None
-    tags: list[str] = []
-    tag_mode: Literal["any", "all"] = "any"
-    favorite: bool = False
-    unviewed: bool = False
-    duration_min: float | None = None
-    duration_max: float | None = None
-    added_from: str = Field(default="", max_length=40)
-    added_to: str = Field(default="", max_length=40)
-    sort: Literal[
-        "newest",
-        "recently_added",
-        "relevance",
-        "title",
-        "random",
-        "most_viewed",
-        "recently_viewed",
-        "favorites",
-        "similar",
-    ] = "recently_added"
-    seed: int = Field(default=0, ge=0)
-    view: Literal["grid", "compact"] = "grid"
-    limit: int = Field(default=48, ge=1, le=96)
-    cursor: str = Field(default="", max_length=500)
-
-
 class ResourceOutput(ApiOutput):
     id: str
     title: str
@@ -342,38 +313,3 @@ class CatalogSyncJobOutput(ApiOutput):
 
 class CatalogSyncJobEnvelope(ApiOutput):
     job: CatalogSyncJobOutput
-
-
-class GallerySourceOutput(ApiOutput):
-    key: str
-    name: str
-
-
-class GalleryItemOutput(ApiOutput):
-    id: str
-    source: GallerySourceOutput
-    media_type: str
-    title: str
-    thumbnail_url: str
-    detail_url: str
-
-
-class GalleryItemsOutput(ApiOutput):
-    items: list[GalleryItemOutput]
-    next_cursor: str | None
-    total_estimate: int
-    query: dict[str, Any]
-    facets: dict[str, Any]
-    source_errors: dict[str, str]
-
-
-class GallerySourceStatusOutput(ApiOutput):
-    key: str
-    name: str
-    count: int
-    available: bool
-    error: str | None = None
-
-
-class GallerySourcesOutput(ApiOutput):
-    items: list[GallerySourceStatusOutput]

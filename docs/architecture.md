@@ -1,6 +1,6 @@
 # Flowinone 現況架構
 
-> 文件角色：這是執行中系統架構的權威說明。最後核對日期：2026-07-24。
+> 文件角色：這是執行中系統架構的權威說明。最後核對日期：2026-07-26。
 > 問題、優先級與改造順序另見 [架構與 UI 修正計畫](migration-plan.md)，實際操作見 [使用手冊](renderer-architecture.md)。
 
 ## 1. 產品邊界
@@ -60,9 +60,8 @@ flowchart TB
 | `run.py` | Flask application factory、顯式 startup validation、loopback 開發伺服器 | debug/dev tools 只在顯式 config 啟用 |
 | `routes.py` | 註冊 Blueprint、request security 與 `flowinone-doctor` | `/debug/` 只在 dev tools 模式註冊 |
 | `src/flowinone/web/` | Local、Chrome、Eagle、media HTTP adapters 與 API schema | 包含來源專屬頁面及檔案回應 |
-| `src/flowinone/catalog/` | Navigator、Catalog query/sync、FTS、facets、sessions、events、relations | `service.py` 同時承擔查詢、同步與 adapter orchestration，責任過多 |
+| `src/flowinone/catalog/` | Navigator、唯一的 Catalog read model、query/sync、FTS、facets、sessions、events、relations、舊瀏覽 URL redirect | `service.py` 同時承擔查詢、同步與 adapter orchestration，責任過多 |
 | `src/flowinone/resource_library/` | URL CRUD、import、metadata/content extraction、job、Resource UI/API | 與 Catalog 共用主 SQLite |
-| `src/flowinone/gallery/` | 舊 Gallery compatibility API、dev-only design lab、相容 redirect | 使用者主頁只走 Navigator；compatibility read model 待刪 |
 | `src/file_handler/` | Local/Eagle/Chrome 來源 adapter、item index、sidecar、thumbnail store/worker | item/cache path 已改由絕對 `FLOWINONE_DATA_DIR` 派生 |
 | `src/eagle_api/` | Eagle API client | Eagle 是權威來源，更新應走其 local API |
 | `migrations/` | `flowinone.sqlite3` 的 Alembic schema history | `0007`、`0008` 對舊 workflow 資料具有破壞性 |
@@ -132,10 +131,12 @@ HTTP fetch 層已有 public-IP 驗證、redirect 重新驗證、回應大小與 
 | Eagle | `/EAGLE_folders/`、`/EAGLE_tags/`、`/EAGLE_smart_folders/`、`/EAGLE_stream/` | Eagle 專屬瀏覽 |
 | Chrome | `/chrome/` | 書籤 tree 瀏覽 |
 | Local | `/folders/`、`/item_db`、`/grid/...`、`/slide/...` | 資料夾、index 與 viewer |
-| 相容入口 | `/gallery/`、`/search/` | 分別 redirect 到 Navigator 的 `gallery`、`all` scope |
-| 開發頁 | `/gallery/lab`、`/debug/` | 僅 `FLOWINONE_DEV_TOOLS` 啟用時可用 |
+| 暫時相容入口 | `/gallery/`、`/search/` | 分別 redirect 到 Navigator 的 `gallery`、`all` scope；保留 query、記錄使用、回傳 deprecation/sunset headers，預計 2026-12-31 後移除 |
+| 開發頁 | `/debug/` | 僅 `FLOWINONE_DEV_TOOLS` 啟用時可用 |
 
 Navigator 只顯示頁內的 scope-aware 搜尋，避免與全域搜尋重複；其他頁面的導覽列搜尋預設 `scope=all`。
+
+舊 `src/flowinone/gallery/`、`/api/gallery/items`、`/api/gallery/sources` 與 Gallery Lab 已刪除。Repo 稽核時沒有 production template、JavaScript 或 Python caller；唯一 runtime 使用者是自含的 dev-only Lab，其餘皆為舊 Gallery 專屬測試。所有列表與篩選現在只查 Catalog projection。
 
 ## 7. 啟動、設定與 migration 的實際行為
 

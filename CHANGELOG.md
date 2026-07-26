@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-26
+
+### Changed
+
+- Consolidated all browser reads on Navigator and the Catalog projection.
+- Kept `/gallery/` and `/search/` as logged compatibility redirects with a 2026-12-31 sunset.
+
+### Removed
+
+- Deleted the duplicate Gallery models, service, JSON API schemas, `/api/gallery/*` routes, and dev-only Gallery Lab.
+
 ## 2026-07-23
 
 ### Changed

@@ -153,7 +153,7 @@ conda run -n py3.11 flask --app run sidecars-import
 | 啟動時出現資料夾選擇器 | `config.json` 缺 Local roots | 補齊設定；自動化環境加 `FLOWINONE_HEADLESS=1` |
 | 顯示 database schema not current | 尚未手動 migration | 執行 `resources-db-upgrade`；不要靠 web request 自動升級 |
 | 設定或 DB 路徑不明 | runtime 環境差異 | 執行 `flowinone-doctor`；所有內建 DB 均來自絕對 `FLOWINONE_DATA_DIR` |
-| 舊 `/gallery/` 或 `/search/` URL | 相容 redirect | 改用 `/navigator/?scope=gallery` 或 `scope=all` |
+| 舊 `/gallery/` 或 `/search/` URL | 暫時相容 redirect（2026-12-31 sunset） | 改用 `/navigator/?scope=gallery` 或 `scope=all` |
 
 ## 7. 產品不處理的事情
 
@@ -162,4 +162,4 @@ conda run -n py3.11 flask --app run sidecars-import
 - 不連接 OneTab、Keep、Notion 或社群平台。
 - 不做 autoplay、無限推薦 feed 或 agent swarm。
 
-`/gallery/lab` 與 `/debug/` 是開發入口，只在 `FLOWINONE_DEV_TOOLS` 明確啟用時註冊。
+`/debug/` 是開發入口，只在 `FLOWINONE_DEV_TOOLS` 明確啟用時註冊。舊 Gallery Lab 與 `/api/gallery/*` 已移除。

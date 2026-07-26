@@ -1,6 +1,6 @@
 # Flowinone 架構與 UI 修正計畫
 
-> 稽核日期：2026-07-24；第一階段實作日期：2026-07-24。這份文件保留原始問題與驗收標準，並追蹤實際完成程度。
+> 稽核日期：2026-07-24；最近更新日期：2026-07-26。這份文件保留原始問題與驗收標準，並追蹤實際完成程度。
 
 ## 0. 實作狀態
 
@@ -10,9 +10,9 @@
 | P0 migration lifecycle | 已完成 | production request 只檢查 Alembic revision，不自動升級；CLI 先用 SQLite backup API 備份並對來源／備份執行 `integrity_check` |
 | P1 bootstrap / paths | 已完成 | import config 不開 GUI、不寫檔；item/cache/resource/content 均從絕對 `FLOWINONE_DATA_DIR` 派生；新增 `flowinone-doctor` |
 | P1 durable sync / health | 已完成 | Web 預設 enqueue 既有 leased `processing_jobs` 並回 202；worker 執行 Catalog sync；1 秒 polling；相同 payload 在 active 期間不重複排程；UI 顯示 worker heartbeat |
-| P1 Gallery 收旂 | 部分完成 | `/gallery/` 僅 redirect，design lab 改為 dev-only；Gallery compatibility API/service 仍保留，待 caller 監測後刪除 |
+| P1 Gallery 收旂 | 已完成 | Repo caller 稽核後刪除 Gallery read model、API、schema 與 Lab；`/gallery/`、`/search/` 由 Catalog 保留為有 log/header、2026-12-31 sunset 的暫時 redirect |
 | P2 query / UI | 已完成本階段 | Navigator origins 改為一次 batch query；主搜尋與結果前移；進階篩選收合；移除 350 ms auto-submit；收藏補 loading/error/ARIA；375 px 單欄 |
-| P2 service 拆分 / facets cache | 待處理 | `catalog/service.py` 仍過大；exact count/facets 仍未 cache；Gallery compatibility read model 仍在 |
+| P2 service 拆分 / facets cache | 待處理 | `catalog/service.py` 仍過大；exact count/facets 仍未 cache |
 | P3 release | 待處理 | dependency lock、wheel package-data、clean-install smoke test 仍需獨立階段 |
 
 ## 1. 尖銳結論
@@ -92,13 +92,13 @@ Flowinone 的核心方向是成立的：來源仍各自權威、Catalog 是可�
 
 #### P1.3 Catalog 與 Gallery 兩條 read path 並存
 
-**證據**：使用者已只看 Navigator，但 `src/flowinone/gallery/service.py`、Gallery API 與 design lab 仍保留獨立來源 flattening/read model；模板/CSS/命名仍大量使用 Gallery 語言。
+**原始證據**：使用者已只看 Navigator，但 `src/flowinone/gallery/service.py`、Gallery API 與 design lab 仍保留獨立來源 flattening/read model；模板/CSS/命名仍大量使用 Gallery 語言。
 
 **影響**：相同來源邏輯會漂移，開發者不清楚哪一層是權威；測試與維護成本成倍增加。
 
-**修正**：先標記 Gallery API deprecated，確認沒有 caller 後刪除舊 service/API；需要的 design lab 移到明確的 dev-only module；`/gallery/` 僅保留一個有期限的 redirect。
+**實際修正**：全 repo 稽核確認沒有 production caller；剩餘 caller 只有自含的 dev-only Lab 與 Gallery 專屬測試，因此一併刪除 models、service、API、schema、Lab 與資產。`/gallery/`、`/search/` 移到 Catalog blueprint，只保留 query-preserving redirect；每次使用寫入 log，response 帶 deprecation 與 2026-12-31 sunset header。
 
-**驗收**：所有 Navigator query 只走 Catalog；repo 不再有第二套來源 flattening；相容 route 有移除日期與 telemetry/log。
+**驗收結果**：所有 Navigator query 只走 Catalog；repo 不再有第二套來源 flattening；移除後的 API/Lab 為 404；相容 route 的 query、scope、log 與 sunset 有聚焦回歸測試。
 
 #### P1.4 debug 預設與註冊邏輯不安全
 

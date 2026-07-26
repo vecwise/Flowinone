@@ -85,10 +85,9 @@ def test_rendered_form_with_session_csrf_token_can_submit(tmp_path):
     assert response.status_code == 302
 
 
-def test_debug_and_gallery_lab_are_not_registered_in_normal_runtime(tmp_path):
+def test_debug_route_is_not_registered_in_normal_runtime(tmp_path):
     client = _app(tmp_path, FLOWINONE_DEV_TOOLS=False).test_client()
     assert client.get("/debug/").status_code == 404
-    assert client.get("/gallery/lab").status_code == 404
 
 
 def test_runtime_refuses_to_implicitly_create_or_upgrade_database(tmp_path):

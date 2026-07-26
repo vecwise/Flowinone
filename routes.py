@@ -12,7 +12,6 @@ import click
 from flask import Blueprint, Flask, current_app, render_template
 
 from src.flowinone.catalog.blueprint import register_catalog
-from src.flowinone.gallery.blueprint import register_gallery
 from src.flowinone.resource_library.blueprint import register_resource_library
 from src.flowinone.web import chrome, eagle, local, media
 from src.flowinone.web.api import register_api_error_handlers
@@ -60,7 +59,6 @@ def register_routes(app: Flask) -> None:
     chrome.register_commands(app)
 
     register_resource_library(app)
-    register_gallery(app)
     register_catalog(app)
 
     @app.cli.command("flowinone-doctor")
