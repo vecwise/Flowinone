@@ -30,6 +30,7 @@ from .repository import ResourceNotFound
 from .service import ResourceService
 from .settings import get_resource_settings
 from .worker import ResourceWorker
+from .versions import ResourceVersionService
 from src.flowinone.web.api import (
     api_error,
     parse_json,
@@ -52,6 +53,10 @@ from src.flowinone.web.schemas import (
     ResourceSearchRequest,
     ResourceTagDeleteQuery,
     ResourceTagsRequest,
+    ResourceVersionCompareQuery,
+    ResourceVersionDiffOutput,
+    ResourceVersionLimitQuery,
+    ResourceVersionsOutput,
     LimitQuery,
 )
 
@@ -240,10 +245,14 @@ def resource_detail(resource_id: str):
     except ResourceNotFound:
         abort(404)
     resource["extracted_text"] = service.repository.latest_content_text(resource_id)[:100_000]
+    content_versions = ResourceVersionService(_database()).list_versions(
+        resource_id, limit=5
+    )
     return render_template(
         "resource_detail.html",
         title=f"{resource['title']} · Flowinone",
         resource=resource,
+        content_versions=content_versions,
         jobs=service.jobs.list_for_resource(resource_id),
         similar_resources=[
             decorate_resource(item)
@@ -252,6 +261,42 @@ def resource_detail(resource_id: str):
         ai_available=EnrichmentService(_database()).ai.available,
         notice=request.args.get("notice"),
         error=request.args.get("error"),
+    )
+
+
+@bp.get("/resources/<resource_id>/versions/")
+def resource_versions(resource_id: str):
+    service = _service()
+    version_service = ResourceVersionService(_database())
+    try:
+        resource = decorate_resource(service.repository.get(resource_id))
+        versions = version_service.list_versions(resource_id)
+    except ResourceNotFound:
+        abort(404)
+    from_version = request.args.get("from", "")
+    to_version = request.args.get("to", "")
+    comparison = None
+    comparison_error = None
+    if not from_version and not to_version and len(versions) >= 2:
+        from_version, to_version = versions[1]["id"], versions[0]["id"]
+    if from_version or to_version:
+        try:
+            comparison = version_service.compare(
+                resource_id,
+                from_version_id=from_version,
+                to_version_id=to_version,
+            )
+        except (LookupError, ValueError) as exc:
+            comparison_error = str(exc)
+    return render_template(
+        "resource_versions.html",
+        title=f"內容版本 · {resource['title']} · Flowinone",
+        resource=resource,
+        versions=versions,
+        selected_from=from_version,
+        selected_to=to_version,
+        comparison=comparison,
+        comparison_error=comparison_error,
     )
 
 
@@ -355,6 +400,34 @@ def api_resource_get(resource_id: str):
         )
     except ResourceNotFound:
         return api_error("not_found", 404)
+
+
+@bp.get("/api/resources/<resource_id>/versions")
+def api_resource_versions(resource_id: str):
+    query = parse_query(ResourceVersionLimitQuery)
+    try:
+        versions = ResourceVersionService(_database()).list_versions(
+            resource_id, limit=query.limit
+        )
+    except ResourceNotFound:
+        return api_error("not_found", 404)
+    return validated_json({"items": versions}, ResourceVersionsOutput)
+
+
+@bp.get("/api/resources/<resource_id>/versions/compare")
+def api_resource_versions_compare(resource_id: str):
+    query = parse_query(ResourceVersionCompareQuery)
+    try:
+        result = ResourceVersionService(_database()).compare(
+            resource_id,
+            from_version_id=query.from_version,
+            to_version_id=query.to_version,
+        )
+    except ResourceNotFound:
+        return api_error("not_found", 404)
+    except (LookupError, ValueError) as exc:
+        return api_error(str(exc), 400)
+    return validated_json(result, ResourceVersionDiffOutput)
 
 
 @bp.patch("/api/resources/<resource_id>")

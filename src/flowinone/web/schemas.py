@@ -143,6 +143,15 @@ class ResourceTagDeleteQuery(ApiQuery):
     source: str = Field(default="user", min_length=1, max_length=40)
 
 
+class ResourceVersionLimitQuery(ApiQuery):
+    limit: int = Field(default=30, ge=1, le=100)
+
+
+class ResourceVersionCompareQuery(ApiQuery):
+    from_version: str = Field(alias="from", min_length=1, max_length=64)
+    to_version: str = Field(alias="to", min_length=1, max_length=64)
+
+
 class LimitQuery(ApiQuery):
     limit: int = Field(default=8, ge=1, le=100)
 
@@ -198,6 +207,33 @@ class ResourceOutput(ApiOutput):
     canonical_url: str
     detail_url: str | None = None
     tag_names: list[str] = []
+
+
+class ResourceContentVersionOutput(ApiOutput):
+    id: str
+    content_type: str
+    content_hash: str | None = None
+    byte_size: int | None = None
+    extractor_name: str | None = None
+    extractor_version: str | None = None
+    created_at: str
+    is_current: bool
+
+
+class ResourceVersionsOutput(ApiOutput):
+    items: list[ResourceContentVersionOutput]
+
+
+class ResourceVersionDiffOutput(ApiOutput):
+    from_version: ResourceContentVersionOutput
+    to_version: ResourceContentVersionOutput
+    changed: bool
+    similarity_percent: int = Field(ge=0, le=100)
+    added_lines: int = Field(ge=0)
+    removed_lines: int = Field(ge=0)
+    change_blocks: int = Field(ge=0)
+    diff: str
+    truncated: bool
 
 
 class ImportSummaryOutput(ApiOutput):

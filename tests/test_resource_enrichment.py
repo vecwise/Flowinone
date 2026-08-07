@@ -6,6 +6,7 @@ from pathlib import Path
 import fitz
 import pytest
 
+from run import create_app
 from src.flowinone.resource_library.ai import AIAnswer, AIUnavailable, OpenAICompatibleClient
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.enrichment import EnrichmentService
@@ -20,6 +21,7 @@ from src.flowinone.resource_library.jobs import JobQueue
 from src.flowinone.resource_library.service import ResourceService
 from src.flowinone.resource_library.settings import ResourceSettings
 from src.flowinone.resource_library.worker import ResourceWorker
+from src.flowinone.resource_library.versions import ResourceVersionService
 
 
 class FakeHTTPClient:
@@ -190,6 +192,125 @@ def test_enrichment_persists_content_and_updates_fts(monkeypatch, tmp_path):
     assert "knowledge workflow" in answer["answer"]
     detail = service.repository.get(resource_id)
     assert detail["ai_artifacts"][0]["question"] == "What does it describe?"
+    database.dispose()
+
+
+def test_content_versions_preserve_snapshots_and_explain_the_diff(monkeypatch, tmp_path):
+    database = ResourceDatabase(tmp_path / "resource.db")
+    settings = make_settings(tmp_path)
+    service = ResourceService(database, link_thumbnail_cache=False)
+    resource_id = service.create_url(
+        "https://example.com/versioned", title="Versioned resource", enqueue=False
+    )["resource"]["id"]
+    texts = iter(
+        (
+            "Opening line\nStable fact\nRemoved detail\n",
+            "Opening line\nStable fact\nNew evidence\n",
+            "Opening line\nStable fact\nNew evidence\n",
+        )
+    )
+
+    class FakeExtractor:
+        def extract_content(self, _url):
+            text = next(texts)
+            return ExtractedContent(
+                content_type="article_text",
+                text=text * 3,
+                markdown="",
+                raw_bytes=b"",
+                raw_content_type="",
+                extractor_name="fixture",
+                extractor_version="1",
+            )
+
+    monkeypatch.setattr(
+        "src.flowinone.resource_library.enrichment.extractor_for",
+        lambda *args, **kwargs: FakeExtractor(),
+    )
+    enrichment = EnrichmentService(database, settings)
+    enrichment.extract_content(resource_id)
+    enrichment.extract_content(resource_id)
+    versions = ResourceVersionService(database, settings)
+    snapshots = versions.list_versions(resource_id)
+    assert len(snapshots) == 2
+    assert snapshots[0]["is_current"] is True
+    current = next(snapshot for snapshot in snapshots if snapshot["is_current"])
+    previous = next(snapshot for snapshot in snapshots if not snapshot["is_current"])
+    diff = versions.compare(
+        resource_id,
+        from_version_id=previous["id"],
+        to_version_id=current["id"],
+    )
+    assert diff["changed"] is True
+    assert diff["added_lines"] == 3
+    assert diff["removed_lines"] == 3
+    assert "-Removed detail" in diff["diff"]
+    assert "+New evidence" in diff["diff"]
+
+    enrichment.extract_content(resource_id)
+    assert len(versions.list_versions(resource_id)) == 2
+    database.dispose()
+
+
+def test_content_version_pages_and_api_use_the_same_snapshot_history(monkeypatch, tmp_path):
+    database = ResourceDatabase(tmp_path / "resource.db")
+    settings = make_settings(tmp_path)
+    service = ResourceService(database, link_thumbnail_cache=False)
+    resource_id = service.create_url(
+        "https://example.com/version-api", title="Version API", enqueue=False
+    )["resource"]["id"]
+    contents = iter(("A stable sentence.\nOld detail.\n" * 3, "A stable sentence.\nNew detail.\n" * 3))
+
+    class FakeExtractor:
+        def extract_content(self, _url):
+            return ExtractedContent(
+                content_type="article_text",
+                text=next(contents),
+                markdown="",
+                raw_bytes=b"",
+                raw_content_type="",
+                extractor_name="fixture",
+                extractor_version="1",
+            )
+
+    monkeypatch.setattr(
+        "src.flowinone.resource_library.enrichment.extractor_for",
+        lambda *args, **kwargs: FakeExtractor(),
+    )
+    enrichment = EnrichmentService(database, settings)
+    enrichment.extract_content(resource_id)
+    enrichment.extract_content(resource_id)
+    snapshots = ResourceVersionService(database, settings).list_versions(resource_id)
+    current = next(snapshot for snapshot in snapshots if snapshot["is_current"])
+    previous = next(snapshot for snapshot in snapshots if not snapshot["is_current"])
+    monkeypatch.setattr(
+        "src.flowinone.resource_library.versions.get_resource_settings",
+        lambda: settings,
+    )
+    app = create_app(
+        {
+            "TESTING": True,
+            "FLOWINONE_RESOURCE_DB_PATH": str(database.path),
+            "CHROME_BOOKMARK_PATH": str(tmp_path / "Bookmarks"),
+            "FLOWINONE_RESOURCE_LINK_THUMBNAILS": False,
+        }
+    )
+    client = app.test_client()
+
+    detail = client.get(f"/resources/{resource_id}/")
+    assert detail.status_code == 200
+    assert "內容版本" in detail.get_data(as_text=True)
+    page = client.get(f"/resources/{resource_id}/versions/")
+    assert page.status_code == 200
+    assert "差異摘要" in page.get_data(as_text=True)
+    listed = client.get(f"/api/resources/{resource_id}/versions")
+    assert listed.status_code == 200
+    assert len(listed.get_json()["items"]) == 2
+    compared = client.get(
+        f"/api/resources/{resource_id}/versions/compare?from={previous['id']}&to={current['id']}"
+    )
+    assert compared.status_code == 200
+    assert compared.get_json()["changed"] is True
     database.dispose()
 
 

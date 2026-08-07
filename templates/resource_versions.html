@@ -1,0 +1,50 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container resource-page resource-versions-page">
+  <nav class="resource-breadcrumb" aria-label="麵包屑">
+    <a href="{{ url_for('resource_library.resource_index') }}">Resources</a><span aria-hidden="true">/</span><a href="{{ url_for('resource_library.resource_detail', resource_id=resource.id) }}">{{ resource.title }}</a><span aria-hidden="true">/</span><span>內容版本</span>
+  </nav>
+
+  <header class="resource-versions-heading">
+    <div><p class="eyebrow">Content history</p><h1>內容版本與差異</h1><p>{{ resource.title }} 的快照只在重新擷取得到不同文字時新增；原始連結和先前快照都會保留。</p></div>
+    <a class="action-button" href="{{ url_for('resource_library.resource_detail', resource_id=resource.id) }}">返回資源</a>
+  </header>
+
+  <section class="resource-surface">
+    <form class="resource-version-form" method="get">
+      <label for="version-from">較早版本</label>
+      <select id="version-from" name="from" {% if not versions %}disabled{% endif %}>
+        <option value="">選擇版本</option>
+        {% for version in versions %}<option value="{{ version.id }}" {% if version.id == selected_from %}selected{% endif %}>{{ version.created_at }}{% if version.is_current %}（目前）{% endif %} · {{ version.content_type }}</option>{% endfor %}
+      </select>
+      <label for="version-to">較新版本</label>
+      <select id="version-to" name="to" {% if not versions %}disabled{% endif %}>
+        <option value="">選擇版本</option>
+        {% for version in versions %}<option value="{{ version.id }}" {% if version.id == selected_to %}selected{% endif %}>{{ version.created_at }}{% if version.is_current %}（目前）{% endif %} · {{ version.content_type }}</option>{% endfor %}
+      </select>
+      <button class="action-button primary" type="submit" {% if versions|length < 2 %}disabled{% endif %}>比較版本</button>
+    </form>
+    {% if versions|length < 2 %}<p class="resource-helper">至少需要兩次內容不同的重新擷取，才能產生差異。</p>{% endif %}
+  </section>
+
+  {% if comparison_error %}<div class="resource-alert is-error" role="alert">{{ comparison_error }}</div>{% endif %}
+  {% if comparison %}
+  <section class="resource-surface resource-version-diff">
+    <div class="resource-section-heading"><h2>差異摘要</h2><span>{{ comparison.similarity_percent }}% 相似</span></div>
+    <dl class="resource-diff-stats"><div><dt>新增行</dt><dd>{{ comparison.added_lines }}</dd></div><div><dt>移除行</dt><dd>{{ comparison.removed_lines }}</dd></div><div><dt>變更區塊</dt><dd>{{ comparison.change_blocks }}</dd></div></dl>
+    {% if comparison.changed %}<pre class="resource-reader resource-diff-reader">{{ comparison.diff }}</pre>{% else %}<p>兩個版本內容相同。</p>{% endif %}
+    {% if comparison.truncated %}<p class="resource-helper">為保持頁面回應，差異輸出已截斷。</p>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="resource-surface">
+    <h2>可比較快照</h2>
+    <ul class="resource-version-list">
+      {% for version in versions %}<li><strong>{% if version.is_current %}目前版本{% else %}歷史版本{% endif %}</strong><span>{{ version.created_at }} · {{ version.content_type }} · {{ version.extractor_name or 'unknown extractor' }}{% if version.byte_size %} · {{ version.byte_size }} bytes{% endif %}</span></li>{% else %}<li>尚無內容快照。</li>{% endfor %}
+    </ul>
+  </section>
+</main>
+{% endblock %}

@@ -43,6 +43,18 @@
         {% if resource.extracted_text %}<pre class="resource-reader">{{ resource.extracted_text }}</pre>{% else %}<p>目前沒有可顯示的全文或 transcript。</p>{% endif %}
       </section>
 
+      <section class="resource-surface resource-version-summary">
+        <div class="resource-section-heading"><h2>內容版本</h2><a class="action-button" href="{{ url_for('resource_library.resource_versions', resource_id=resource.id) }}">查看差異</a></div>
+        {% if content_versions %}
+        <p>每次重新擷取到不同文字時會保存快照；目前有 {{ content_versions|length }} 個最近版本。</p>
+        <ul class="resource-version-list">
+          {% for version in content_versions %}
+          <li><strong>{% if version.is_current %}目前版本{% else %}歷史版本{% endif %}</strong><span>{{ version.created_at }} · {{ version.content_type }}{% if version.byte_size %} · {{ version.byte_size }} bytes{% endif %}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}<p>重新擷取完成後，內容版本會出現在這裡。</p>{% endif %}
+      </section>
+
       <section class="resource-surface">
         <h2>來源紀錄</h2>
         {% if resource.origins %}
