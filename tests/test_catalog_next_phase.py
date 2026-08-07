@@ -525,6 +525,9 @@ def test_new_catalog_routes_render(tmp_path):
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         'script[src$="/static/js/navigator_commands.js"]'
     )
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        'script[src$="/static/js/navigator_watch.js"]'
+    )
     saved_card = BeautifulSoup(gallery.data, "html.parser").select_one(
         f'[data-saved-search-id="{saved["id"]}"]'
     )
@@ -536,6 +539,12 @@ def test_new_catalog_routes_render(tmp_path):
     status_payload = client.get("/api/catalog/sync/status").get_json()["sources"]
     assert status_payload["eagle"]["status"] == "retrying"
     assert status_payload["bookmarks"]["error"] == "bookmark source failed"
+    watch_status = client.get("/api/catalog/watch")
+    assert watch_status.status_code == 200
+    assert watch_status.get_json()["enabled"] is False
+    enabled_watch = client.post("/api/catalog/watch", json={"enabled": True})
+    assert enabled_watch.status_code == 200
+    assert enabled_watch.get_json()["enabled"] is True
     parsed_gallery = BeautifulSoup(gallery.data, "html.parser")
     assert parsed_gallery.select_one("form.search-container") is None
     gallery_search = parsed_gallery.select_one("form.navigator-query")

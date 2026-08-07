@@ -62,8 +62,15 @@ class ResourceWorker:
                 from src.flowinone.catalog.service import CatalogSyncService
 
                 payload = job.get("payload") or {}
+                sources = tuple(payload.get("sources") or ())
+                if payload.get("refresh_local_index") and "local" in sources:
+                    from src.file_handler.item_db import update_item_database
+
+                    local_index = update_item_database()
+                    if local_index.get("errors"):
+                        raise RuntimeError("; ".join(error for _path, error in local_index["errors"]))
                 result = CatalogSyncService(self.database).sync(
-                    payload.get("sources") or (),
+                    sources,
                     full_rescan=bool(payload.get("full_rescan")),
                 )
                 failures = [

@@ -302,6 +302,30 @@
 .catalog-sync-status li[data-status="retrying"] > strong { color: var(--fo-warning, #a35b00); }
 .catalog-sync-status li[data-status="failed"] > strong { color: var(--fo-danger, #b42318); }
 
+.catalog-watch-status {
+    display: grid;
+    gap: 9px;
+    border-top: 1px solid var(--fo-border);
+    padding-top: 12px;
+}
+.catalog-watch-heading { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.catalog-watch-heading > div { display: grid; gap: 3px; }
+.catalog-watch-heading small,
+.catalog-watch-status li > small { color: var(--fo-muted-text); font-size: .72rem; line-height: 1.35; }
+.catalog-watch-toggle { min-height: 40px; padding: 5px 8px; font-size: .72rem; }
+.catalog-watch-status ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.catalog-watch-status li { display: grid; grid-template-columns: minmax(72px, 1fr) auto; gap: 2px 8px; padding-top: 6px; border-top: 1px solid var(--fo-border); }
+.catalog-watch-status li > span,
+.catalog-watch-status li > strong { font-size: .78rem; }
+.catalog-watch-status li > strong { color: var(--fo-muted-text); }
+.catalog-watch-status li > small { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.catalog-watch-status li[data-watch-state="complete"] > strong { color: var(--fo-success, #2f7d4a); }
+.catalog-watch-status li[data-watch-state="changed"] > strong,
+.catalog-watch-status li[data-watch-state="queued"] > strong,
+.catalog-watch-status li[data-watch-state="running"] > strong,
+.catalog-watch-status li[data-watch-state="retry"] > strong { color: var(--fo-warning, #a35b00); }
+.catalog-watch-status li[data-watch-state="error"] > strong { color: var(--fo-danger, #b42318); }
+
 .navigator-scope {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

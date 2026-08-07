@@ -107,6 +107,10 @@ class CatalogSyncRequest(ApiInput):
     full_rescan: StrictBool = False
 
 
+class CatalogWatchSettingsRequest(ApiInput):
+    enabled: StrictBool
+
+
 class ChromeImportFormRequest(ApiInput):
     format: Literal["json", "html", "htm"] | None = None
 
@@ -342,3 +346,21 @@ class CatalogSyncJobOutput(ApiOutput):
 
 class CatalogSyncJobEnvelope(ApiOutput):
     job: CatalogSyncJobOutput
+
+
+class CatalogWatchSourceOutput(ApiOutput):
+    state: str | None = None
+    error: str | None = None
+    observed_at: str | None = None
+    changed_at: str | None = None
+    queued_at: str | None = None
+    job_id: str | None = None
+    job_status: str | None = None
+
+
+class CatalogWatchStatusOutput(ApiOutput):
+    enabled: bool
+    poll_interval_seconds: int
+    debounce_seconds: int
+    last_checked_at: str | None = None
+    sources: dict[str, CatalogWatchSourceOutput]

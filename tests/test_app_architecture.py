@@ -157,3 +157,22 @@ def test_dedicated_worker_runtime_owns_and_stops_both_workers():
     assert not thread.is_alive()
     assert thumbnail.stopped.is_set()
     assert resource.stopped.is_set()
+
+
+def test_dedicated_worker_runtime_owns_and_stops_source_watcher():
+    thumbnail = _FakeWorker()
+    resource = _FakeWorker()
+    watcher = _FakeWorker()
+    runtime = WorkerRuntime(
+        thumbnail_worker=thumbnail,  # type: ignore[arg-type]
+        resource_worker=resource,  # type: ignore[arg-type]
+        source_watcher=watcher,  # type: ignore[arg-type]
+    )
+    thread = threading.Thread(target=runtime.run_forever)
+    thread.start()
+    assert watcher.started.wait(timeout=1)
+
+    runtime.stop()
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    assert watcher.stopped.is_set()

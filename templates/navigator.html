@@ -54,6 +54,33 @@
               {% endfor %}
             </ul>
           </div>
+          <div class="catalog-watch-status" data-catalog-watch-status data-enabled="{{ 'true' if source_watch_status.enabled else 'false' }}" aria-live="polite">
+            <div class="catalog-watch-heading">
+              <div><strong>自動偵測</strong><small data-catalog-watch-summary>{% if source_watch_status.enabled %}每 {{ source_watch_status.poll_interval_seconds }} 秒檢查一次，變更會在 {{ source_watch_status.debounce_seconds }} 秒後排程{% else %}目前關閉；不會讀取來源{% endif %}</small></div>
+              <button class="action-button catalog-watch-toggle" id="catalog-source-watch-toggle" type="button" aria-pressed="{{ 'true' if source_watch_status.enabled else 'false' }}">{{ '暫停偵測' if source_watch_status.enabled else '啟用自動偵測' }}</button>
+            </div>
+            <ul>
+              {% for source in catalog_sources %}
+              {% set watch_state = source_watch_status.sources.get(source.key, {}) %}
+              {% set state = watch_state.get('state', 'idle') %}
+              <li data-catalog-watch-source="{{ source.key }}" data-watch-state="{{ state }}">
+                <span>{{ source.label }}</span>
+                <strong data-catalog-watch-state>
+                  {% if state == 'watching' %}正在監看
+                  {% elif state == 'changed' %}等待變更穩定
+                  {% elif state == 'queued' %}已排程
+                  {% elif state == 'running' %}同步中
+                  {% elif state == 'retry' %}待重試
+                  {% elif state == 'complete' %}已同步
+                  {% elif state == 'unavailable' %}無法觀測
+                  {% elif state == 'error' %}發生錯誤
+                  {% else %}尚未觀測{% endif %}
+                </strong>
+                <small data-catalog-watch-detail>{{ watch_state.get('error') or watch_state.get('observed_at') or '—' }}</small>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
         </div>
       </details>
     </div>
@@ -322,5 +349,6 @@
 })();
 </script>
 <script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>
 {% endblock %}

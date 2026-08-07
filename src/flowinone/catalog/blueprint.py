@@ -17,6 +17,7 @@ from src.flowinone.resource_library.canonical import hash_text
 from src.file_handler.eagle_integration import is_eagle_available
 
 from .service import CATALOG_SOURCES, CatalogQuery, CatalogService, CatalogSyncService
+from .watch import CatalogSourceWatcher
 from .discovery import DiscoveryService
 from .artifacts import CatalogArtifactService, PersonService
 from src.flowinone.web.api import api_error, parse_json, parse_query, validated_json
@@ -39,6 +40,8 @@ from src.flowinone.web.schemas import (
     CatalogSyncJobEnvelope,
     CatalogSyncRequest,
     CatalogSyncStatusOutput,
+    CatalogWatchSettingsRequest,
+    CatalogWatchStatusOutput,
     PersonLinkRequest,
     PersonNameRequest,
     PersonOutput,
@@ -349,6 +352,7 @@ def navigator_page():
                 )
             ),
         },
+        source_watch_status=CatalogSourceWatcher(_database()).status(),
         eagle_available=eagle_available,
         item_type_labels=ITEM_TYPE_LABELS,
     )
@@ -606,6 +610,23 @@ def api_sync_status():
     return validated_json(
         {"sources": CatalogService(_database()).sync_status()},
         CatalogSyncStatusOutput,
+    )
+
+
+@bp.get("/api/catalog/watch")
+def api_catalog_watch_status():
+    return validated_json(
+        CatalogSourceWatcher(_database()).status(),
+        CatalogWatchStatusOutput,
+    )
+
+
+@bp.post("/api/catalog/watch")
+def api_catalog_watch_update():
+    payload = parse_json(CatalogWatchSettingsRequest)
+    return validated_json(
+        CatalogSourceWatcher(_database()).set_enabled(payload.enabled),
+        CatalogWatchStatusOutput,
     )
 
 

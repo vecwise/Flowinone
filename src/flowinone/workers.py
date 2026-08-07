@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 from src.file_handler.thumbnails.worker import ThumbnailWorker
 
+from .catalog.watch import CatalogSourceWatcher
 from .resource_library.worker import ResourceWorker
 
 
@@ -23,9 +24,14 @@ class WorkerRuntime:
         *,
         thumbnail_worker: ThumbnailWorker | None = None,
         resource_worker: ResourceWorker | None = None,
+        source_watcher: CatalogSourceWatcher | None = None,
     ) -> None:
         self.thumbnail_worker = thumbnail_worker or ThumbnailWorker()
         self.resource_worker = resource_worker or ResourceWorker()
+        database = getattr(self.resource_worker, "database", None)
+        self.source_watcher = source_watcher or (
+            CatalogSourceWatcher(database) if database is not None else None
+        )
         self.stop_event = threading.Event()
         self._threads: list[threading.Thread] = []
 
@@ -33,6 +39,8 @@ class WorkerRuntime:
         self.stop_event.set()
         self.thumbnail_worker.stop()
         self.resource_worker.stop()
+        if self.source_watcher is not None:
+            self.source_watcher.stop()
 
     @staticmethod
     def _run(name: str, target: Callable[[], None]) -> None:
@@ -54,6 +62,14 @@ class WorkerRuntime:
                 name="flowinone-resource-runtime",
             ),
         ]
+        if self.source_watcher is not None:
+            self._threads.append(
+                threading.Thread(
+                    target=self._run,
+                    args=("catalog source watcher", self.source_watcher.run_forever),
+                    name="flowinone-catalog-watch-runtime",
+                )
+            )
         for thread in self._threads:
             thread.start()
 
