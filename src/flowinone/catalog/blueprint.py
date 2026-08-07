@@ -20,6 +20,7 @@ from .service import CATALOG_SOURCES, CatalogQuery, CatalogService, CatalogSyncS
 from .watch import CatalogSourceWatcher
 from .discovery import DiscoveryService
 from .artifacts import CatalogArtifactService, PersonService
+from .similarity import CatalogSimilarityService
 from src.flowinone.web.api import api_error, parse_json, parse_query, validated_json
 from src.flowinone.web.schemas import (
     CatalogEventRequest,
@@ -40,6 +41,9 @@ from src.flowinone.web.schemas import (
     CatalogSyncJobEnvelope,
     CatalogSyncRequest,
     CatalogSyncStatusOutput,
+    CatalogSimilarityJobEnvelope,
+    CatalogSimilarityRebuildRequest,
+    CatalogSimilarityStatusOutput,
     CatalogWatchSettingsRequest,
     CatalogWatchStatusOutput,
     PersonLinkRequest,
@@ -47,6 +51,8 @@ from src.flowinone.web.schemas import (
     PersonOutput,
     RelationsRebuildOutput,
     RelatedLimitQuery,
+    SimilarImageQuery,
+    SimilarImagesOutput,
     SessionLimitQuery,
 )
 
@@ -353,6 +359,7 @@ def navigator_page():
             ),
         },
         source_watch_status=CatalogSourceWatcher(_database()).status(),
+        similarity_status=CatalogSimilarityService(_database()).status(),
         eagle_available=eagle_available,
         item_type_labels=ITEM_TYPE_LABELS,
     )
@@ -438,6 +445,24 @@ def api_related(item_id: str):
         },
         CatalogItemsOutput,
     )
+
+
+@bp.get("/api/catalog/items/<item_id>/similar-images")
+def api_similar_images(item_id: str):
+    query = parse_query(SimilarImageQuery)
+    service = CatalogService(_database())
+    try:
+        payload = CatalogSimilarityService(_database()).similar_images(
+            item_id, limit=query.limit, max_distance=query.max_distance
+        )
+    except LookupError:
+        return api_error("Catalog item not found", 404)
+    payload["items"] = _visible_items(
+        service,
+        payload,
+        CatalogQuery.create(scope="all", sources=CATALOG_SOURCES),
+    )
+    return validated_json(payload, SimilarImagesOutput)
 
 
 @bp.post("/api/catalog/relations/rebuild")
@@ -630,6 +655,31 @@ def api_catalog_watch_update():
     )
 
 
+@bp.get("/api/catalog/similarity/status")
+def api_catalog_similarity_status():
+    return validated_json(
+        CatalogSimilarityService(_database()).status(),
+        CatalogSimilarityStatusOutput,
+    )
+
+
+@bp.post("/api/catalog/similarity/rebuild")
+def api_catalog_similarity_rebuild():
+    payload = parse_json(CatalogSimilarityRebuildRequest)
+    job_payload = {"limit": payload.limit, "force": payload.force}
+    job = JobQueue(_database()).queue(
+        "catalog_similarity",
+        resource_id=None,
+        payload=job_payload,
+        input_hash=hash_text(
+            json.dumps(job_payload, ensure_ascii=False, sort_keys=True)
+        )[:16],
+        priority=25,
+        force=True,
+    )
+    return validated_json({"job": job}, CatalogSimilarityJobEnvelope, 202)
+
+
 def register_catalog(app: Flask) -> None:
     app.config.setdefault(
         "FLOWINONE_CATALOG_SYNC_INLINE", bool(app.config.get("TESTING"))
@@ -660,6 +710,16 @@ def register_catalog(app: Flask) -> None:
     @click.argument("path", type=click.Path(path_type=Path, exists=True, dir_okay=False))
     def catalog_ocr(item_id: str, path: Path) -> None:
         click.echo(CatalogArtifactService(_database()).run_ocr(item_id, path))
+
+    @app.cli.command("catalog-similarity-rebuild")
+    @click.option("--force", is_flag=True, help="重新計算所有本機圖片，而不只變更過的檔案。")
+    @click.option("--limit", default=20_000, type=click.IntRange(1, 50_000), show_default=True)
+    def catalog_similarity_rebuild(force: bool, limit: int) -> None:
+        click.echo(
+            CatalogSimilarityService(_database()).analyze_local_images(
+                limit=limit, force=force
+            )
+        )
 
 
 __all__ = ["bp", "register_catalog"]

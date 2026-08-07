@@ -111,6 +111,11 @@ class CatalogWatchSettingsRequest(ApiInput):
     enabled: StrictBool
 
 
+class CatalogSimilarityRebuildRequest(ApiInput):
+    force: StrictBool = False
+    limit: StrictInt = Field(default=20_000, ge=1, le=50_000)
+
+
 class ChromeImportFormRequest(ApiInput):
     format: Literal["json", "html", "htm"] | None = None
 
@@ -144,6 +149,11 @@ class LimitQuery(ApiQuery):
 
 class RelatedLimitQuery(ApiQuery):
     limit: int = Field(default=18, ge=1, le=100)
+
+
+class SimilarImageQuery(ApiQuery):
+    limit: int = Field(default=12, ge=1, le=40)
+    max_distance: int = Field(default=8, ge=0, le=32)
 
 
 class SessionLimitQuery(ApiQuery):
@@ -364,3 +374,38 @@ class CatalogWatchStatusOutput(ApiOutput):
     debounce_seconds: int
     last_checked_at: str | None = None
     sources: dict[str, CatalogWatchSourceOutput]
+
+
+class CatalogSimilarityJobOutput(ApiOutput):
+    id: str
+    job_type: Literal["catalog_similarity"]
+    status: str
+    error_message: str | None = None
+
+
+class CatalogSimilarityJobEnvelope(ApiOutput):
+    job: CatalogSimilarityJobOutput
+
+
+class CatalogSimilarityStatusOutput(ApiOutput):
+    algorithm: str
+    analyzed_items: int
+    duplicate_groups: int
+    duplicate_items: int
+    job: CatalogSimilarityJobOutput | None = None
+
+
+class SimilarImageItemOutput(CatalogItemOutput):
+    launch_source: str | None = None
+    launch_source_label: str | None = None
+    launch_uri: str | None = None
+    thumbnail_ref: str | None = None
+    target_blank: bool = False
+    match_type: Literal["duplicate", "visual"]
+    distance: int = Field(ge=0, le=64)
+    similarity_percent: int = Field(ge=0, le=100)
+
+
+class SimilarImagesOutput(ApiOutput):
+    analyzed: bool
+    items: list[SimilarImageItemOutput]

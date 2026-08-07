@@ -528,6 +528,12 @@ def test_new_catalog_routes_render(tmp_path):
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         'script[src$="/static/js/navigator_watch.js"]'
     )
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        'script[src$="/static/js/navigator_similarity.js"]'
+    )
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        "[data-catalog-similarity-status]"
+    )
     saved_card = BeautifulSoup(gallery.data, "html.parser").select_one(
         f'[data-saved-search-id="{saved["id"]}"]'
     )

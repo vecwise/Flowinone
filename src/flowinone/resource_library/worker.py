@@ -80,6 +80,14 @@ class ResourceWorker:
                 ]
                 if failures:
                     raise RuntimeError("; ".join(failures))
+            elif job.get("job_type") == "catalog_similarity":
+                from src.flowinone.catalog.similarity import CatalogSimilarityService
+
+                payload = job.get("payload") or {}
+                CatalogSimilarityService(self.database).analyze_local_images(
+                    limit=int(payload.get("limit") or 20_000),
+                    force=bool(payload.get("force")),
+                )
             else:
                 self.enrichment.process_job(job)
         except Exception as exc:

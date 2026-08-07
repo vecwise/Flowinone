@@ -81,6 +81,18 @@
               {% endfor %}
             </ul>
           </div>
+          <div class="catalog-similarity-status" data-catalog-similarity-status aria-live="polite">
+            <div class="catalog-watch-heading">
+              <div>
+                <strong>相同／相似圖片</strong>
+                <small data-catalog-similarity-summary>
+                  已分析 {{ similarity_status.analyzed_items }} 張本機圖片{% if similarity_status.duplicate_groups %} · {{ similarity_status.duplicate_groups }} 組完全相同檔案{% endif %}
+                </small>
+              </div>
+              <button class="action-button" id="catalog-similarity-rebuild" type="button">分析本機圖片</button>
+            </div>
+            <small data-catalog-similarity-detail>使用本機 SHA-256 找完全相同檔案，再用 dHash 找視覺相近圖片；只讀取本機圖片。</small>
+          </div>
         </div>
       </details>
     </div>
@@ -212,7 +224,7 @@
           <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
           {% endif %}
           {% if item.tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.tags[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
-          <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
+          <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似</button>{% endif %}{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
         </div>
       </article>
       {% endfor %}
@@ -262,6 +274,18 @@
     </div>
     <p class="navigator-command-empty" data-command-palette-empty hidden>找不到相符的動作或儲存搜尋。</p>
     <p class="navigator-command-hint"><kbd>⌘ K</kbd> 開啟 · <kbd>Esc</kbd> 關閉</p>
+  </div>
+</dialog>
+
+<dialog class="navigator-similar-dialog" data-catalog-similar-dialog aria-labelledby="navigator-similar-title">
+  <div class="navigator-command-shell">
+    <div class="navigator-command-heading">
+      <div><p class="eyebrow">Local image analysis</p><h2 id="navigator-similar-title">相同／相似圖片</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉相似圖片">關閉</button></form>
+    </div>
+    <p class="navigator-similar-summary" data-catalog-similar-summary>正在查詢…</p>
+    <div class="navigator-similar-results" data-catalog-similar-results></div>
+    <p class="navigator-similar-empty" data-catalog-similar-empty hidden></p>
   </div>
 </dialog>
 
@@ -350,5 +374,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_similarity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>
 {% endblock %}

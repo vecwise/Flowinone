@@ -97,8 +97,13 @@ def test_json_api_success_responses_satisfy_declared_contracts(tmp_path):
         f"/api/catalog/items/{item_id}/events", json={"event_type": "view"}
     ).status_code == 200
     assert client.get(f"/api/catalog/items/{item_id}/related").status_code == 200
+    assert client.get(f"/api/catalog/items/{item_id}/similar-images").status_code == 200
     assert client.get("/api/catalog/facets").status_code == 200
     assert client.get("/api/catalog/sync/status").status_code == 200
+    assert client.get("/api/catalog/similarity/status").status_code == 200
+    assert client.post(
+        "/api/catalog/similarity/rebuild", json={"force": False}
+    ).status_code == 202
 
     session = client.post(
         "/api/catalog/sessions",

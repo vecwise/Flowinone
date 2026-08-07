@@ -505,6 +505,39 @@ def fetch_items(limit: int = 500, offset: int = 0) -> Dict[str, object]:
     }
 
 
+def fetch_item_paths(item_ids: Iterable[str]) -> Dict[str, Dict[str, object]]:
+    """Return the local paths needed by renderer-owned background analyzers.
+
+    The item database is the authority for local file locations.  Keeping this
+    narrow lookup here avoids teaching Catalog code about the item DB schema or
+    reconstructing absolute paths from a browser route.
+    """
+    selected = tuple(dict.fromkeys(str(item_id) for item_id in item_ids if item_id))
+    if not selected:
+        return {}
+    result: Dict[str, Dict[str, object]] = {}
+    with _get_db_connection() as conn:
+        for offset in range(0, len(selected), 800):
+            batch = selected[offset:offset + 800]
+            placeholders = ",".join("?" for _ in batch)
+            rows = conn.execute(
+                f"""
+                SELECT item_id,absolute_path,item_type,size_bytes,updated_at
+                FROM items
+                WHERE item_id IN ({placeholders})
+                """,
+                batch,
+            ).fetchall()
+            for row in rows:
+                result[str(row["item_id"])] = {
+                    "absolute_path": str(row["absolute_path"] or ""),
+                    "item_type": str(row["item_type"] or ""),
+                    "size_bytes": row["size_bytes"],
+                    "updated_at": row["updated_at"],
+                }
+    return result
+
+
 def clear_thumbnails(base_dir: Optional[str] = None) -> Dict[str, object]:
     """Clear thumbnail_route for items (optionally scoped to a library root)."""
     target_dir = os.path.abspath(base_dir) if base_dir else None
@@ -536,4 +569,5 @@ __all__ = [
     "update_item_database",
     "update_missing_thumbnails",
     "fetch_items",
+    "fetch_item_paths",
 ]

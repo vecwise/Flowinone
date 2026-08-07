@@ -64,7 +64,7 @@ class CatalogArtifactService:
         version: str = "1",
         input_fingerprint: str = "",
     ) -> dict[str, Any]:
-        if artifact_type not in {"ocr", "face_detection", "face_embedding"}:
+        if artifact_type not in {"ocr", "face_detection", "face_embedding", "visual_hash"}:
             raise ValueError("不支援的 Catalog artifact")
         artifact_id = new_id()
         now = utc_now_text()
