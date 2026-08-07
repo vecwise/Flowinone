@@ -10,10 +10,13 @@ import os
 import re
 import sqlite3
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
+from threading import RLock
 from typing import Any, Callable, Iterable, Sequence
 from urllib.parse import quote
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import text
 
@@ -48,6 +51,8 @@ CATALOG_SORTS = (
     "recently_viewed",
     "favorites",
 )
+CATALOG_BROWSE_CACHE_MAX_ENTRIES = 128
+CATALOG_BROWSE_CACHE_COMPONENT = "catalog_browse_cache"
 
 
 def _json(value: Any, fallback: Any) -> Any:
@@ -153,6 +158,23 @@ class CatalogQuery:
     def signature(self) -> str:
         payload = {**self.public_dict(), "cursor": None, "limit": None}
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:20]
+
+    def filter_signature(self) -> str:
+        """Return the cache key for metadata that is independent of paging.
+
+        Exact totals depend on every filtering input, while the current
+        availability facets intentionally remain catalog-wide.  Both are
+        unchanged when a user advances a cursor or switches a
+        presentation-only sort.  Keeping those dimensions out of the key lets
+        successive Navigator pages reuse metadata safely without crossing
+        filters.
+        """
+        payload = self.public_dict()
+        for field in ("cursor", "limit", "sort", "seed"):
+            payload.pop(field, None)
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()[:20]
 
     def public_dict(self) -> dict[str, Any]:
         return {
@@ -397,7 +419,9 @@ class CatalogSyncService:
 
     def sync_resource(self, resource_id: str) -> int:
         with self.database.write_transaction() as conn:
-            return self._sync_resources(conn, resource_id)
+            count = self._sync_resources(conn, resource_id)
+        CatalogService.mark_browse_data_changed(self.database)
+        return count
 
     def _sync_bookmarks(self, conn) -> int:
         count = 0
@@ -1163,7 +1187,13 @@ class CatalogSyncService:
         """Synchronize sources without allowing overlapping full projections."""
         selected = tuple(source for source in sources if source in CATALOG_SOURCES)
         with self.database.catalog_sync():
-            return self._sync_selected(selected, full_rescan=full_rescan)
+            result = self._sync_selected(selected, full_rescan=full_rescan)
+        if self._browse_data_may_have_changed(result):
+            # A failed incremental source can already have committed a page, so
+            # invalidate non-lock failures as well as fully successful results.
+            # Do not attempt another write after a final SQLite lock failure.
+            CatalogService.mark_browse_data_changed(self.database)
+        return result
 
     def sync_if_empty(self, sources: Iterable[str] = CATALOG_SOURCES) -> dict[str, dict[str, Any]]:
         """Run the initial projection once when concurrent pages open together."""
@@ -1175,7 +1205,113 @@ class CatalogSyncService:
                         text("SELECT 1 FROM catalog_items WHERE is_deleted=0 LIMIT 1")
                     ).first()
                 )
-            return {} if populated else self._sync_selected(selected)
+            if populated:
+                return {}
+            result = self._sync_selected(selected)
+        if self._browse_data_may_have_changed(result):
+            CatalogService.mark_browse_data_changed(self.database)
+        return result
+
+    @staticmethod
+    def _browse_data_may_have_changed(result: dict[str, dict[str, Any]]) -> bool:
+        return any(
+            state.get("status") == "complete" or not state.get("locked", False)
+            for state in result.values()
+        )
+
+
+@dataclass(frozen=True)
+class _CachedFacets:
+    sources: tuple[tuple[str, int], ...]
+    types: tuple[tuple[str, int], ...]
+    tags: tuple[tuple[str, int], ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "sources": dict(self.sources),
+            "types": dict(self.types),
+            "tags": [
+                {"name": name, "count": count}
+                for name, count in self.tags
+            ],
+        }
+
+
+@dataclass
+class _BrowseCacheEntry:
+    total: int | None = None
+    facets: _CachedFacets | None = None
+
+
+class _CatalogBrowseCache:
+    """Small LRU cache for expensive exact Navigator metadata."""
+
+    def __init__(self, *, max_entries: int = CATALOG_BROWSE_CACHE_MAX_ENTRIES):
+        self.max_entries = max(1, max_entries)
+        self._entries: OrderedDict[str, _BrowseCacheEntry] = OrderedDict()
+        self._revision = ""
+        self._lock = RLock()
+
+    def _prepare(self, revision: str) -> None:
+        if revision != self._revision:
+            self._entries.clear()
+            self._revision = revision
+
+    def _entry(self, key: str) -> _BrowseCacheEntry:
+        entry = self._entries.pop(key, None)
+        if entry is None:
+            entry = _BrowseCacheEntry()
+        self._entries[key] = entry
+        while len(self._entries) > self.max_entries:
+            self._entries.popitem(last=False)
+        return entry
+
+    def get_total(self, key: str, revision: str) -> int | None:
+        with self._lock:
+            self._prepare(revision)
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            self._entries.move_to_end(key)
+            return entry.total
+
+    def store_total(self, key: str, revision: str, total: int) -> None:
+        with self._lock:
+            self._prepare(revision)
+            self._entry(key).total = total
+
+    def get_facets(self, key: str, revision: str) -> _CachedFacets | None:
+        with self._lock:
+            self._prepare(revision)
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            self._entries.move_to_end(key)
+            return entry.facets
+
+    def store_facets(self, key: str, revision: str, facets: _CachedFacets) -> None:
+        with self._lock:
+            self._prepare(revision)
+            self._entry(key).facets = facets
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+
+_BROWSE_CACHES: WeakKeyDictionary[ResourceDatabase, _CatalogBrowseCache] = (
+    WeakKeyDictionary()
+)
+_BROWSE_CACHES_LOCK = RLock()
+
+
+def _browse_cache_for(database: ResourceDatabase) -> _CatalogBrowseCache:
+    with _BROWSE_CACHES_LOCK:
+        cache = _BROWSE_CACHES.get(database)
+        if cache is None:
+            cache = _CatalogBrowseCache()
+            _BROWSE_CACHES[database] = cache
+        return cache
 
 
 class CatalogService:
@@ -1183,6 +1319,52 @@ class CatalogService:
 
     def __init__(self, database: ResourceDatabase):
         self.database = database
+        self._browse_cache = _browse_cache_for(database)
+
+    @staticmethod
+    def mark_browse_data_changed(database: ResourceDatabase) -> None:
+        """Invalidate Catalog metadata in this and other application processes.
+
+        Navigator requests may be served by a web process while synchronization
+        happens in a worker process.  The persisted revision makes the next
+        read in either process discard its local LRU entries; clearing here
+        avoids even that one-request delay in the process that performed the
+        mutation.
+        """
+        revision = json.dumps({"revision": new_id()}, separators=(",", ":"))
+        with database.write_transaction() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO runtime_state(component,heartbeat_at,metadata_json)
+                    VALUES(:component,:now,:revision)
+                    ON CONFLICT(component) DO UPDATE SET
+                        heartbeat_at=excluded.heartbeat_at,
+                        metadata_json=excluded.metadata_json
+                    """
+                ),
+                {
+                    "component": CATALOG_BROWSE_CACHE_COMPONENT,
+                    "now": utc_now_text(),
+                    "revision": revision,
+                },
+            )
+        _browse_cache_for(database).clear()
+
+    def _browse_cache_context(self, query: CatalogQuery) -> tuple[str, str]:
+        """Return a filter key and the durable Catalog mutation revision."""
+        with self.database.engine.connect() as conn:
+            revision = str(
+                conn.execute(
+                    text(
+                        "SELECT metadata_json FROM runtime_state "
+                        "WHERE component=:component"
+                    ),
+                    {"component": CATALOG_BROWSE_CACHE_COMPONENT},
+                ).scalar()
+                or ""
+            )
+        return query.filter_signature(), revision
 
     def count(self) -> int:
         with self.database.engine.connect() as conn:
@@ -1313,27 +1495,62 @@ class CatalogService:
             WHERE {' AND '.join(conditions)}
             ORDER BY sort_value {direction}, i.id ASC LIMIT :limit
         """
+        cache_key, cache_revision = self._browse_cache_context(query)
         with self.database.engine.connect() as conn:
             rows = list(conn.execute(text(sql), params).mappings())
-            count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(conditions[:-1] if cursor else conditions)}"
-            count_params = {key: value for key, value in params.items() if key not in {"limit", "cursor_sort", "cursor_id"}}
-            total = int(conn.execute(text(count_sql), count_params).scalar() or 0)
+            total = self._browse_cache.get_total(cache_key, cache_revision)
+            if total is None:
+                count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(conditions[:-1] if cursor else conditions)}"
+                count_params = {key: value for key, value in params.items() if key not in {"limit", "cursor_sort", "cursor_id"}}
+                total = int(conn.execute(text(count_sql), count_params).scalar() or 0)
+                self._browse_cache.store_total(cache_key, cache_revision, total)
         has_more = len(rows) > query.limit
         rows = rows[: query.limit]
         next_cursor = self._encode_cursor(query, rows[-1]["sort_value"], rows[-1]["id"]) if has_more and rows else None
-        return {"items": [self._row(row) for row in rows], "next_cursor": next_cursor, "total_estimate": total, "query": query.public_dict(), "facets": self.facets(query)}
+        return {"items": [self._row(row) for row in rows], "next_cursor": next_cursor, "total_estimate": total, "query": query.public_dict(), "facets": self.facets(query, cache_context=(cache_key, cache_revision))}
 
-    def facets(self, query: CatalogQuery) -> dict[str, Any]:
-        with self.database.engine.connect() as conn:
-            sources = dict(conn.execute(text("SELECT source_kind,COUNT(DISTINCT catalog_item_id) FROM catalog_origins WHERE stale=0 GROUP BY source_kind")).all())
-            types = dict(conn.execute(text("SELECT item_type,COUNT(*) FROM catalog_items WHERE is_deleted=0 GROUP BY item_type")).all())
-            tags = [dict(row) for row in conn.execute(text("SELECT t.name,COUNT(DISTINCT it.catalog_item_id) AS count FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id GROUP BY t.id ORDER BY count DESC,t.name LIMIT 100")).mappings()]
-        return {
-            "sources": sources,
-            "types": types,
-            "tags": tags,
-            "sync": self.sync_status(),
-        }
+    def facets(
+        self,
+        query: CatalogQuery,
+        *,
+        cache_context: tuple[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Return catalog facets with live sync state kept outside the cache."""
+        cache_key, cache_revision = cache_context or self._browse_cache_context(query)
+        cached = self._browse_cache.get_facets(cache_key, cache_revision)
+        if cached is None:
+            with self.database.engine.connect() as conn:
+                sources = tuple(
+                    (str(source), int(count))
+                    for source, count in conn.execute(
+                        text(
+                            "SELECT source_kind,COUNT(DISTINCT catalog_item_id) "
+                            "FROM catalog_origins WHERE stale=0 GROUP BY source_kind"
+                        )
+                    ).all()
+                )
+                types = tuple(
+                    (str(item_type), int(count))
+                    for item_type, count in conn.execute(
+                        text(
+                            "SELECT item_type,COUNT(*) FROM catalog_items "
+                            "WHERE is_deleted=0 GROUP BY item_type"
+                        )
+                    ).all()
+                )
+                tags = tuple(
+                    (str(row["name"]), int(row["count"]))
+                    for row in conn.execute(
+                        text(
+                            "SELECT t.name,COUNT(DISTINCT it.catalog_item_id) AS count "
+                            "FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id "
+                            "GROUP BY t.id ORDER BY count DESC,t.name LIMIT 100"
+                        )
+                    ).mappings()
+                )
+            cached = _CachedFacets(sources=sources, types=types, tags=tags)
+            self._browse_cache.store_facets(cache_key, cache_revision, cached)
+        return {**cached.as_dict(), "sync": self.sync_status()}
 
     def sync_status(self) -> dict[str, dict[str, Any]]:
         """Merge durable results with lock-safe, process-local live progress."""
@@ -1467,6 +1684,9 @@ class CatalogService:
                 conn.execute(text("UPDATE item_user_state SET favorite=:value,updated_at=:now WHERE catalog_item_id=:id"), {"id": item_id, "value": 1 if event_type == "favorite" else 0, "now": now})
             elif event_type in {"hide", "unhide"}:
                 conn.execute(text("UPDATE item_user_state SET hidden=:value,updated_at=:now WHERE catalog_item_id=:id"), {"id": item_id, "value": 1 if event_type == "hide" else 0, "now": now})
+        # Favorites, hidden state, and view state can all affect exact totals
+        # for active Navigator filters, so invalidate the filter-keyed cache.
+        self.mark_browse_data_changed(self.database)
         return self.get(item_id)
 
     def save_session(self, payload: dict[str, Any], session_id: str | None = None) -> dict[str, Any]:

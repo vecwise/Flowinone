@@ -11,6 +11,8 @@ from sqlalchemy import text
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
+from .service import CatalogService
+
 
 class OCRProvider(Protocol):
     name: str
@@ -78,6 +80,10 @@ class CatalogArtifactService:
                 current = conn.execute(text("SELECT extracted_text FROM catalog_fts WHERE catalog_item_id=:id"), {"id": item_id}).scalar_one_or_none() or ""
                 merged = current if content_text in current else f"{current}\n{content_text}".strip()
                 conn.execute(text("UPDATE catalog_fts SET extracted_text=:text WHERE catalog_item_id=:id"), {"id": item_id, "text": merged[:1_000_000]})
+        if artifact_type == "ocr" and content_text:
+            # OCR changes full-text matches and therefore exact totals for a
+            # text-filtered Navigator request.
+            CatalogService.mark_browse_data_changed(self.database)
         return self.get(artifact_id)
 
     def get(self, artifact_id: str) -> dict[str, Any]:

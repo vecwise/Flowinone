@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from bs4 import BeautifulSoup
 from flask import Flask
+from sqlalchemy import event
 
 from routes import register_routes
 from src.file_handler import item_db
@@ -473,6 +474,105 @@ def test_new_catalog_routes_render(tmp_path):
     assert b"/resources/resource-web/" not in bookmark_search.data
 
 
+def test_catalog_browse_metadata_cache_reuses_paging_and_is_filter_keyed(tmp_path):
+    """A repeated Navigator browse must not repeat COUNT/facet aggregation."""
+    database, _first, _second, _third = _catalog(tmp_path)
+    query = CatalogQuery.create(
+        scope="all", sources=["bookmarks", "eagle", "local", "resources"],
+        q="visual", limit=1,
+    )
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(" ".join(statement.split()))
+
+    event.listen(database.engine, "before_cursor_execute", capture)
+    try:
+        first = CatalogService(database).list(query)
+        assert first["total_estimate"] == 2
+        assert first["next_cursor"]
+
+        statements.clear()
+        next_page = CatalogService(database).list(
+            CatalogQuery.create(
+                scope="all",
+                sources=["bookmarks", "eagle", "local", "resources"],
+                q="visual",
+                limit=1,
+                cursor=first["next_cursor"],
+            )
+        )
+        assert next_page["total_estimate"] == 2
+        assert not any("COUNT(DISTINCT i.id)" in statement for statement in statements)
+        assert not any("GROUP BY source_kind" in statement for statement in statements)
+        assert not any("GROUP BY t.id" in statement for statement in statements)
+        assert not any("GROUP BY item_type" in statement for statement in statements)
+
+        statements.clear()
+        filtered = CatalogService(database).list(
+            CatalogQuery.create(
+                scope="all",
+                sources=["bookmarks", "eagle", "local", "resources"],
+                q="board",
+                limit=1,
+            )
+        )
+        assert filtered["total_estimate"] == 1
+        assert any("COUNT(DISTINCT i.id)" in statement for statement in statements)
+    finally:
+        event.remove(database.engine, "before_cursor_execute", capture)
+
+
+def test_catalog_browse_metadata_cache_invalidates_after_sync(monkeypatch, tmp_path):
+    database, _first, _second, local_id = _catalog(tmp_path)
+    query = CatalogQuery.create(scope="gallery", sources=["local"])
+    service = CatalogService(database)
+    warmed = service.list(query)
+    assert warmed["total_estimate"] == 1
+    assert warmed["facets"]["sources"]["local"] == 1
+
+    def sync_two_local_items(sync, conn):
+        sync._upsert(
+            conn,
+            identity_key="local:three",
+            source_kind="local",
+            source_key="three",
+            item_type="image",
+            title="Knowledge reference image",
+            detail_uri="/image/three.jpg",
+        )
+        sync._upsert(
+            conn,
+            identity_key="local:four",
+            source_kind="local",
+            source_key="four",
+            item_type="image",
+            title="Freshly synchronized image",
+            detail_uri="/image/four.jpg",
+        )
+        return 2
+
+    monkeypatch.setattr(CatalogSyncService, "_sync_local", sync_two_local_items)
+    assert CatalogSyncService(database).sync(("local",))["local"]["count"] == 2
+
+    statements: list[str] = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(" ".join(statement.split()))
+
+    event.listen(database.engine, "before_cursor_execute", capture)
+    try:
+        refreshed = CatalogService(database).list(query)
+    finally:
+        event.remove(database.engine, "before_cursor_execute", capture)
+
+    assert local_id in {item["id"] for item in refreshed["items"]}
+    assert refreshed["total_estimate"] == 2
+    assert refreshed["facets"]["sources"]["local"] == 2
+    assert any("COUNT(DISTINCT i.id)" in statement for statement in statements)
+    assert any("GROUP BY source_kind" in statement for statement in statements)
+
+
 def test_catalog_100k_keyset_query_contract(tmp_path):
     """The materialized projection must avoid the former load-every-source request path."""
     database = get_resource_database(tmp_path / "catalog-100k.db")
@@ -494,10 +594,22 @@ def test_catalog_100k_keyset_query_contract(tmp_path):
             "INSERT INTO catalog_origins(id,catalog_item_id,source_kind,source_key,last_seen_at) VALUES(?,?,?,?,?)",
             origins,
         )
+    query = CatalogQuery.create(
+        scope="gallery", sources=["local"], sort="recently_added", limit=48
+    )
     started = time.perf_counter()
-    page = CatalogService(database).list(CatalogQuery.create(scope="gallery", sources=["local"], sort="recently_added", limit=48))
+    page = CatalogService(database).list(query)
     elapsed = time.perf_counter() - started
     assert page["total_estimate"] == 100_000
     assert len(page["items"]) == 48
     assert page["next_cursor"]
     assert elapsed < 2.5
+
+    # The warm browse keeps the keyset data query but must not repeat exact
+    # COUNT or facet aggregation work over all 100k projected records.
+    started = time.perf_counter()
+    warm_page = CatalogService(database).list(query)
+    warm_elapsed = time.perf_counter() - started
+    assert warm_page["total_estimate"] == 100_000
+    assert len(warm_page["items"]) == 48
+    assert warm_elapsed < 0.75
