@@ -88,6 +88,12 @@ class CatalogSessionRequest(ApiInput):
     status: Literal["active", "closed"] = "active"
 
 
+class SavedCatalogSearchRequest(ApiInput):
+    label: StrictStr = Field(min_length=1, max_length=80)
+    query: CatalogQueryInput
+    pinned: StrictBool = True
+
+
 class PersonNameRequest(ApiInput):
     display_name: StrictStr = Field(default="", max_length=200)
 
@@ -138,6 +144,10 @@ class RelatedLimitQuery(ApiQuery):
 
 class SessionLimitQuery(ApiQuery):
     limit: int = Field(default=3, ge=1, le=20)
+
+
+class SavedSearchLimitQuery(ApiQuery):
+    limit: int = Field(default=12, ge=1, le=50)
 
 
 class CatalogListQuery(ApiQuery):
@@ -283,6 +293,24 @@ class CatalogSessionOutput(ApiOutput):
 
 class CatalogSessionsOutput(ApiOutput):
     items: list[CatalogSessionOutput]
+
+
+class SavedCatalogSearchOutput(ApiOutput):
+    id: str
+    label: str
+    query: dict[str, Any]
+    pinned: bool
+    created_at: str
+    updated_at: str
+    last_used_at: str | None = None
+
+
+class SavedCatalogSearchesOutput(ApiOutput):
+    items: list[SavedCatalogSearchOutput]
+
+
+class SavedCatalogSearchDeleteOutput(ApiOutput):
+    id: str
 
 
 class PersonOutput(ApiOutput):

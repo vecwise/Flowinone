@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block page_content %}
-<main id="main-content" class="container gallery-page navigator-page" data-navigator-query="{{ query.signature() }}">
+<main id="main-content" class="container gallery-page navigator-page" data-navigator-query="{{ query.signature() }}" data-navigator-query-payload='{{ query.public_dict()|tojson }}'>
   <header class="gallery-hero navigator-hero">
     <div>
       <p class="eyebrow">Cross-source navigator</p>
@@ -13,6 +13,9 @@
       <p>{% if query.scope == 'gallery' %}本機、Eagle 與書籤以扁平 item 瀏覽；資料夾只作為描述或 tag。{% else %}本機、Eagle、書籤與 Resources 共用可搜尋索引；包含標題、摘要、tag 與已擷取內容。{% endif %}</p>
     </div>
     <div class="navigator-hero-actions">
+      <button class="action-button navigator-command-trigger" type="button" data-command-palette-open aria-haspopup="dialog">
+        快速開啟 <kbd aria-hidden="true">⌘ K</kbd>
+      </button>
       <a class="action-button" href="{{ random_url }}">隨機探索</a>
       <details class="navigator-maintenance">
         <summary>來源管理</summary>
@@ -65,6 +68,32 @@
     </a>
   </nav>
 
+  <section class="navigator-saved-searches" aria-labelledby="navigator-saved-searches-heading">
+    <div class="gallery-results-heading">
+      <div>
+        <p class="eyebrow">Quick views</p>
+        <h2 id="navigator-saved-searches-heading">已儲存搜尋</h2>
+      </div>
+      <button class="action-button" type="button" data-save-search-open>儲存目前搜尋</button>
+    </div>
+    {% if saved_searches %}
+    <div class="navigator-saved-search-grid">
+      {% for saved in saved_searches %}
+      <article class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
+        <a href="{{ saved.url }}">
+          <span class="navigator-session-meta">{{ saved.scope_label }}</span>
+          <strong>{{ saved.label }}</strong>
+          <span>{{ saved.summary }}</span>
+        </a>
+        <button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除儲存搜尋：{{ saved.label }}">移除</button>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="navigator-saved-search-empty">把常用條件儲存起來；例如「未看設計參考」或「本週新加入」。</p>
+    {% endif %}
+  </section>
+
   {% if not eagle_available and 'eagle' in query.sources %}
   <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
   {% endif %}
@@ -113,6 +142,7 @@
     {% if query.seed %}<input type="hidden" name="seed" value="{{ query.seed }}">{% endif %}
     <div class="navigator-query-actions">
       <button class="action-button primary" type="submit">套用</button>
+      <button class="action-button" type="button" data-save-search-open>儲存搜尋</button>
       <a class="action-button" href="{{ reset_url }}">重設</a>
     </div>
     <details class="navigator-advanced" {% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
@@ -181,6 +211,48 @@
   <p id="navigator-action-status" class="sr-only" aria-live="polite"></p>
 </main>
 
+<dialog class="navigator-command-dialog" data-command-palette aria-labelledby="navigator-command-title">
+  <div class="navigator-command-shell">
+    <div class="navigator-command-heading">
+      <div><p class="eyebrow">Navigator</p><h2 id="navigator-command-title">快速開啟</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉快速開啟">關閉</button></form>
+    </div>
+    <label class="sr-only" for="navigator-command-input">篩選快速開啟選項</label>
+    <input id="navigator-command-input" class="navigator-command-input" data-command-palette-input type="search" placeholder="搜尋動作或已儲存搜尋" autocomplete="off">
+    <div class="navigator-command-list" data-command-palette-list aria-label="快速開啟選項">
+      <button type="button" class="navigator-command-item" data-command-item data-command-action="focus-search">搜尋目前範圍</button>
+      <a class="navigator-command-item" data-command-item href="{{ scope_urls.gallery }}">切換到素材</a>
+      <a class="navigator-command-item" data-command-item href="{{ scope_urls.all }}">切換到全部內容</a>
+      <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.favorites }}">查看我的最愛</a>
+      <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.unviewed }}">查看尚未瀏覽</a>
+      <a class="navigator-command-item" data-command-item href="{{ random_url }}">隨機探索</a>
+      {% for saved in saved_searches %}
+      <a class="navigator-command-item" data-command-item href="{{ saved.url }}">{{ saved.label }} <small>{{ saved.summary }}</small></a>
+      {% endfor %}
+    </div>
+    <p class="navigator-command-empty" data-command-palette-empty hidden>找不到相符的動作或儲存搜尋。</p>
+    <p class="navigator-command-hint"><kbd>⌘ K</kbd> 開啟 · <kbd>Esc</kbd> 關閉</p>
+  </div>
+</dialog>
+
+<dialog class="navigator-save-search-dialog" data-save-search-dialog aria-labelledby="navigator-save-search-title">
+  <div class="navigator-command-shell">
+    <div class="navigator-command-heading">
+      <div><p class="eyebrow">Quick views</p><h2 id="navigator-save-search-title">儲存目前搜尋</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉儲存搜尋">關閉</button></form>
+    </div>
+    <form data-save-search-form>
+      <label for="navigator-saved-search-label">名稱</label>
+      <input id="navigator-saved-search-label" name="label" maxlength="80" required placeholder="例如：未看設計參考">
+      <p class="navigator-save-search-feedback" data-save-search-feedback role="alert" hidden></p>
+      <div class="navigator-save-search-actions">
+        <button class="action-button primary" type="submit">儲存</button>
+        <button class="action-button" type="button" data-save-search-cancel>取消</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
 <script>
 (() => {
   const page = document.querySelector('[data-navigator-query]');
@@ -246,5 +318,6 @@
 
 })();
 </script>
+<script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>
 {% endblock %}

@@ -1726,3 +1726,117 @@ class CatalogService:
             result["query"] = _json(result.pop("query_json"), {})
             output.append(result)
         return output
+
+    @staticmethod
+    def _saved_search_result(row: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a persisted saved search before exposing it to callers."""
+        result = dict(row)
+        query = CatalogQuery.create(**_json(result.pop("query_json"), {}))
+        result["query"] = query.public_dict()
+        result["pinned"] = bool(result.pop("is_pinned"))
+        return result
+
+    def save_search(
+        self,
+        label: str,
+        query: dict[str, Any],
+        *,
+        saved_search_id: str | None = None,
+        pinned: bool = True,
+    ) -> dict[str, Any]:
+        """Create or update a named, reusable Navigator query.
+
+        Browse sessions intentionally remain ephemeral and are updated while a
+        user scrolls.  A saved search has its own record so a later session
+        update can never overwrite the name or pinned state a user chose.
+        """
+        normalized_label = " ".join(str(label or "").split())[:80]
+        if not normalized_label:
+            raise ValueError("儲存搜尋需要名稱")
+        normalized_query = CatalogQuery.create(**(query or {})).public_dict()
+        normalized_query["cursor"] = None
+        now = utc_now_text()
+        search_id = saved_search_id or new_id()
+        stored_query = json.dumps(normalized_query, ensure_ascii=False)
+        signature = CatalogQuery.create(**normalized_query).signature()
+        with self.database.write_transaction() as conn:
+            existing = conn.execute(
+                text("SELECT 1 FROM saved_catalog_searches WHERE id=:id"),
+                {"id": search_id},
+            ).first()
+            if existing:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE saved_catalog_searches
+                        SET label=:label, query_json=:query, query_signature=:signature,
+                            is_pinned=:pinned, updated_at=:now
+                        WHERE id=:id
+                        """
+                    ),
+                    {
+                        "id": search_id,
+                        "label": normalized_label,
+                        "query": stored_query,
+                        "signature": signature,
+                        "pinned": int(bool(pinned)),
+                        "now": now,
+                    },
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO saved_catalog_searches(
+                            id,label,query_json,query_signature,is_pinned,
+                            created_at,updated_at,last_used_at
+                        ) VALUES(
+                            :id,:label,:query,:signature,:pinned,:now,:now,NULL
+                        )
+                        """
+                    ),
+                    {
+                        "id": search_id,
+                        "label": normalized_label,
+                        "query": stored_query,
+                        "signature": signature,
+                        "pinned": int(bool(pinned)),
+                        "now": now,
+                    },
+                )
+        return self.get_saved_search(search_id)
+
+    def get_saved_search(self, saved_search_id: str) -> dict[str, Any]:
+        with self.database.engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT * FROM saved_catalog_searches WHERE id=:id"),
+                {"id": saved_search_id},
+            ).mappings().first()
+        if row is None:
+            raise LookupError(saved_search_id)
+        return self._saved_search_result(dict(row))
+
+    def list_saved_searches(self, limit: int = 12) -> list[dict[str, Any]]:
+        with self.database.engine.connect() as conn:
+            rows = list(
+                conn.execute(
+                    text(
+                        """
+                        SELECT * FROM saved_catalog_searches
+                        ORDER BY is_pinned DESC, updated_at DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"limit": max(1, min(int(limit), 50))},
+                ).mappings()
+            )
+        return [self._saved_search_result(dict(row)) for row in rows]
+
+    def delete_saved_search(self, saved_search_id: str) -> None:
+        with self.database.write_transaction() as conn:
+            result = conn.execute(
+                text("DELETE FROM saved_catalog_searches WHERE id=:id"),
+                {"id": saved_search_id},
+            )
+        if not result.rowcount:
+            raise LookupError(saved_search_id)

@@ -30,6 +30,11 @@ from src.flowinone.web.schemas import (
     CatalogSessionOutput,
     CatalogSessionRequest,
     CatalogSessionsOutput,
+    SavedCatalogSearchDeleteOutput,
+    SavedCatalogSearchesOutput,
+    SavedCatalogSearchOutput,
+    SavedCatalogSearchRequest,
+    SavedSearchLimitQuery,
     CatalogSyncOutput,
     CatalogSyncJobEnvelope,
     CatalogSyncRequest,
@@ -242,6 +247,32 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
     return sessions
 
 
+def _saved_search_summary(query: CatalogQuery) -> str:
+    details = []
+    if query.q:
+        details.append(f"「{query.q}」")
+    if query.tags:
+        details.append(f"標籤：{', '.join(query.tags)}")
+    if query.favorite:
+        details.append("我的最愛")
+    if query.unviewed:
+        details.append("尚未瀏覽")
+    if query.item_type:
+        details.append(ITEM_TYPE_LABELS.get(query.item_type, query.item_type))
+    return " · ".join(details) or "篩選瀏覽"
+
+
+def _navigator_saved_searches(service: CatalogService) -> list[dict]:
+    saved_searches = []
+    for saved in service.list_saved_searches():
+        query = CatalogQuery.create(**(saved.get("query") or {}))
+        saved["url"] = _navigator_url(query)
+        saved["scope_label"] = "素材" if query.scope == "gallery" else "全部內容"
+        saved["summary"] = _saved_search_summary(query)
+        saved_searches.append(saved)
+    return saved_searches
+
+
 @bp.get("/navigator/", strict_slashes=False)
 def navigator_page():
     service = CatalogService(_database())
@@ -301,6 +332,23 @@ def navigator_page():
         random_url=_navigator_url(CatalogQuery.create(**random_values)),
         scope_urls={scope: _navigator_url(_with_scope(query, scope)) for scope in NAVIGATOR_SCOPE_SOURCES},
         recent_sessions=_navigator_recent_sessions(service),
+        saved_searches=_navigator_saved_searches(service),
+        quick_filter_urls={
+            "favorites": _navigator_url(
+                CatalogQuery.create(
+                    scope=query.scope,
+                    sources=NAVIGATOR_SCOPE_SOURCES[query.scope],
+                    favorite=True,
+                )
+            ),
+            "unviewed": _navigator_url(
+                CatalogQuery.create(
+                    scope=query.scope,
+                    sources=NAVIGATOR_SCOPE_SOURCES[query.scope],
+                    unviewed=True,
+                )
+            ),
+        },
         eagle_available=eagle_available,
         item_type_labels=ITEM_TYPE_LABELS,
     )
@@ -437,6 +485,47 @@ def _session_payload(payload: CatalogSessionRequest) -> dict:
     query.pop("type", None)
     query.pop("view", None)
     return values
+
+
+def _saved_search_payload(payload: SavedCatalogSearchRequest) -> dict:
+    query = payload.query.model_dump()
+    if query.get("type") and not query.get("item_type"):
+        query["item_type"] = query["type"]
+    query.pop("type", None)
+    query.pop("view", None)
+    return {
+        "label": payload.label,
+        "query": query,
+        "pinned": payload.pinned,
+    }
+
+
+@bp.get("/api/catalog/saved-searches")
+def api_saved_searches():
+    query = parse_query(SavedSearchLimitQuery)
+    return validated_json(
+        {"items": CatalogService(_database()).list_saved_searches(query.limit)},
+        SavedCatalogSearchesOutput,
+    )
+
+
+@bp.post("/api/catalog/saved-searches")
+def api_saved_search_create():
+    payload = _saved_search_payload(parse_json(SavedCatalogSearchRequest))
+    try:
+        saved = CatalogService(_database()).save_search(**payload)
+    except ValueError as exc:
+        return api_error(str(exc), 400)
+    return validated_json(saved, SavedCatalogSearchOutput, 201)
+
+
+@bp.delete("/api/catalog/saved-searches/<saved_search_id>")
+def api_saved_search_delete(saved_search_id: str):
+    try:
+        CatalogService(_database()).delete_saved_search(saved_search_id)
+    except LookupError:
+        return api_error("saved_search_not_found", 404)
+    return validated_json({"id": saved_search_id}, SavedCatalogSearchDeleteOutput)
 
 
 @bp.post("/api/people")

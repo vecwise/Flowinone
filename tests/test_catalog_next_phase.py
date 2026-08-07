@@ -349,6 +349,66 @@ def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path)
     assert service.recent_sessions(1)[0]["id"] == session["id"]
 
 
+def test_catalog_saved_searches_keep_named_queries_separate_from_sessions(tmp_path):
+    database, _first, second, _third = _catalog(tmp_path)
+    service = CatalogService(database)
+
+    saved = service.save_search(
+        "  視覺靈感  ",
+        {
+            "q": "visual",
+            "scope": "gallery",
+            "sources": ["eagle"],
+            "sort": "title",
+            "cursor": "discard-this-page-cursor",
+        },
+    )
+    service.save_session(
+        {
+            "query": {"q": "other", "sources": ["local"]},
+            "focused_item_id": second,
+            "scroll_position": 900,
+        }
+    )
+
+    assert saved["label"] == "視覺靈感"
+    assert saved["pinned"] is True
+    assert saved["query"] == {
+        "q": "visual",
+        "scope": "gallery",
+        "sources": ["eagle"],
+        "type": None,
+        "tags": [],
+        "tag_mode": "any",
+        "favorite": False,
+        "unviewed": False,
+        "duration_min": None,
+        "duration_max": None,
+        "added_from": None,
+        "added_to": None,
+        "sort": "title",
+        "seed": None,
+        "limit": 48,
+        "cursor": None,
+    }
+    assert service.list_saved_searches() == [saved]
+
+    updated = service.save_search(
+        "視覺靈感（未看）",
+        {"scope": "gallery", "sources": ["eagle"], "unviewed": True},
+        saved_search_id=saved["id"],
+        pinned=False,
+    )
+    assert updated["id"] == saved["id"]
+    assert updated["pinned"] is False
+    assert updated["query"]["unviewed"] is True
+
+    service.delete_saved_search(saved["id"])
+    assert service.list_saved_searches() == []
+    with pytest.raises(LookupError):
+        service.get_saved_search(saved["id"])
+
+
 def test_item_relations_are_explainable_renderer_recommendations(tmp_path):
     database, first, second, third = _catalog(tmp_path)
     discovery = DiscoveryService(database)
@@ -403,6 +463,10 @@ def test_new_catalog_routes_render(tmp_path):
     database.set_catalog_sync_status("eagle", status="retrying", next_attempt=2, max_attempts=4)
     database.set_catalog_sync_status("bookmarks", status="failed", error="bookmark source failed")
     database.set_catalog_sync_status("resources", status="syncing", attempt=1, max_attempts=4)
+    saved = CatalogService(database).save_search(
+        "未看書籤",
+        {"scope": "gallery", "sources": ["bookmarks"], "unviewed": True},
+    )
     app = Flask("catalog-next", template_folder=str(Path(__file__).parents[1] / "templates"), static_folder=str(Path(__file__).parents[1] / "static"))
     app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(tmp_path / "web.db"), FLOWINONE_RESOURCE_LINK_THUMBNAILS=False)
     register_routes(app)
@@ -443,6 +507,17 @@ def test_new_catalog_routes_render(tmp_path):
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         'script[src$="/static/js/navigator_sync.js"]'
     )
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        'script[src$="/static/js/navigator_commands.js"]'
+    )
+    saved_card = BeautifulSoup(gallery.data, "html.parser").select_one(
+        f'[data-saved-search-id="{saved["id"]}"]'
+    )
+    assert saved_card is not None
+    assert saved_card.select_one("a").get_text(" ", strip=True).startswith("素材 未看書籤")
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        "[data-command-palette]"
+    )
     status_payload = client.get("/api/catalog/sync/status").get_json()["sources"]
     assert status_payload["eagle"]["status"] == "retrying"
     assert status_payload["bookmarks"]["error"] == "bookmark source failed"
@@ -472,6 +547,32 @@ def test_new_catalog_routes_render(tmp_path):
     bookmark_search = client.get("/navigator/?scope=all&source=bookmarks")
     assert b"https://example.com/web" in bookmark_search.data
     assert b"/resources/resource-web/" not in bookmark_search.data
+
+    created = client.post(
+        "/api/catalog/saved-searches",
+        json={
+            "label": "Web bookmarks",
+            "query": {
+                "q": "web",
+                "scope": "all",
+                "sources": ["bookmarks"],
+                "sort": "relevance",
+            },
+        },
+    )
+    assert created.status_code == 201
+    created_payload = created.get_json()
+    assert created_payload["label"] == "Web bookmarks"
+    assert created_payload["query"]["sources"] == ["bookmarks"]
+    saved_list = client.get("/api/catalog/saved-searches?limit=20")
+    assert saved_list.status_code == 200
+    assert {item["id"] for item in saved_list.get_json()["items"]} == {
+        saved["id"],
+        created_payload["id"],
+    }
+    deleted = client.delete(f'/api/catalog/saved-searches/{created_payload["id"]}')
+    assert deleted.status_code == 200
+    assert deleted.get_json() == {"id": created_payload["id"]}
 
 
 def test_catalog_browse_metadata_cache_reuses_paging_and_is_filter_keyed(tmp_path):
