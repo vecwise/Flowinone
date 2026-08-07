@@ -38,6 +38,13 @@ Folders are never items in the **素材** scope. They may appear as source metad
 ## Catalog and sidecar maintenance
 
 - `catalog-sync --source all` rebuilds/updates source projections independently.
-- Navigator's source manager enqueues the same operation as a durable job; `python -m src.flowinone.workers` must be running to process it.
+- Navigator's source manager enqueues the same operation as a durable job; its optional source watcher first records a baseline, then debounces changes before queueing work. `python -m src.flowinone.workers` must be running to process it.
+- `catalog-similarity-rebuild` reads Local image files to create Flowinone-owned SHA-256/dHash artifacts. Exact file matches rank before visual matches; it never writes the source file or source metadata.
 - `catalog-relations-rebuild` computes bounded, explainable related-item edges from title, tags, and source metadata.
 - `sidecars-export`, `sidecars-import`, and `sidecars-audit` keep portable local-media metadata in `.flowinone.json`; absolute paths and caches are excluded.
+
+## Resource content versions
+
+1. A Resource's forced re-enrichment writes a new text snapshot only when the extracted content hash changes.
+2. Open **查看差異** from the Resource detail page and select an earlier and later snapshot. The renderer exposes added/removed line counts and a bounded unified diff.
+3. Snapshots remain Flowinone-owned files under `data/content/`; the remote URL remains the authority and can be re-fetched at any time.

@@ -52,6 +52,8 @@ FLOWINONE_HEADLESS=1 conda run -n py3.11 python run.py
 2. 先用文字、來源、類型與排序搜尋；tag、收藏、尚未瀏覽與影片長度放在「進階篩選」。輸入不會自動送出，按 Enter 或「套用」才執行。
 3. 點卡片後，Local/Eagle media 使用內建 viewer；Bookmark 開啟原始網址。
 4. 同一項目若有多個 origin，開啟行為仍依選到的來源決定。
+5. `⌘/Ctrl + K` 可開啟常用動作與已儲存搜尋；將目前條件儲存後，可快速回到同一個 scope 和篩選組合。
+6. 如需清理本機素材，先到「來源管理」按「分析本機圖片」；分析完成後，圖片卡的「找相似」會先列出完整 SHA-256 相同檔案，再列出 dHash 視覺相近項目。
 
 ### 3.2 我不知道資源在哪個來源
 
@@ -67,7 +69,8 @@ Navigator 內只保留一個頁內搜尋，它會保留目前的「素材」或�
 2. Flowinone 建立 Resource 與 background job。
 3. worker 擷取 metadata、thumbnail、文章/PDF/transcript 內容，以及有設定時的 AI summary。
 4. 進入 Resource detail 檢查狀態、原始來源、摘要、全文、標籤與相關資源。
-5. 若 job 失敗，修正連線/來源問題後再 retry。
+5. 來源內容更新時按「重新擷取」；若新的文字雜湊不同，detail 的「內容版本」會保留新快照，可在「查看差異」比較任兩次擷取。
+6. 若 job 失敗，修正連線/來源問題後再 retry。
 
 頁首會同時顯示待處理數與 `worker 線上/離線`。心跳超過 30 秒未更新就視為離線；若 pending 長時間不動，先確認第二個 terminal 的 worker process。
 
@@ -84,6 +87,7 @@ Navigator 是跨來源的 flat projection；來源頁才保留來源本身的 tr
 ## 4. 資料何時會更新
 
 - Local/Eagle/Chrome 的 Catalog 不是即時雙向同步。來源大量變更後，執行 sync。
+- 「來源管理」的自動偵測預設關閉。啟用後會低頻讀取來源簽名、先建立 baseline，並在變更去抖動後排入既有 durable sync job；不會在 Flask request 中掃描來源。Local 變更會先更新 item index。
 - Navigator 的「來源管理」會排入 durable job 並立即回應；工作由獨立 worker 執行，離開頁面不會取消。同一組 active 同步不會重複排程。
 - Resource 建立、更新、改 tags 或 enrichment 完成時，現行 service 會自動同步該筆 Catalog projection；只有 projection 漂移、批次修復或來源大量變更時才需要手動 Catalog sync。
 - Eagle metadata 請先透過 Eagle UI 或 Eagle local API 修改，不要直接改 `.info/metadata.json`；之後再 sync Flowinone。
@@ -133,6 +137,7 @@ conda run -n py3.11 flask --app run resources-worker --limit 20
 ```bash
 conda run -n py3.11 flask --app run resources-rebuild-fts
 conda run -n py3.11 flask --app run catalog-relations-rebuild
+conda run -n py3.11 flask --app run catalog-similarity-rebuild
 ```
 
 Local sidecar 稽核、匯出與匯入：
@@ -150,6 +155,8 @@ conda run -n py3.11 flask --app run sidecars-import
 | Eagle 顯示離線或資料不完整 | Eagle app 與 local API | 開啟 Eagle，再執行 Eagle sync |
 | Resource 一直 pending | worker terminal | 啟動 `python -m src.flowinone.workers`，檢查失敗 job |
 | Navigator 看不到剛改的來源資料 | Catalog projection 尚未更新 | 執行對應 source sync |
+| 找相似顯示尚未分析 | 尚未建立 Local 圖片 artifact | 在來源管理按「分析本機圖片」，或執行 `catalog-similarity-rebuild`；確認 worker 正在運行 |
+| Resource 無法比較版本 | 只有一個不同文字快照，或快照檔已缺失 | 重新擷取一次內容有變更的來源；確認 `data/content/` 未被清除 |
 | 啟動時出現資料夾選擇器 | `config.json` 缺 Local roots | 補齊設定；自動化環境加 `FLOWINONE_HEADLESS=1` |
 | 顯示 database schema not current | 尚未手動 migration | 執行 `resources-db-upgrade`；不要靠 web request 自動升級 |
 | 設定或 DB 路徑不明 | runtime 環境差異 | 執行 `flowinone-doctor`；所有內建 DB 均來自絕對 `FLOWINONE_DATA_DIR` |

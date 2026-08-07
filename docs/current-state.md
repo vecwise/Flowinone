@@ -1,6 +1,6 @@
 # Current state
 
-Updated: 2026-07-26
+Updated: 2026-08-08
 
 This page is the concise product-state snapshot. For the actual runtime,
 storage, route, and authority model, use [Flowinone 現況架構](architecture.md);
@@ -12,9 +12,9 @@ Flowinone is a multi-source resource renderer. The root route redirects to `/nav
 
 | Domain | Status | Notes |
 | --- | --- | --- |
-| Navigator | Active | One user-facing surface with **素材** (`scope=gallery`) for flat Local/Eagle/Bookmark browsing and **全部內容** (`scope=all`) for retrieval across those sources plus Resources; source multi-select, filters, deterministic random order, scroll restore, favorites and bounded sessions |
-| Catalog | Active | Rebuildable SQLite projection over Local, Eagle, Bookmarks, and Resources; FTS, facets, tags, keyset cursor, origin-aware opening |
-| Resources | Active | URL/Chrome import, deduplication, thumbnail/content extraction, optional AI summaries, tags, related Resources |
+| Navigator | Active | One user-facing surface with **素材** (`scope=gallery`) for flat Local/Eagle/Bookmark browsing and **全部內容** (`scope=all`) for retrieval across those sources plus Resources; saved searches, command palette, explainable FTS excerpts, filters, deterministic random order, scroll restore, favorites and bounded sessions |
+| Catalog | Active | Rebuildable SQLite projection over Local, Eagle, Bookmarks, and Resources; FTS, facets, tags, keyset cursor, origin-aware opening, opt-in source watcher, and Local image duplicate/visual-similarity artifacts |
+| Resources | Active | URL/Chrome import, deduplication, thumbnail/content extraction, preserved text snapshots with bounded version diffs, optional AI summaries, tags, related Resources |
 | Sidecar | Active | Portable local-media metadata import/export/audit and move relinking |
 | Item relations | Active | Explainable metadata-based related items; no opaque recommendation feed |
 | OCR/People | Foundation only | Artifact/person data interfaces remain optional; no provider is required for normal browsing |
@@ -23,7 +23,7 @@ Flowinone is a multi-source resource renderer. The root route redirects to `/nav
 
 Navigator uses one page-level, scope-aware search. The navigation search is hidden there to remove duplication; on every non-Navigator page it defaults to `scope=all`.
 
-The web app now enqueues UI-triggered Catalog synchronization as durable leased jobs. The standalone worker processes them and publishes a persisted heartbeat; production HTTP requests never apply Alembic migrations implicitly.
+The web app now enqueues UI-triggered Catalog synchronization and Local image analysis as durable leased jobs. The standalone worker processes them and publishes a persisted heartbeat; the optional source watcher only queues work after a stable change, and production HTTP requests never apply Alembic migrations implicitly.
 
 Last audit observed approximately 7,630 canonical Catalog items and 14,800 origins, including roughly 7,128 Resources and 7,193 Chrome bookmarks. Catalog is used because request-time flattening at this size is no longer appropriate.
 
