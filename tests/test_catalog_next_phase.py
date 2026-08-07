@@ -41,7 +41,7 @@ def _catalog(tmp_path: Path):
         second = sync._upsert(
             conn, identity_key="eagle:two", source_kind="eagle", source_key="two",
             item_type="image", title="Visual reference board", detail_uri="/EAGLE_image/two/",
-            tags=(("visual", "source"), ("reference", "source")),
+            tags=(("visual", "source"), ("reference", "source"), ("taxonomy", "source")),
         )
         third = sync._upsert(
             conn, identity_key="local:three", source_kind="local", source_key="three",
@@ -324,6 +324,21 @@ def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path)
 
     searched = service.list(CatalogQuery.create(q="projection", sources=["resources"], sort="relevance"))
     assert [item["id"] for item in searched["items"]] == [first]
+    assert searched["items"][0]["match_reason"] == {
+        "field": "content",
+        "label": "擷取內容",
+        "excerpt": "catalog search projection",
+    }
+    title_match = service.list(CatalogQuery.create(q="visual", sources=["eagle"], sort="relevance"))
+    assert title_match["items"][0]["match_reason"] == {
+        "field": "title",
+        "label": "標題",
+        "excerpt": "Visual reference board",
+    }
+    tag_match = service.list(CatalogQuery.create(q="taxonomy", sources=["eagle"], sort="relevance"))
+    assert tag_match["items"][0]["match_reason"]["field"] == "tags"
+    assert tag_match["items"][0]["match_reason"]["label"] == "標籤"
+    assert "taxonomy" in tag_match["items"][0]["match_reason"]["excerpt"]
     tag_all = service.list(CatalogQuery.create(tags=["knowledge", "reference"], tag_mode="all", sort="title", limit=1))
     assert tag_all["items"][0]["id"] == third
     assert CatalogQuery.create(tags=["knowledge,reference"]).tags == ("knowledge", "reference")
@@ -547,6 +562,15 @@ def test_new_catalog_routes_render(tmp_path):
     bookmark_search = client.get("/navigator/?scope=all&source=bookmarks")
     assert b"https://example.com/web" in bookmark_search.data
     assert b"/resources/resource-web/" not in bookmark_search.data
+    explained_search = client.get("/navigator/?scope=all&source=bookmarks&q=web")
+    assert "命中：標題" in explained_search.get_data(as_text=True)
+    explained_api = client.get("/api/catalog/items?source=bookmarks&q=web")
+    assert explained_api.status_code == 200
+    assert explained_api.get_json()["items"][0]["match_reason"] == {
+        "field": "title",
+        "label": "標題",
+        "excerpt": "Web resource",
+    }
 
     created = client.post(
         "/api/catalog/saved-searches",

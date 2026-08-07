@@ -181,6 +181,9 @@
         <div class="gallery-card-body">
           <div class="gallery-card-source"><span>{{ item.launch_source_label }}</span>{% if item.duration_seconds %}<span>{{ item.duration_seconds|int }}s</span>{% endif %}</div>
           <h3><a href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+          {% if item.match_reason %}
+          <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
+          {% endif %}
           {% if item.tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.tags[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
         </div>

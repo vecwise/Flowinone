@@ -256,6 +256,7 @@ class CatalogItemOutput(ApiOutput):
     item_type: str
     tags: list[str] = []
     sources: list[str] = []
+    match_reason: dict[str, str] | None = None
 
 
 class CatalogFacetsOutput(ApiOutput):

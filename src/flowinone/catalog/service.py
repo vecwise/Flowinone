@@ -53,6 +53,14 @@ CATALOG_SORTS = (
 )
 CATALOG_BROWSE_CACHE_MAX_ENTRIES = 128
 CATALOG_BROWSE_CACHE_COMPONENT = "catalog_browse_cache"
+_MATCH_MARKER_START = "\x01"
+_MATCH_MARKER_END = "\x02"
+_MATCH_REASON_FIELDS = (
+    ("title", "標題", "fts_matched_title"),
+    ("tags", "標籤", "fts_matched_tags"),
+    ("description", "描述", "fts_matched_description"),
+    ("content", "擷取內容", "fts_matched_content"),
+)
 
 
 def _json(value: Any, fallback: Any) -> Any:
@@ -1393,11 +1401,29 @@ class CatalogService:
     @staticmethod
     def _row(row: Any) -> dict[str, Any]:
         result = dict(row)
+        match_reason = None
+        for field, label, key in _MATCH_REASON_FIELDS:
+            value = str(result.pop(key, "") or "")
+            if _MATCH_MARKER_START not in value:
+                continue
+            excerpt = " ".join(
+                value.replace(_MATCH_MARKER_START, "")
+                .replace(_MATCH_MARKER_END, "")
+                .split()
+            )
+            match_reason = {
+                "field": field,
+                "label": label,
+                "excerpt": excerpt[:360],
+            }
+            break
         result["tags"] = [tag for tag in str(result.pop("tag_names", "") or "").split("\x1f") if tag]
         result["sources"] = [source for source in str(result.pop("source_names", "") or "").split(",") if source]
         result["favorite"] = bool(result.get("favorite"))
         result["hidden"] = bool(result.get("hidden"))
         result["metadata"] = _json(result.pop("metadata_json", "{}"), {})
+        if match_reason:
+            result["match_reason"] = match_reason
         return result
 
     def list(self, query: CatalogQuery) -> dict[str, Any]:
@@ -1448,6 +1474,12 @@ class CatalogService:
                 f"(SELECT COUNT(DISTINCT ct.normalized_name) FROM catalog_item_tags cit JOIN catalog_tags ct ON ct.id=cit.tag_id WHERE cit.catalog_item_id=i.id AND ct.normalized_name IN ({','.join(tag_placeholders)})) {operator}"
             )
         rank_expression = "0.0"
+        match_select = """
+            NULL AS fts_matched_title,
+            NULL AS fts_matched_description,
+            NULL AS fts_matched_tags,
+            NULL AS fts_matched_content,
+        """
         if query.q:
             fts = _fts_query(query.q)
             if not fts:
@@ -1456,6 +1488,12 @@ class CatalogService:
             conditions.append("catalog_fts MATCH :fts")
             params["fts"] = fts
             rank_expression = "bm25(catalog_fts)"
+            match_select = """
+                highlight(catalog_fts, 1, char(1), char(2)) AS fts_matched_title,
+                highlight(catalog_fts, 2, char(1), char(2)) AS fts_matched_description,
+                highlight(catalog_fts, 3, char(1), char(2)) AS fts_matched_tags,
+                snippet(catalog_fts, 4, char(1), char(2), '…', 20) AS fts_matched_content,
+            """
 
         if query.sort == "title":
             sort_expression, direction = "lower(i.title)", "ASC"
@@ -1489,6 +1527,7 @@ class CatalogService:
             SELECT i.*, COALESCE(us.favorite,0) AS favorite, COALESCE(us.hidden,0) AS hidden,
                    COALESCE(us.open_count,0) AS open_count, us.last_viewed_at,
                    ({sort_expression}) AS sort_value,
+                   {match_select}
                    (SELECT GROUP_CONCAT(name, char(31)) FROM (SELECT DISTINCT t.name AS name FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id WHERE it.catalog_item_id=i.id ORDER BY t.name)) AS tag_names,
                    (SELECT GROUP_CONCAT(DISTINCT source_kind) FROM catalog_origins o WHERE o.catalog_item_id=i.id AND o.stale=0) AS source_names
             FROM catalog_items i {' '.join(joins)}
