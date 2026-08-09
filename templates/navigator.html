@@ -92,6 +92,7 @@
               <button class="action-button" id="catalog-similarity-rebuild" type="button">分析本機圖片</button>
             </div>
             <small data-catalog-similarity-detail>使用本機 SHA-256 找完全相同檔案，再用 dHash 找視覺相近圖片；只讀取本機圖片。</small>
+            <a class="action-button" href="{{ url_for('catalog.duplicate_review_page') }}">檢閱完全相同群組</a>
           </div>
         </div>
       </details>
@@ -268,6 +269,7 @@
       <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.favorites }}">查看我的最愛</a>
       <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.unviewed }}">查看尚未瀏覽</a>
       <a class="navigator-command-item" data-command-item href="{{ random_url }}">隨機探索</a>
+      <a class="navigator-command-item" data-command-item href="{{ url_for('catalog.duplicate_review_page') }}">檢閱完全相同圖片群組</a>
       {% for saved in saved_searches %}
       <a class="navigator-command-item" data-command-item href="{{ saved.url }}">{{ saved.label }} <small>{{ saved.summary }}</small></a>
       {% endfor %}

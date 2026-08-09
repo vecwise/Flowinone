@@ -9,6 +9,7 @@
 
     <div class="nav-links">
         <a class="{% if request.endpoint == 'catalog.navigator_page' %}is-active{% endif %}" href="{{ url_for('catalog.navigator_page', scope='gallery') }}" {% if request.endpoint == 'catalog.navigator_page' %}aria-current="page"{% endif %}>NAVIGATOR</a>
+        <a class="{% if request.endpoint == 'catalog.duplicate_review_page' %}is-active{% endif %}" href="{{ url_for('catalog.duplicate_review_page') }}" {% if request.endpoint == 'catalog.duplicate_review_page' %}aria-current="page"{% endif %}>DUPLICATES</a>
         <a class="{% if request.blueprint == 'resource_library' %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}" {% if request.blueprint == 'resource_library' %}aria-current="page"{% endif %}>RESOURCES</a>
     </div>
 

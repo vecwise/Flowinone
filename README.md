@@ -72,7 +72,7 @@ For headless setup, set valid Local media roots in `config.json` and use `FLOWIN
 2. Switch to **全部內容** in the same Navigator when you do not know which source contains the item or want to include Resources.
 3. Use Navigator's page search to keep its current scope; navigation search from another page opens **全部內容**.
 4. Open **Resources** for imported URLs and their extracted full text.
-5. For Local images, choose **來源管理 → 分析本機圖片** once, then use **找相似** on an image card to inspect exact duplicates or visual matches.
+5. For Local images, choose **來源管理 → 分析本機圖片** once. Use **檢閱完全相同群組** for a library-wide SHA-256 duplicate review, choose a Flowinone-only reference image, and safely open, reveal, or copy a source path; it never changes source files. Use **找相似** on an image card for exact duplicates or dHash visual matches.
 6. On a Resource detail page, use **重新擷取** and **查看差異** to compare content snapshots when a source page changes.
 7. Add user tags when they make future search better.
 

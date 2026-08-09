@@ -1,0 +1,88 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/duplicate_review.css') }}">
+{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container duplicate-review-page" data-duplicate-review>
+  <header class="gallery-hero duplicate-review-hero">
+    <div>
+      <p class="eyebrow">Local image analysis</p>
+      <h1>重複圖片檢閱</h1>
+      <p>以現有 SHA-256 artifact 分組所有本機圖片。選擇的參考圖片只會儲存在 Flowinone；這個頁面不會刪除、移動或修改任何來源檔案。</p>
+    </div>
+    <div class="duplicate-review-hero-actions">
+      <a class="action-button" href="{{ url_for('catalog.navigator_page', scope='gallery') }}">回到 Navigator</a>
+      <a class="action-button" href="{{ url_for('catalog.navigator_page', scope='gallery') }}#catalog-similarity-rebuild">重新分析圖片</a>
+    </div>
+  </header>
+
+  <section class="duplicate-review-overview" aria-label="重複圖片分析摘要">
+    <div><strong>{{ review.analyzed_items }}</strong><span>已分析本機圖片</span></div>
+    <div><strong>{{ review.duplicate_groups }}</strong><span>完全相同群組</span></div>
+    <div><strong>{{ review.duplicate_items }}</strong><span>群組中的圖片</span></div>
+  </section>
+
+  <p class="duplicate-review-note">每個群組都由相同的完整 SHA-256 內容雜湊組成；dHash 的視覺相似比對仍可從 Navigator 圖片卡的「找相似」查看。</p>
+  <p class="sr-only" data-duplicate-review-status aria-live="polite"></p>
+
+  {% if review.groups %}
+  <section class="duplicate-review-groups" aria-label="完全相同的本機圖片群組">
+    {% for group in review.groups %}
+    <article class="duplicate-review-group" data-duplicate-group="{{ group.content_hash }}">
+      <header class="duplicate-review-group-heading">
+        <div>
+          <p class="eyebrow">Exact duplicate group</p>
+          <h2>{{ group['items']|length }} 張完全相同的圖片</h2>
+        </div>
+        <code title="{{ group.content_hash }}">{{ group.content_hash[:19] }}…</code>
+      </header>
+      <div class="duplicate-review-items">
+        {% for item in group['items'] %}
+        {% set is_canonical = item.id == group.canonical_item_id %}
+        <article class="duplicate-review-item {% if is_canonical %}is-canonical{% endif %}" data-duplicate-item="{{ item.id }}">
+          <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="180" height="128" loading="lazy" decoding="async">
+          <div class="duplicate-review-item-body">
+            <div class="duplicate-review-item-heading">
+              <div>
+                <h3>{{ item.title }}</h3>
+                {% if is_canonical %}<p class="duplicate-canonical-state">已選定為參考圖片</p>{% endif %}
+              </div>
+              {% if is_canonical %}
+              <span class="duplicate-canonical-badge">參考圖片</span>
+              {% endif %}
+            </div>
+            <div class="duplicate-review-actions">
+              {% if is_canonical %}
+              <button class="action-button primary" type="button" disabled aria-pressed="true">已設為參考</button>
+              {% else %}
+              <button class="action-button primary" type="button" data-duplicate-canonical="{{ item.id }}" data-content-hash="{{ group.content_hash }}" aria-pressed="false">設為參考圖片</button>
+              {% endif %}
+              {% if item.open_uri %}<a class="action-button" href="{{ item.open_uri }}" target="_blank" rel="noopener noreferrer">開啟預覽</a>{% endif %}
+              <button class="action-button" type="button" data-duplicate-reveal="{{ item.id }}" {% if not item.local_path %}disabled title="本機來源檔已無法使用"{% endif %}>在檔案管理器顯示</button>
+              <button class="action-button" type="button" data-duplicate-copy-path="{{ item.local_path or '' }}" {% if not item.local_path %}disabled title="本機來源檔已無法使用"{% endif %}>複製路徑</button>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+  {% elif review.analyzed_items %}
+  <section class="duplicate-review-empty" aria-labelledby="duplicate-review-empty-title">
+    <h2 id="duplicate-review-empty-title">沒有完全相同的本機圖片</h2>
+    <p>目前分析過的 {{ review.analyzed_items }} 張圖片沒有相同 SHA-256 內容雜湊。</p>
+  </section>
+  {% else %}
+  <section class="duplicate-review-empty" aria-labelledby="duplicate-review-empty-title">
+    <h2 id="duplicate-review-empty-title">尚未分析本機圖片</h2>
+    <p>先從 Navigator 的「來源管理」執行「分析本機圖片」。分析只會讀取來源檔，然後可在這裡檢閱完全相同的群組。</p>
+    <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='gallery') }}#catalog-similarity-rebuild">前往圖片分析</a>
+  </section>
+  {% endif %}
+</main>
+<script src="{{ url_for('static', filename='js/duplicate_review.js') }}"></script>
+{% endblock %}

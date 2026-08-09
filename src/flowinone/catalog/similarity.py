@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections import Counter
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -212,10 +212,13 @@ class CatalogSimilarityService:
             rows = conn.execute(
                 text(
                     """
-                    SELECT a.catalog_item_id,a.content_json,i.title
+                    SELECT a.catalog_item_id,a.content_json,i.title,i.thumbnail_ref,
+                           o.source_key AS local_item_id,o.detail_uri
                     FROM catalog_artifacts a
                     JOIN catalog_items i ON i.id=a.catalog_item_id
+                    JOIN catalog_origins o ON o.catalog_item_id=i.id
                     WHERE a.artifact_type=:type AND a.is_current=1 AND i.is_deleted=0
+                      AND i.item_type='image' AND o.source_kind='local' AND o.stale=0
                     """
                 ),
                 {"type": VISUAL_HASH_ARTIFACT},
@@ -224,19 +227,182 @@ class CatalogSimilarityService:
                 {
                     "item_id": str(row["catalog_item_id"]),
                     "title": str(row["title"] or ""),
+                    "thumbnail_ref": str(row["thumbnail_ref"] or ""),
+                    "local_item_id": str(row["local_item_id"] or ""),
+                    "detail_uri": str(row["detail_uri"] or ""),
                     "content": _artifact_payload(row["content_json"]),
                 }
                 for row in rows
             ]
 
+    @staticmethod
+    def _duplicate_members(artifacts: Iterable[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in artifacts:
+            content_hash = str(item["content"].get("content_hash") or "")
+            if content_hash.startswith("sha256:"):
+                grouped[content_hash].append(item)
+        return {
+            content_hash: members
+            for content_hash, members in grouped.items()
+            if len(members) > 1
+        }
+
+    def _canonical_selections(self, content_hashes: Iterable[str]) -> dict[str, str]:
+        selected = tuple(dict.fromkeys(str(value) for value in content_hashes if value))
+        if not selected:
+            return {}
+        result: dict[str, str] = {}
+        with self.database.engine.connect() as conn:
+            for offset in range(0, len(selected), 800):
+                batch = selected[offset:offset + 800]
+                placeholders = ",".join(f":hash_{index}" for index in range(len(batch)))
+                rows = conn.execute(
+                    text(
+                        f"""
+                        SELECT content_hash,canonical_item_id
+                        FROM catalog_duplicate_reviews
+                        WHERE content_hash IN ({placeholders})
+                        """
+                    ),
+                    {f"hash_{index}": value for index, value in enumerate(batch)},
+                ).mappings()
+                result.update(
+                    {
+                        str(row["content_hash"]): str(row["canonical_item_id"])
+                        for row in rows
+                    }
+                )
+        return result
+
+    @staticmethod
+    def _review_member(item: dict[str, Any], paths: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        path_data = paths.get(str(item["local_item_id"])) or {}
+        path = Path(str(path_data.get("absolute_path") or ""))
+        return {
+            "id": item["item_id"],
+            "title": item["title"] or "Untitled",
+            "thumbnail_ref": item["thumbnail_ref"] or None,
+            "open_uri": item["detail_uri"] or None,
+            # A path is included only when the current indexed file still exists.
+            # The web layer uses the item id again before revealing it, so a stale
+            # rendered path can never be used as a filesystem command argument.
+            "local_path": str(path) if path.is_file() else None,
+        }
+
+    def duplicate_review(self) -> dict[str, Any]:
+        """Return every exact Local-image duplicate group from current artifacts.
+
+        dHash remains available through ``similar_images`` on the existing image
+        cards.  This review surface deliberately presents only byte-identical
+        SHA-256 groups so choosing a canonical remains unambiguous.
+        """
+        artifacts = self._current_artifacts()
+        duplicate_members = self._duplicate_members(artifacts)
+        selections = self._canonical_selections(duplicate_members)
+        groups: list[dict[str, Any]] = []
+        for content_hash, members in duplicate_members.items():
+            ids = {str(member["item_id"]) for member in members}
+            selected = selections.get(content_hash)
+            canonical_item_id = selected if selected in ids else str(
+                min(
+                    members,
+                    key=lambda member: (
+                        str(member["title"]).casefold(), str(member["item_id"])
+                    ),
+                )["item_id"]
+            )
+            paths = fetch_item_paths(member["local_item_id"] for member in members)
+            ordered_members = sorted(
+                members,
+                key=lambda member: (
+                    0 if member["item_id"] == canonical_item_id else 1,
+                    str(member["title"]).casefold(),
+                    str(member["item_id"]),
+                ),
+            )
+            groups.append(
+                {
+                    "content_hash": content_hash,
+                    "canonical_item_id": canonical_item_id,
+                    "items": [self._review_member(member, paths) for member in ordered_members],
+                }
+            )
+        groups.sort(
+            key=lambda group: (
+                -len(group["items"]),
+                str(group["items"][0]["title"]).casefold(),
+                group["content_hash"],
+            )
+        )
+        return {
+            "analyzed_items": len(artifacts),
+            "duplicate_groups": len(groups),
+            "duplicate_items": sum(len(group["items"]) for group in groups),
+            "groups": groups,
+        }
+
+    def choose_duplicate_canonical(self, content_hash: str, item_id: str) -> dict[str, Any]:
+        """Persist a review-only canonical choice for one exact-hash group."""
+        normalized_hash = str(content_hash or "").strip()
+        normalized_item_id = str(item_id or "").strip()
+        members = self._duplicate_members(self._current_artifacts()).get(normalized_hash, [])
+        if len(members) < 2:
+            raise LookupError(normalized_hash)
+        if normalized_item_id not in {str(member["item_id"]) for member in members}:
+            raise ValueError("選定的圖片不屬於這組完全相同檔案")
+        now = utc_now_text()
+        with self.database.write_transaction() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO catalog_duplicate_reviews(content_hash,canonical_item_id,updated_at)
+                    VALUES(:content_hash,:canonical_item_id,:updated_at)
+                    ON CONFLICT(content_hash) DO UPDATE SET
+                        canonical_item_id=:canonical_item_id,
+                        updated_at=:updated_at
+                    """
+                ),
+                {
+                    "content_hash": normalized_hash,
+                    "canonical_item_id": normalized_item_id,
+                    "updated_at": now,
+                },
+            )
+        return {
+            "content_hash": normalized_hash,
+            "canonical_item_id": normalized_item_id,
+        }
+
+    def duplicate_review_path(self, item_id: str) -> Path:
+        """Resolve a currently reviewed duplicate to its local source path."""
+        normalized_item_id = str(item_id or "").strip()
+        artifacts = self._current_artifacts()
+        duplicate_members = self._duplicate_members(artifacts)
+        matching = next(
+            (
+                member
+                for members in duplicate_members.values()
+                for member in members
+                if str(member["item_id"]) == normalized_item_id
+            ),
+            None,
+        )
+        if matching is None:
+            raise LookupError(normalized_item_id)
+        path_data = fetch_item_paths([matching["local_item_id"]]).get(
+            str(matching["local_item_id"]), {}
+        )
+        path = Path(str(path_data.get("absolute_path") or ""))
+        if not path.is_file():
+            raise FileNotFoundError(normalized_item_id)
+        return path
+
     def status(self) -> dict[str, Any]:
         artifacts = self._current_artifacts()
-        counts = Counter(
-            str(item["content"].get("content_hash") or "")
-            for item in artifacts
-            if str(item["content"].get("content_hash") or "").startswith("sha256:")
-        )
-        duplicate_counts = [count for count in counts.values() if count > 1]
+        duplicate_counts = [
+            len(members) for members in self._duplicate_members(artifacts).values()
+        ]
         with self.database.engine.connect() as conn:
             job = conn.execute(
                 text(

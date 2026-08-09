@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import secrets
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
@@ -11,6 +14,7 @@ from urllib.parse import urlencode
 import click
 from flask import Blueprint, Flask, abort, current_app, redirect, render_template, request, url_for
 
+from config import DB_route_external, DB_route_internal
 from src.flowinone.resource_library.database import get_resource_database
 from src.flowinone.resource_library.jobs import JobQueue
 from src.flowinone.resource_library.canonical import hash_text
@@ -44,6 +48,10 @@ from src.flowinone.web.schemas import (
     CatalogSimilarityJobEnvelope,
     CatalogSimilarityRebuildRequest,
     CatalogSimilarityStatusOutput,
+    DuplicateCanonicalSelectionOutput,
+    DuplicateCanonicalSelectionRequest,
+    DuplicateRevealOutput,
+    DuplicateReviewOutput,
     CatalogWatchSettingsRequest,
     CatalogWatchStatusOutput,
     PersonLinkRequest,
@@ -55,6 +63,7 @@ from src.flowinone.web.schemas import (
     SimilarImagesOutput,
     SessionLimitQuery,
 )
+from src.flowinone.web.common import path_is_within_roots
 
 
 bp = Blueprint("catalog", __name__)
@@ -93,6 +102,28 @@ def _database():
             current_app.config.get("FLOWINONE_AUTO_MIGRATE", current_app.testing)
         ),
     )
+
+
+def _duplicate_review_roots() -> list[str]:
+    """Return the same configured Local roots used by media serving."""
+    configured = current_app.config.get("FLOWINONE_MEDIA_ROOTS", ())
+    if isinstance(configured, str):
+        configured = configured.split(os.pathsep)
+    return [
+        str(Path(value).expanduser().resolve())
+        for value in (DB_route_external, DB_route_internal, *configured)
+        if value
+    ]
+
+
+def _reveal_duplicate_path(path: Path) -> None:
+    """Ask the operating system to reveal one validated Local source file."""
+    if platform.system() == "Darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+    elif platform.system() == "Windows":
+        subprocess.Popen(["explorer", "/select,", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(path.parent)])
 
 
 def _query(scope: str | None = None) -> CatalogQuery:
@@ -365,6 +396,17 @@ def navigator_page():
     )
 
 
+@bp.get("/catalog/duplicate-review/")
+def duplicate_review_page():
+    """Review every current exact duplicate group in the Local image library."""
+    review = CatalogSimilarityService(_database()).duplicate_review()
+    return render_template(
+        "duplicate_review.html",
+        title="重複圖片檢閱 · Flowinone",
+        review=review,
+    )
+
+
 @bp.get("/gallery/", strict_slashes=False)
 def gallery_page():
     """Redirect former Gallery browser links to Navigator's media scope."""
@@ -463,6 +505,54 @@ def api_similar_images(item_id: str):
         CatalogQuery.create(scope="all", sources=CATALOG_SOURCES),
     )
     return validated_json(payload, SimilarImagesOutput)
+
+
+@bp.get("/api/catalog/duplicate-review")
+def api_duplicate_review():
+    return validated_json(
+        CatalogSimilarityService(_database()).duplicate_review(),
+        DuplicateReviewOutput,
+    )
+
+
+@bp.post("/api/catalog/duplicate-review/canonical")
+def api_choose_duplicate_canonical():
+    payload = parse_json(DuplicateCanonicalSelectionRequest)
+    try:
+        selected = CatalogSimilarityService(_database()).choose_duplicate_canonical(
+            payload.content_hash, payload.canonical_item_id
+        )
+    except LookupError:
+        return api_error("Duplicate group not found", 404)
+    except ValueError as exc:
+        return api_error(str(exc), 400)
+    return validated_json(selected, DuplicateCanonicalSelectionOutput)
+
+
+@bp.post("/api/catalog/duplicate-review/items/<item_id>/reveal")
+def api_reveal_duplicate_item(item_id: str):
+    try:
+        path = CatalogSimilarityService(_database()).duplicate_review_path(item_id)
+    except LookupError:
+        return api_error("Duplicate review item not found", 404)
+    except FileNotFoundError:
+        return api_error("Local source file not found", 404)
+    try:
+        path = path.resolve(strict=True)
+    except OSError:
+        return api_error("Local source file not found", 404)
+    if not path.is_file() or not path_is_within_roots(
+        str(path), _duplicate_review_roots()
+    ):
+        return api_error("Local source path is outside configured media roots", 403)
+    try:
+        _reveal_duplicate_path(path)
+    except OSError as exc:
+        current_app.logger.warning("Could not reveal duplicate item %s: %s", item_id, exc)
+        return api_error("Could not reveal Local source file", 500)
+    return validated_json(
+        {"item_id": item_id, "revealed": True}, DuplicateRevealOutput
+    )
 
 
 @bp.post("/api/catalog/relations/rebuild")

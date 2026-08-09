@@ -116,6 +116,11 @@ class CatalogSimilarityRebuildRequest(ApiInput):
     limit: StrictInt = Field(default=20_000, ge=1, le=50_000)
 
 
+class DuplicateCanonicalSelectionRequest(ApiInput):
+    content_hash: StrictStr = Field(min_length=8, max_length=72)
+    canonical_item_id: StrictStr = Field(min_length=1, max_length=64)
+
+
 class ChromeImportFormRequest(ApiInput):
     format: Literal["json", "html", "htm"] | None = None
 
@@ -445,3 +450,34 @@ class SimilarImageItemOutput(CatalogItemOutput):
 class SimilarImagesOutput(ApiOutput):
     analyzed: bool
     items: list[SimilarImageItemOutput]
+
+
+class DuplicateReviewItemOutput(ApiOutput):
+    id: str
+    title: str
+    thumbnail_ref: str | None = None
+    open_uri: str | None = None
+    local_path: str | None = None
+
+
+class DuplicateReviewGroupOutput(ApiOutput):
+    content_hash: str
+    canonical_item_id: str
+    items: list[DuplicateReviewItemOutput]
+
+
+class DuplicateReviewOutput(ApiOutput):
+    analyzed_items: int
+    duplicate_groups: int
+    duplicate_items: int
+    groups: list[DuplicateReviewGroupOutput]
+
+
+class DuplicateCanonicalSelectionOutput(ApiOutput):
+    content_hash: str
+    canonical_item_id: str
+
+
+class DuplicateRevealOutput(ApiOutput):
+    item_id: str
+    revealed: bool

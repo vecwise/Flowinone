@@ -5,9 +5,11 @@ from __future__ import annotations
 import shutil
 
 from PIL import Image
+from bs4 import BeautifulSoup
 
 from run import create_app
 from src.file_handler import item_db
+from src.flowinone.catalog import blueprint as catalog_blueprint
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.catalog.similarity import CatalogSimilarityService
 from src.flowinone.resource_library.database import get_resource_database
@@ -101,3 +103,106 @@ def test_similarity_api_decorates_results_with_safe_launch_targets(monkeypatch, 
     duplicate = next(item for item in payload["items"] if item["match_type"] == "duplicate")
     assert duplicate["launch_source"] == "local"
     assert duplicate["launch_uri"].startswith("/image/")
+
+
+def test_duplicate_review_groups_exact_hashes_and_persists_a_review_only_canonical(
+    monkeypatch, tmp_path
+):
+    database, by_title = _local_catalog(monkeypatch, tmp_path)
+    service = CatalogSimilarityService(database)
+    service.analyze_local_images()
+    original_path = tmp_path / "media" / "original.png"
+    duplicate_path = tmp_path / "media" / "duplicate.png"
+    before = {path: path.read_bytes() for path in (original_path, duplicate_path)}
+
+    review = service.duplicate_review()
+
+    assert review["analyzed_items"] == 3
+    assert review["duplicate_groups"] == 1
+    assert review["duplicate_items"] == 2
+    group = review["groups"][0]
+    assert {item["id"] for item in group["items"]} == {
+        by_title["original.png"],
+        by_title["duplicate.png"],
+    }
+    assert all(item["open_uri"].startswith("/image/") for item in group["items"])
+    assert {item["local_path"] for item in group["items"]} == {
+        str(original_path),
+        str(duplicate_path),
+    }
+
+    selected = service.choose_duplicate_canonical(
+        group["content_hash"], by_title["original.png"]
+    )
+    refreshed = service.duplicate_review()["groups"][0]
+
+    assert selected["canonical_item_id"] == by_title["original.png"]
+    assert refreshed["canonical_item_id"] == by_title["original.png"]
+    assert refreshed["items"][0]["id"] == by_title["original.png"]
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_duplicate_review_page_and_safe_actions_use_current_local_duplicate_items(
+    monkeypatch, tmp_path
+):
+    database, by_title = _local_catalog(monkeypatch, tmp_path)
+    CatalogSimilarityService(database).analyze_local_images()
+    revealed = []
+    monkeypatch.setattr(
+        catalog_blueprint,
+        "_reveal_duplicate_path",
+        lambda path: revealed.append(path),
+    )
+    app = create_app(
+        {
+            "TESTING": True,
+            "FLOWINONE_RESOURCE_DB_PATH": str(database.path),
+            "CHROME_BOOKMARK_PATH": str(tmp_path / "Bookmarks"),
+            "FLOWINONE_MEDIA_ROOTS": [str(tmp_path / "media")],
+            "FLOWINONE_RESOURCE_LINK_THUMBNAILS": False,
+        }
+    )
+    client = app.test_client()
+
+    api_review = client.get("/api/catalog/duplicate-review")
+    assert api_review.status_code == 200
+    group = api_review.get_json()["groups"][0]
+    assert group["canonical_item_id"] in {
+        by_title["original.png"],
+        by_title["duplicate.png"],
+    }
+
+    page = client.get("/catalog/duplicate-review/")
+    assert page.status_code == 200
+    parsed = BeautifulSoup(page.data, "html.parser")
+    assert parsed.select_one("[data-duplicate-review]")
+    assert parsed.select_one("[data-duplicate-canonical]")
+    assert parsed.select_one("[data-duplicate-reveal]")
+    assert parsed.select_one("[data-duplicate-copy-path]")
+    assert parsed.select_one('a[href^="/image/"][target="_blank"]')
+    assert not parsed.select("[data-delete], [data-duplicate-delete]")
+
+    chosen = client.post(
+        "/api/catalog/duplicate-review/canonical",
+        json={
+            "content_hash": group["content_hash"],
+            "canonical_item_id": by_title["original.png"],
+        },
+    )
+    assert chosen.status_code == 200
+    assert chosen.get_json()["canonical_item_id"] == by_title["original.png"]
+
+    reveal = client.post(
+        f'/api/catalog/duplicate-review/items/{by_title["original.png"]}/reveal'
+    )
+    assert reveal.status_code == 200
+    assert reveal.get_json() == {
+        "item_id": by_title["original.png"],
+        "revealed": True,
+    }
+    assert revealed == [tmp_path / "media" / "original.png"]
+
+    navigator = client.get("/navigator/?scope=gallery")
+    navigator_html = BeautifulSoup(navigator.data, "html.parser")
+    assert navigator_html.select_one("[data-catalog-similar-dialog]")
+    assert navigator_html.select_one('[data-catalog-similar-item]')
