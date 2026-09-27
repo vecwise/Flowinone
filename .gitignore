@@ -18,6 +18,10 @@ docs/*
 !docs/workflows.md
 !docs/migration-plan.md
 !docs/renderer-architecture.md
+!docs/commit-change-log.md
+!docs/repo-code-map.md
+!docs/hands-on.md
+!docs/control-center-proposal.md
 
 # Machine-local Flowinone extensions. Never include these in source or builds.
 .flowinone_local/
