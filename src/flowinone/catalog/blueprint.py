@@ -72,7 +72,6 @@ NAVIGATOR_SCOPE_SOURCES = {
     "gallery": tuple(source for source in CATALOG_SOURCES if source != "resources"),
     "all": CATALOG_SOURCES,
 }
-LEGACY_BROWSER_REDIRECT_SUNSET = "Thu, 31 Dec 2026 23:59:59 GMT"
 SOURCE_LABELS = {
     "local": "本機",
     "eagle": "EAGLE",
@@ -190,19 +189,6 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
 
 def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
     return f"{url_for('catalog.navigator_page')}?{urlencode(_navigator_query_pairs(query, cursor=cursor))}"
-
-
-def _legacy_browser_redirect(scope: str):
-    args = request.args.to_dict(flat=False)
-    args["scope"] = [scope]
-    target = f"{url_for('catalog.navigator_page')}?{urlencode(args, doseq=True)}"
-    current_app.logger.info(
-        "legacy browser redirect used path=%s scope=%s", request.path, scope
-    )
-    response = redirect(target)
-    response.headers["Deprecation"] = "@1785024000"
-    response.headers["Sunset"] = LEGACY_BROWSER_REDIRECT_SUNSET
-    return response
 
 
 def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
@@ -405,18 +391,6 @@ def duplicate_review_page():
         title="重複圖片檢閱 · Flowinone",
         review=review,
     )
-
-
-@bp.get("/gallery/", strict_slashes=False)
-def gallery_page():
-    """Redirect former Gallery browser links to Navigator's media scope."""
-    return _legacy_browser_redirect("gallery")
-
-
-@bp.get("/search/", strict_slashes=False)
-def search_page():
-    """Redirect former Search browser links to Navigator's all-content scope."""
-    return _legacy_browser_redirect("all")
 
 
 @bp.get("/api/catalog/items")

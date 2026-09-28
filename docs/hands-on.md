@@ -53,7 +53,7 @@ return redirect(url_for("catalog.navigator_page", scope="gallery"))
 rg -n 'def create_app|def register_routes|def index|def navigator_page|def api_items' run.py routes.py src/flowinone
 ```
 
-**換一個條件：** 把 curl URL 換成 `http://127.0.0.1:5894/search/?q=hello`。預期仍是 `302`，Location 帶 `q=hello` 與 `scope=all`；原因是 `catalog/blueprint.py` 的 `_legacy_browser_redirect()`。不要省略 `/search/` 的尾端斜線，`/search` 另有 Eagle route。
+**換一個條件：** 開 `http://127.0.0.1:5894/navigator/?scope=all&q=hello`。預期直接載入跨來源搜尋頁，搜尋字保留為 `hello`。
 
 **若不同：** connection refused 先看 Web 是否啟動；不要從 Catalog SQL 開始找。
 

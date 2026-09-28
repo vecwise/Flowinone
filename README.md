@@ -72,7 +72,7 @@ Chrome Bookmarks ────────┤
 | 本機索引、圖片／影片 viewer | `/item_db` 按「同步索引」或「補縮圖」；從卡片開啟 viewer | 顯示本機索引與媒體詳情；索引更新後還要同步 Catalog |
 | 可攜 metadata（sidecar） | 用下方維護指令 audit／export／import `.flowinone.json` | metadata 隨本機素材保存；import／export 預設 dry-run |
 
-Navigator 的頁內搜尋保留目前範圍；其他頁面導覽列的搜尋會進「全部內容」。舊 `/gallery/`、`/search/` 是相容轉址，預計 2026-12-31 後移除；已沒有獨立的 `/api/gallery/*`。
+Navigator 的頁內搜尋保留目前範圍；其他頁面導覽列的搜尋會進「全部內容」。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。
 
 OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊筆記／專案工作流與筆記匯出功能已移除；目前也沒有跨裝置同步。
 

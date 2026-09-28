@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-28
+
+### Removed
+
+- Removed the `/gallery/` and `/search/` compatibility redirects. Use `/navigator/?scope=gallery` or `/navigator/?scope=all`.
+
 ## 2026-07-26
 
 ### Changed

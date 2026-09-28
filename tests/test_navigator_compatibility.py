@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import logging
-from urllib.parse import parse_qs, urlsplit
-
 import pytest
 
 from run import create_app
@@ -22,37 +19,12 @@ def client(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("legacy_path", "scope"),
-    (("/gallery/", "gallery"), ("/search/", "all")),
-)
-def test_legacy_browser_redirect_preserves_query_and_forces_scope(
-    client, caplog, legacy_path, scope
-):
-    with caplog.at_level(logging.INFO):
-        response = client.get(
-            f"{legacy_path}?source=local&source=bookmarks&type=image&scope=wrong",
-            follow_redirects=False,
-        )
-
-    assert response.status_code == 302
-    parsed = urlsplit(response.headers["Location"])
-    assert parsed.path == "/navigator/"
-    assert parse_qs(parsed.query) == {
-        "source": ["local", "bookmarks"],
-        "type": ["image"],
-        "scope": [scope],
-    }
-    assert response.headers["Deprecation"] == "@1785024000"
-    assert response.headers["Sunset"] == "Thu, 31 Dec 2026 23:59:59 GMT"
-    assert f"path={legacy_path}" in caplog.text
-    assert f"scope={scope}" in caplog.text
-
-
-@pytest.mark.parametrize(
     "path",
     (
         "/api/gallery/items",
         "/api/gallery/sources",
+        "/gallery/",
+        "/search/",
         "/gallery/lab",
         "/gallery/lab/gsap-filmstrip",
     ),

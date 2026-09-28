@@ -8,7 +8,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from bs4 import BeautifulSoup
@@ -566,13 +565,6 @@ def test_new_catalog_routes_render(tmp_path):
     assert all_search is not None
     assert all_search.select_one('input[name="scope"]')["value"] == "all"
 
-    gallery_legacy = client.get("/gallery/?source=bookmarks", follow_redirects=False)
-    assert gallery_legacy.status_code == 302
-    assert parse_qs(urlsplit(gallery_legacy.headers["Location"]).query)["scope"] == ["gallery"]
-
-    search_legacy = client.get("/search/?source=bookmarks", follow_redirects=False)
-    assert search_legacy.status_code == 302
-    assert parse_qs(urlsplit(search_legacy.headers["Location"]).query)["scope"] == ["all"]
     assert client.get("/api/catalog/items").status_code == 200
     bookmark_search = client.get("/navigator/?scope=all&source=bookmarks")
     assert b"https://example.com/web" in bookmark_search.data
