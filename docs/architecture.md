@@ -98,6 +98,8 @@ Navigator 的「同步變更」會建立 `processing_jobs` 工作並回 202；CL
 | [templates/](../templates/)、[static/](../static/) | Jinja 畫面與 CSS／原生 JavaScript |
 | [migrations/](../migrations/) | 主 SQLite 的 Alembic schema 版本 |
 
+Catalog 與 Resource Library 各自以 `blueprint.py` 放頁面與註冊、`api.py` 放 JSON route、`commands.py` 放 CLI；`http.py` 提供共用 Blueprint 和 request helper。兩者共用的資料庫設定在 `web/database.py`。
+
 ## 3. 資料架構：權威、投影與儲存位置
 
 ```mermaid
@@ -165,5 +167,5 @@ flowchart TB
 2. 用本頁的「完整資料流」分清 **來源、索引、投影**；再看程式架構圖分清 **Web 與 Worker**；最後看資料架構圖確認 **資料實際保存位置**。
 3. 想追搜尋：`templates/navigator.html` → `catalog/blueprint.py` 的 `_navigator_query()`／`navigator_page()` → `catalog/query.py` 的 `CatalogQuery` → `catalog/browse.py` 的 `CatalogService.list()`。
 4. 想追本機新檔：`web/local.py` 的 `/update_db` → `file_handler/item_db.py` 的 `update_item_database()` → `catalog/sync.py` 的 `_sync_local()`。
-5. 想追匯入與擷取：`resource_library/blueprint.py` → `service.py`／`repository.py` → `jobs.py` → `worker.py` → `enrichment.py`／`extractors.py`。
+5. 想追匯入與擷取：`resource_library/blueprint.py`／`api.py` → `service.py`／`repository.py` → `jobs.py` → `worker.py` → `enrichment.py`／`extractors.py`。
 6. 想驗證每一段，接著做 [動手接手練習](hands-on.md)。實際啟動、同步與故障排除查 [使用手冊](renderer-architecture.md)。

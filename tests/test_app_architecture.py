@@ -25,6 +25,15 @@ def test_application_factory_registers_source_blueprints_without_workers(tmp_pat
     assert endpoints["chrome.view_chrome_folder"] == "/chrome/<path:folder_path>/"
     assert endpoints["eagle.view_eagle_image"] == "/EAGLE_image/<item_id>/"
     assert endpoints["media.view_image"] == "/image/<path:image_path>"
+    assert endpoints["catalog.navigator_page"] == "/navigator/"
+    assert endpoints["catalog.api_items"] == "/api/catalog/items"
+    assert endpoints["catalog.api_person_create"] == "/api/people"
+    assert endpoints["resource_library.resource_index"] == "/resources/"
+    assert endpoints["resource_library.api_resources_create"] == "/api/resources"
+    assert {
+        "catalog-sync", "catalog-ocr", "catalog-similarity-rebuild",
+        "resources-sync", "resources-worker", "resources-db-upgrade",
+    } <= set(app.cli.commands)
     assert not {name for name in after - before if name.startswith("flowinone-")}
 
 

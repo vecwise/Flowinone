@@ -106,7 +106,7 @@ rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_p
 **為什麼／哪段程式：**
 
 - [navigator.html](../templates/navigator.html) 的 `.navigator-favorite` click handler 先 `fetch()`，成功後改按鈕文字。
-- [catalog/blueprint.py](../src/flowinone/catalog/blueprint.py) 的 `api_event()` 把事件交給 `CatalogService.record_event()`。
+- [catalog/api.py](../src/flowinone/catalog/api.py) 的 `api_event()` 把事件交給 `CatalogService.record_event()`。
 - [catalog/browse.py](../src/flowinone/catalog/browse.py) 的 `record_event()` 新增 `catalog_events`，並更新 `item_user_state.favorite`；所以刷新後能再讀回。
 
 ```bash
@@ -128,7 +128,7 @@ curl -sS -i http://127.0.0.1:5894/api/resources \
 
 **預期：** `400`，JSON 的 `error` 是 `invalid_request`，`details` 指向 `enqueue`。不會建立 Resource，也不會擷取 URL，因為在呼叫 service 前就拒絕了輸入。
 
-**為什麼／哪段程式：** [web/schemas.py](../src/flowinone/web/schemas.py) 的 `ResourceCreateRequest.enqueue` 要求 `StrictBool`。JSON 的 `"false"` 是字串，`false` 才是布林值。[web/api.py](../src/flowinone/web/api.py) 的 `parse_json()`／`parse_payload()` 驗證失敗，error handler 回 400；[Resource Blueprint](../src/flowinone/resource_library/blueprint.py) 的 `api_resources_create()` 因此還沒走到 `_service().create_url()`。
+**為什麼／哪段程式：** [web/schemas.py](../src/flowinone/web/schemas.py) 的 `ResourceCreateRequest.enqueue` 要求 `StrictBool`。JSON 的 `"false"` 是字串，`false` 才是布林值。[web/api.py](../src/flowinone/web/api.py) 的 `parse_json()`／`parse_payload()` 驗證失敗，error handler 回 400；[Resource API](../src/flowinone/resource_library/api.py) 的 `api_resources_create()` 因此還沒走到 `_service().create_url()`。
 
 ```bash
 rg -n 'class ResourceCreateRequest|enqueue:|def parse_json|def parse_payload|def handle_request_validation|def api_resources_create' src/flowinone
@@ -214,7 +214,7 @@ rg -n 'assert ResourceWorker\(database|assert completed.get_json' tests/test_sec
 
 ```text
 測試 client.post("/api/catalog/sync")
-  → catalog/blueprint.py：api_sync()
+  → catalog/api.py：api_sync()
   → resource_library/jobs.py：JobQueue.queue()，寫 pending，HTTP 回 202
   → 測試明確呼叫 ResourceWorker.run_until_idle(max_jobs=1)
   → worker.py：_run_loop() 透過 queue.claim() 領取工作

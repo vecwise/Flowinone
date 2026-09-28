@@ -1,4 +1,4 @@
-"""Flask UI, JSON API, and CLI integration for rendered web resources."""
+"""Resource HTML pages and Blueprint registration."""
 
 from __future__ import annotations
 
@@ -6,62 +6,19 @@ import math
 import tempfile
 from pathlib import Path
 
-import click
-from flask import (
-    Blueprint,
-    Flask,
-    abort,
-    current_app,
-    redirect,
-    render_template,
-    request,
-    send_file,
-    url_for,
-)
+from flask import Flask, abort, current_app, redirect, render_template, request, send_file, url_for
 
 from config import CHROME_BOOKMARK_PATH
-from src.file_handler.thumbnails.store import get_thumbnail_store
 
+from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .canonical import ensure_within
-from .database import backup_database, get_resource_database, upgrade_database
+from .commands import register_resource_commands
 from .enrichment import EnrichmentService
-from .maintenance import rebuild_fts, retry_failed_jobs
+from .http import bp, _database, _form_error, _list_params, _service, decorate_resource
 from .repository import ResourceNotFound
-from .service import ResourceService
 from .settings import get_resource_settings
-from .worker import ResourceWorker
 from .versions import ResourceVersionService
-from src.flowinone.web.api import (
-    api_error,
-    parse_json,
-    parse_payload,
-    parse_query,
-    validated_json,
-)
-from src.flowinone.web.schemas import (
-    EnrichmentRequest,
-    ChromeImportFormRequest,
-    ImportSummaryOutput,
-    JobsOutput,
-    ResourceCreateOutput,
-    ResourceCreateRequest,
-    ResourceItemsOutput,
-    ResourceListQuery,
-    ResourceListOutput,
-    ResourceOutput,
-    ResourcePatchRequest,
-    ResourceSearchRequest,
-    ResourceTagDeleteQuery,
-    ResourceTagsRequest,
-    ResourceVersionCompareQuery,
-    ResourceVersionDiffOutput,
-    ResourceVersionLimitQuery,
-    ResourceVersionsOutput,
-    LimitQuery,
-)
 
-
-bp = Blueprint("resource_library", __name__)
 RESOURCE_TYPE_LABELS = {
     "article": "文章",
     "web_page": "網頁",
@@ -72,77 +29,6 @@ RESOURCE_TYPE_LABELS = {
     "social_post": "社群貼文",
     "unknown": "其他",
 }
-
-
-def _database():
-    configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-    return get_resource_database(
-        Path(configured) if configured else None,
-        migrate=bool(
-            current_app.config.get("FLOWINONE_AUTO_MIGRATE", current_app.testing)
-        ),
-    )
-
-
-def _service() -> ResourceService:
-    return ResourceService(
-        _database(),
-        link_thumbnail_cache=bool(
-            current_app.config.get("FLOWINONE_RESOURCE_LINK_THUMBNAILS", True)
-        ),
-    )
-
-
-def _list_params(payload=None) -> dict:
-    values = payload or request.args
-
-    def multi(name: str) -> tuple[str, ...]:
-        if hasattr(values, "getlist"):
-            result = values.getlist(name)
-        else:
-            raw = values.get(name, []) if isinstance(values, dict) else []
-            result = raw if isinstance(raw, list) else str(raw).split(",")
-        return tuple(value.strip() for value in result if str(value).strip())
-
-    try:
-        page = int(values.get("page", 1))
-        per_page = int(values.get("per_page", 30))
-    except (TypeError, ValueError):
-        page, per_page = 1, 30
-    return {
-        "query": str(values.get("q") or values.get("query") or "").strip(),
-        "source_types": multi("source_type"),
-        "tag": str(values.get("tag") or "").strip(),
-        "domain": str(values.get("domain") or "").strip(),
-        "page": page,
-        "per_page": per_page,
-    }
-
-
-def _thumbnail_url(resource: dict) -> str:
-    if resource.get("thumbnail_path"):
-        return url_for(
-            "resource_library.resource_asset",
-            resource_id=resource["id"],
-            kind="thumbnail",
-        )
-    media_id = resource.get("thumbnail_media_id")
-    if media_id and get_thumbnail_store().get_thumbnail_path(media_id):
-        return url_for("chrome.serve_bookmark_thumbnail", media_id=media_id)
-    return url_for("static", filename="default_thumbnail.svg")
-
-
-def decorate_resource(resource: dict) -> dict:
-    decorated = dict(resource)
-    decorated["thumbnail_url"] = _thumbnail_url(resource)
-    decorated["detail_url"] = url_for(
-        "resource_library.resource_detail", resource_id=resource["id"]
-    )
-    return decorated
-
-
-def _form_error(endpoint: str, error: Exception, **values):
-    return redirect(url_for(endpoint, error=str(error), **values))
 
 
 @bp.get("/resources/")
@@ -358,216 +244,6 @@ def resource_asset(resource_id: str, kind: str):
     return send_file(path, conditional=True, max_age=3600)
 
 
-@bp.get("/api/resources")
-def api_resources_list():
-    query = parse_query(ResourceListQuery, list_fields=("source_type",))
-    page = _service().repository.list(**_list_params(query.model_dump()))
-    return validated_json(
-        {
-            "items": [decorate_resource(item) for item in page.items],
-            "total": page.total,
-            "page": page.page,
-            "per_page": page.per_page,
-        },
-        ResourceListOutput,
-    )
-
-
-@bp.post("/api/resources")
-def api_resources_create():
-    payload = parse_json(ResourceCreateRequest)
-    try:
-        result = _service().create_url(
-            payload.url,
-            title=payload.title,
-            enqueue=payload.enqueue,
-        )
-    except (ValueError, RuntimeError) as exc:
-        return api_error(str(exc), 400)
-    result["resource"] = decorate_resource(result["resource"])
-    return validated_json(
-        result,
-        ResourceCreateOutput,
-        201 if result["import"]["created"] else 200,
-    )
-
-
-@bp.get("/api/resources/<resource_id>")
-def api_resource_get(resource_id: str):
-    try:
-        return validated_json(
-            decorate_resource(_service().repository.get(resource_id)), ResourceOutput
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-
-
-@bp.get("/api/resources/<resource_id>/versions")
-def api_resource_versions(resource_id: str):
-    query = parse_query(ResourceVersionLimitQuery)
-    try:
-        versions = ResourceVersionService(_database()).list_versions(
-            resource_id, limit=query.limit
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    return validated_json({"items": versions}, ResourceVersionsOutput)
-
-
-@bp.get("/api/resources/<resource_id>/versions/compare")
-def api_resource_versions_compare(resource_id: str):
-    query = parse_query(ResourceVersionCompareQuery)
-    try:
-        result = ResourceVersionService(_database()).compare(
-            resource_id,
-            from_version_id=query.from_version,
-            to_version_id=query.to_version,
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    except (LookupError, ValueError) as exc:
-        return api_error(str(exc), 400)
-    return validated_json(result, ResourceVersionDiffOutput)
-
-
-@bp.patch("/api/resources/<resource_id>")
-def api_resource_patch(resource_id: str):
-    payload = parse_json(ResourcePatchRequest)
-    changes = payload.model_dump(exclude_none=True)
-    if not changes:
-        return api_error("Only title and availability are editable", 400)
-    try:
-        resource = _service().update_resource(resource_id, changes)
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    return validated_json(decorate_resource(resource), ResourceOutput)
-
-
-@bp.delete("/api/resources/<resource_id>")
-def api_resource_delete(resource_id: str):
-    try:
-        _service().repository.delete(resource_id)
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    return "", 204
-
-
-@bp.post("/api/resources/<resource_id>/tags")
-def api_resource_tags(resource_id: str):
-    payload = parse_json(ResourceTagsRequest)
-    try:
-        return validated_json(
-            _service().replace_tags(resource_id, payload.tags), ResourceOutput
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-
-
-@bp.delete("/api/resources/<resource_id>/tags/<tag_id>")
-def api_resource_tag_delete(resource_id: str, tag_id: str):
-    query = parse_query(ResourceTagDeleteQuery)
-    try:
-        resource = _service().repository.remove_tag(
-            resource_id,
-            tag_id,
-            source=query.source,
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    return validated_json(resource, ResourceOutput)
-
-
-@bp.post("/api/resources/<resource_id>/enrich")
-def api_resource_enrich(resource_id: str):
-    payload = parse_json(EnrichmentRequest)
-    try:
-        jobs = _service().enqueue_enrichment(
-            resource_id,
-            include_ai=payload.include_ai,
-            force=payload.force,
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    return validated_json({"jobs": jobs}, JobsOutput, 202)
-
-
-@bp.post("/api/resources/<resource_id>/retry")
-def api_resource_retry(resource_id: str):
-    payload = parse_json(EnrichmentRequest)
-    try:
-        jobs = _service().enqueue_enrichment(
-            resource_id,
-            include_ai=payload.include_ai,
-            force=True,
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    return validated_json({"jobs": jobs}, JobsOutput, 202)
-
-
-@bp.get("/api/resources/<resource_id>/similar")
-def api_resource_similar(resource_id: str):
-    query = parse_query(LimitQuery)
-    try:
-        items = _service().repository.find_similar(
-            resource_id,
-            limit=query.limit,
-        )
-    except ResourceNotFound:
-        return api_error("not_found", 404)
-    return validated_json(
-        {"items": [decorate_resource(item) for item in items]}, ResourceItemsOutput
-    )
-
-
-@bp.post("/api/search")
-def api_search():
-    payload = parse_json(ResourceSearchRequest)
-    page = _service().repository.list(**_list_params(payload.model_dump()))
-    return validated_json(
-        {"items": [decorate_resource(item) for item in page.items], "total": page.total},
-        ResourceListOutput,
-    )
-
-
-@bp.post("/api/imports/chrome")
-def api_import_chrome():
-    service = _service()
-    options = parse_payload(ChromeImportFormRequest, request.form.to_dict(flat=True))
-    upload = request.files.get("file")
-    if upload is None:
-        path = Path(current_app.config.get("CHROME_BOOKMARK_PATH", CHROME_BOOKMARK_PATH))
-        try:
-            summary = service.import_file(path, format_hint="json", enqueue=True)
-        except Exception as exc:
-            return api_error(str(exc), 400)
-        return validated_json(summary.to_dict(), ImportSummaryOutput)
-    format_hint = options.format or Path(upload.filename or "").suffix.lstrip(".")
-    suffix = ".html" if format_hint.lower() in {"html", "htm"} else ".json"
-    temporary_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            prefix="flowinone-api-bookmarks-", suffix=suffix, delete=False
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            upload.save(temporary)
-        summary = service.import_file(
-            temporary_path,
-            format_hint=format_hint,
-            enqueue=True,
-        )
-        return validated_json(summary.to_dict(), ImportSummaryOutput)
-    except Exception as exc:
-        return api_error(str(exc), 400)
-    finally:
-        if temporary_path:
-            temporary_path.unlink(missing_ok=True)
-
-
 def register_resource_library(app: Flask) -> None:
     """Register renderer routes, config defaults, and maintenance commands."""
     settings = get_resource_settings()
@@ -576,47 +252,7 @@ def register_resource_library(app: Flask) -> None:
     app.config.setdefault("FLOWINONE_RESOURCE_LINK_THUMBNAILS", True)
     app.config.setdefault("MAX_CONTENT_LENGTH", settings.max_download_bytes)
     app.register_blueprint(bp)
-
-    @app.cli.command("resources-sync")
-    @click.option("--path", "path_value", type=click.Path(path_type=Path), default=None)
-    @click.option("--format", "format_hint", type=click.Choice(["json", "html"]), default=None)
-    @click.option("--no-enqueue", is_flag=True, help="Import without enrichment jobs.")
-    def resources_sync(path_value, format_hint, no_enqueue):
-        """Import a Chrome profile/export into rendered Resources."""
-        target = path_value or Path(current_app.config["CHROME_BOOKMARK_PATH"])
-        summary = ResourceService(_database()).import_file(
-            target,
-            format_hint=format_hint,
-            enqueue=not no_enqueue,
-        )
-        click.echo(summary.to_dict())
-
-    @app.cli.command("resources-worker")
-    @click.option("--limit", type=click.IntRange(min=1), default=None)
-    def resources_worker(limit):
-        """Process ready Resource enrichment jobs and exit when idle."""
-        completed = ResourceWorker(_database()).run_until_idle(max_jobs=limit)
-        click.echo(f"processed={completed}")
-
-    @app.cli.command("resources-db-upgrade")
-    def resources_db_upgrade():
-        """Apply all database migrations."""
-        database_path = Path(current_app.config["FLOWINONE_RESOURCE_DB_PATH"])
-        backup_path = backup_database(database_path)
-        if backup_path:
-            click.echo(f"backup={backup_path}")
-        upgrade_database(database_path)
-        click.echo("resource database is at head")
-
-    @app.cli.command("resources-rebuild-fts")
-    def resources_rebuild_fts():
-        """Rebuild Resource FTS rows from rendered metadata and extracted content."""
-        click.echo(rebuild_fts(_database()))
-
-    @app.cli.command("resources-retry-failed")
-    def resources_retry_failed():
-        """Reset failed enrichment jobs so the worker can retry them."""
-        click.echo(retry_failed_jobs(_database()))
+    register_resource_commands(app)
 
 
 __all__ = ["bp", "decorate_resource", "register_resource_library"]

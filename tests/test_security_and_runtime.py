@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import event
 
 from run import create_app
-from src.flowinone.catalog.blueprint import _visible_items
+from src.flowinone.catalog.presentation import visible_items
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.resource_library.database import (
     DatabaseUpgradeRequired,
@@ -165,7 +165,7 @@ def test_navigator_origin_decoration_uses_one_batch_query(tmp_path):
                 for index, item_id in enumerate(item_ids)
             ]
         }
-        visible = _visible_items(
+        visible = visible_items(
             CatalogService(database),
             payload,
             CatalogQuery.create(sources=["local"]),

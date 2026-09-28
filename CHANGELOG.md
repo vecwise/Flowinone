@@ -2,6 +2,12 @@
 
 ## 2026-09-28
 
+### Changed
+
+- Split Catalog query, browse, source sync, Eagle checkpointing, page routes, JSON APIs, and CLI commands by responsibility.
+- Centralized Resource-to-Catalog refreshes and shared request database resolution.
+- Use `pyproject.toml` as the dependency source; install development dependencies with `pip install -e '.[dev]'` in the existing `py3.11` Conda environment.
+
 ### Removed
 
 - Removed the `/gallery/` and `/search/` compatibility redirects. Use `/navigator/?scope=gallery` or `/navigator/?scope=all`.

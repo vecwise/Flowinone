@@ -94,7 +94,7 @@ OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊�
 `external` 是目前本機索引預設掃描的 root；`internal` 也供來源瀏覽／媒體存取使用。未設定時，互動啟動會嘗試跳出資料夾選擇視窗；無桌面環境可用 `FLOWINONE_HEADLESS=1`，路徑不完整會直接報錯。
 
 ```bash
-conda run -n py3.11 python -m pip install -r requirements.txt
+conda run -n py3.11 python -m pip install -e '.[dev]'
 conda run -n py3.11 flask --app run resources-db-upgrade
 conda run -n py3.11 flask --app run flowinone-doctor
 ```
@@ -231,48 +231,15 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 | --- | --- |
 | 啟動與 route 註冊 | [run.py](run.py) → [routes.py](routes.py) |
 | Navigator 搜尋／篩選 | [catalog/blueprint.py](src/flowinone/catalog/blueprint.py) 的 `navigator_page()` → [catalog/query.py](src/flowinone/catalog/query.py) 的 `CatalogQuery` → [catalog/browse.py](src/flowinone/catalog/browse.py) 的 `CatalogService.list()` → [navigator.html](templates/navigator.html) |
-| 同步按鈕 | [navigator_sync.js](static/js/navigator_sync.js) → `api_sync()` → [jobs.py](src/flowinone/resource_library/jobs.py) → [worker.py](src/flowinone/resource_library/worker.py) → [catalog/sync.py](src/flowinone/catalog/sync.py) 的 `CatalogSyncService`；Eagle 續傳在 [eagle_sync.py](src/flowinone/catalog/eagle_sync.py) |
-| URL 匯入／全文擷取 | [Resource Blueprint](src/flowinone/resource_library/blueprint.py) → [ResourceService](src/flowinone/resource_library/service.py)／[Repository](src/flowinone/resource_library/repository.py) → jobs → [EnrichmentService](src/flowinone/resource_library/enrichment.py)／[Extractors](src/flowinone/resource_library/extractors.py)；提交後由 [projection.py](src/flowinone/resource_library/projection.py) 刷新 Catalog |
+| 同步按鈕 | [navigator_sync.js](static/js/navigator_sync.js) → [catalog/api.py](src/flowinone/catalog/api.py) 的 `api_sync()` → [jobs.py](src/flowinone/resource_library/jobs.py) → [worker.py](src/flowinone/resource_library/worker.py) → [catalog/sync.py](src/flowinone/catalog/sync.py) 的 `CatalogSyncService`；Eagle 續傳在 [eagle_sync.py](src/flowinone/catalog/eagle_sync.py) |
+| URL 匯入／全文擷取 | [Resource UI／API](src/flowinone/resource_library/blueprint.py)（JSON route 在 [api.py](src/flowinone/resource_library/api.py)）→ [ResourceService](src/flowinone/resource_library/service.py)／[Repository](src/flowinone/resource_library/repository.py) → jobs → [EnrichmentService](src/flowinone/resource_library/enrichment.py)／[Extractors](src/flowinone/resource_library/extractors.py)；提交後由 [projection.py](src/flowinone/resource_library/projection.py) 刷新 Catalog |
 | Local／Chrome／Eagle 瀏覽 | [web/](src/flowinone/web/) 的對應 route → [file_handler/](src/file_handler/) 的對應來源函式 → template |
 | Worker 為何會跑／不跑 | [workers.py](src/flowinone/workers.py) 的 `WorkerRuntime` → Resource worker、[Thumbnail worker](src/file_handler/thumbnails/worker.py)、[Source watcher](src/flowinone/catalog/watch.py) |
 | 樣式與畫面互動 | [templates/](templates/) → [static/css/](static/css/)／[static/js/](static/js/) |
 
-### 資料究竟放哪裡？
+### 資料與維護
 
-| 位置（預設） | 保存什麼 | 能否直接重建？ |
-| --- | --- | --- |
-| 原始媒體、Eagle library、Chrome Bookmarks | 來源本體 | 是上游資料，要先保留；Catalog 同步不等於備份來源 |
-| `data/item_db.db` | 本機檔案索引，也可能含 sidecar 匯入 metadata | 檔案索引可重掃；自訂 metadata 需保留 sidecar |
-| `data/cache.db`、`data/thumbnails/` | 縮圖、cache 與縮圖 jobs | 通常可重抓；cache／job 狀態會重新建立 |
-| `data/flowinone.sqlite3` | Resources、Catalog、user state、saved search、jobs 等 | Catalog 的來源投影可重建；收藏、搜尋、Resource 標籤等需要備份，不能整個 DB 當 cache 刪除 |
-| `data/content/` | 擷取內容與歷史快照 | 遠端可能已改變，重抓不能保證還原歷史 |
-| 媒體資料夾的 `.flowinone.json` | 可攜 metadata | 與素材一起保留 |
-
-主 SQLite 由 SQLAlchemy／Alembic 管理；item／cache DB 由 Python `sqlite3` 管理。根目錄的 `file_handler.py` 是相容轉接，實作在 `src/file_handler/`。
-
-## 維護指令：按目的挑一個
-
-以下表格的命令，都加上前綴 `conda run -n py3.11 flask --app run`。例如：
-
-```bash
-conda run -n py3.11 flask --app run catalog-sync --source bookmarks
-```
-
-| 命令尾段 | 何時用／影響 |
-| --- | --- |
-| `flowinone-doctor` | 檢查 root 與主 DB schema；路徑應先設定好 |
-| `resources-db-upgrade` | 安裝／升級 schema；先自動備份既有主 DB |
-| `catalog-sync --source all` | 四來源投影同步；CLI 直接執行，不需等待 worker；本機仍讀既有 item index |
-| `catalog-sync --source eagle --full-rescan` | Eagle checkpoint 不適用時重掃；需 Eagle 可連線 |
-| `resources-sync --path "/absolute/path/to/bookmarks.html" --format html` | 匯入書籤為 Resources 並排擷取工作；用 `--no-enqueue` 可只匯入 |
-| `resources-worker --limit 20` | 處理最多 20 個當下可執行的共用 jobs 後退出；也可能處理 Catalog jobs，不會啟動 Thumbnail worker／watcher |
-| `resources-retry-failed` | 重排 failed jobs，之後仍需 worker 處理 |
-| `resources-rebuild-fts` | 重建 Resource 全文索引；Catalog 全文投影另經 Resource source sync 更新 |
-| `catalog-relations-rebuild` | 依 metadata 重算可解釋的相關項目 |
-| `catalog-similarity-rebuild` | 直接分析已進 Catalog 的本機圖片；不修改原始圖片 |
-| `sidecars-audit "/absolute/path/to/media"` | 檢查 sidecar |
-| `sidecars-export "/absolute/path/to/media"` | 預覽匯出；加 `--apply` 才寫 manifest |
-| `sidecars-import "/absolute/path/to/media"` | 預覽匯入；加 `--apply` 才更新本機索引，之後再同步 Catalog |
+資料庫、縮圖與歷史內容的保存位置和備份性質見 [現行架構](docs/architecture.md#3-資料架構權威投影與儲存位置)；同步、升級、重建與 sidecar 指令集中在 [使用手冊](docs/renderer-architecture.md#5-維護指令)。
 
 ## 建議閱讀順序
 

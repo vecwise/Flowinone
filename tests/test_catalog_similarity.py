@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 
 from run import create_app
 from src.file_handler import item_db
-from src.flowinone.catalog import blueprint as catalog_blueprint
+from src.flowinone.catalog import http as catalog_http
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.catalog.similarity import CatalogSimilarityService
 from src.flowinone.resource_library.database import get_resource_database
@@ -149,7 +149,7 @@ def test_duplicate_review_page_and_safe_actions_use_current_local_duplicate_item
     CatalogSimilarityService(database).analyze_local_images()
     revealed = []
     monkeypatch.setattr(
-        catalog_blueprint,
+        catalog_http,
         "_reveal_duplicate_path",
         lambda path: revealed.append(path),
     )

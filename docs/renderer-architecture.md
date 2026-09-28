@@ -15,7 +15,7 @@
 從 repo root 執行：
 
 ```bash
-conda run -n py3.11 python -m pip install -r requirements.txt
+conda run -n py3.11 python -m pip install -e '.[dev]'
 conda run -n py3.11 flask --app run resources-db-upgrade
 conda run -n py3.11 flask --app run flowinone-doctor
 conda run --no-capture-output -n py3.11 python run.py

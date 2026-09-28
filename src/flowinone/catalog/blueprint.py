@@ -1,84 +1,28 @@
-"""HTML, JSON, and CLI surfaces for the cross-source Catalog."""
+"""Navigator and duplicate review pages plus Catalog registration."""
 
 from __future__ import annotations
 
-import json
-import os
-import platform
 import secrets
-import subprocess
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlencode
 
-import click
-from flask import Blueprint, Flask, abort, current_app, redirect, render_template, request, url_for
+from flask import Flask, abort, current_app, redirect, render_template, request, url_for
 
-from config import DB_route_external, DB_route_internal
-from src.flowinone.resource_library.database import get_resource_database
-from src.flowinone.resource_library.jobs import JobQueue
-from src.flowinone.resource_library.canonical import hash_text
 from src.file_handler.eagle_integration import is_eagle_available
 
-from .query import CATALOG_SOURCES, CatalogQuery
+from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .browse import CatalogService
+from .commands import register_catalog_commands
+from .http import bp, _database
+from .presentation import SOURCE_LABELS, visible_items
+from .query import CATALOG_SOURCES, CatalogQuery
+from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
 from .watch import CatalogSourceWatcher
-from .discovery import DiscoveryService
-from .artifacts import CatalogArtifactService, PersonService
-from .similarity import CatalogSimilarityService
-from src.flowinone.web.api import api_error, parse_json, parse_query, validated_json
-from src.flowinone.web.schemas import (
-    CatalogEventRequest,
-    CatalogFacetsOutput,
-    CatalogItemOutput,
-    CatalogItemsOutput,
-    CatalogListOutput,
-    CatalogListQuery,
-    CatalogSessionOutput,
-    CatalogSessionRequest,
-    CatalogSessionsOutput,
-    SavedCatalogSearchDeleteOutput,
-    SavedCatalogSearchesOutput,
-    SavedCatalogSearchOutput,
-    SavedCatalogSearchRequest,
-    SavedSearchLimitQuery,
-    CatalogSyncOutput,
-    CatalogSyncJobEnvelope,
-    CatalogSyncRequest,
-    CatalogSyncStatusOutput,
-    CatalogSimilarityJobEnvelope,
-    CatalogSimilarityRebuildRequest,
-    CatalogSimilarityStatusOutput,
-    DuplicateCanonicalSelectionOutput,
-    DuplicateCanonicalSelectionRequest,
-    DuplicateRevealOutput,
-    DuplicateReviewOutput,
-    CatalogWatchSettingsRequest,
-    CatalogWatchStatusOutput,
-    PersonLinkRequest,
-    PersonNameRequest,
-    PersonOutput,
-    RelationsRebuildOutput,
-    RelatedLimitQuery,
-    SimilarImageQuery,
-    SimilarImagesOutput,
-    SessionLimitQuery,
-)
-from src.flowinone.web.common import path_is_within_roots
-
-
-bp = Blueprint("catalog", __name__)
 
 NAVIGATOR_SCOPE_SOURCES = {
     "gallery": tuple(source for source in CATALOG_SOURCES if source != "resources"),
     "all": CATALOG_SOURCES,
-}
-SOURCE_LABELS = {
-    "local": "本機",
-    "eagle": "EAGLE",
-    "bookmarks": "書籤",
-    "resources": "Resources",
 }
 ITEM_TYPE_LABELS = {
     "image": "圖片",
@@ -93,38 +37,6 @@ ITEM_TYPE_LABELS = {
     "folder": "資料夾",
     "unknown": "其他",
 }
-
-
-def _database():
-    configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
-    return get_resource_database(
-        Path(configured) if configured else None,
-        migrate=bool(
-            current_app.config.get("FLOWINONE_AUTO_MIGRATE", current_app.testing)
-        ),
-    )
-
-
-def _duplicate_review_roots() -> list[str]:
-    """Return the same configured Local roots used by media serving."""
-    configured = current_app.config.get("FLOWINONE_MEDIA_ROOTS", ())
-    if isinstance(configured, str):
-        configured = configured.split(os.pathsep)
-    return [
-        str(Path(value).expanduser().resolve())
-        for value in (DB_route_external, DB_route_internal, *configured)
-        if value
-    ]
-
-
-def _reveal_duplicate_path(path: Path) -> None:
-    """Ask the operating system to reveal one validated Local source file."""
-    if platform.system() == "Darwin":
-        subprocess.Popen(["open", "-R", str(path)])
-    elif platform.system() == "Windows":
-        subprocess.Popen(["explorer", "/select,", str(path)])
-    else:
-        subprocess.Popen(["xdg-open", str(path.parent)])
 
 
 def _query(scope: str | None = None) -> CatalogQuery:
@@ -197,42 +109,6 @@ def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
     values = query.public_dict()
     values.update({"scope": scope, "sources": NAVIGATOR_SCOPE_SOURCES[scope], "cursor": ""})
     return CatalogQuery.create(**values)
-
-
-def _visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -> list[dict]:
-    """Decorate canonical rows with a source-specific, usable launch target."""
-    visible_items = []
-    origins_by_item = service.get_origins_for_items(
-        item["id"] for item in payload["items"]
-    )
-    for item in payload["items"]:
-        available = origins_by_item.get(item["id"], {})
-        origins = []
-        for source in query.sources:
-            origin = available.get(source)
-            if origin:
-                origins.append(origin)
-        if not origins:
-            for source in item.get("sources") or []:
-                origin = available.get(source)
-                if origin:
-                    origins.append(origin)
-        chosen = origins[0] if origins else None
-        if not chosen:
-            continue
-        metadata = chosen.get("metadata") or {}
-        source = chosen["source_kind"]
-        item["launch_source"] = source
-        item["launch_source_label"] = SOURCE_LABELS[source]
-        item["launch_uri"] = (
-            chosen.get("original_url") or chosen.get("detail_uri")
-            if source == "bookmarks"
-            else chosen.get("detail_uri")
-        )
-        item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
-        item["target_blank"] = source == "bookmarks"
-        visible_items.append(item)
-    return visible_items
 
 
 def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
@@ -327,7 +203,7 @@ def navigator_page():
         }
     except ValueError as exc:
         abort(400, description=str(exc))
-    payload["items"] = _visible_items(service, payload, effective_query)
+    payload["items"] = visible_items(service, payload, effective_query)
     if not payload["next_cursor"]:
         payload["total_estimate"] = len(payload["items"])
     next_url = None
@@ -395,397 +271,12 @@ def duplicate_review_page():
     )
 
 
-@bp.get("/api/catalog/items")
-def api_items():
-    try:
-        return validated_json(
-            CatalogService(_database()).list(_validated_api_query()),
-            CatalogListOutput,
-        )
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-
-
-@bp.get("/api/catalog/items/<item_id>")
-def api_item(item_id: str):
-    try:
-        return validated_json(
-            CatalogService(_database()).get(item_id), CatalogItemOutput
-        )
-    except LookupError:
-        return api_error("Catalog item not found", 404)
-
-
-@bp.get("/api/catalog/facets")
-def api_facets():
-    return validated_json(
-        CatalogService(_database()).facets(_validated_api_query()),
-        CatalogFacetsOutput,
-    )
-
-
-def _validated_api_query() -> CatalogQuery:
-    query = parse_query(CatalogListQuery, list_fields=("source", "tags"))
-    values = query.model_dump()
-    values["sources"] = values.pop("source")
-    values["item_type"] = values.pop("type")
-    return CatalogQuery.create(**values)
-
-
-@bp.post("/api/catalog/items/<item_id>/events")
-def api_event(item_id: str):
-    payload = parse_json(CatalogEventRequest)
-    try:
-        return validated_json(
-            CatalogService(_database()).record_event(
-                item_id,
-                payload.event_type,
-                value=payload.event_value,
-                session_id=payload.session_id,
-                metadata=payload.metadata,
-            ),
-            CatalogItemOutput,
-        )
-    except LookupError:
-        return api_error("Catalog item not found", 404)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-
-
-@bp.get("/api/catalog/items/<item_id>/related")
-def api_related(item_id: str):
-    query = parse_query(RelatedLimitQuery)
-    return validated_json(
-        {
-            "items": DiscoveryService(_database()).related_items(
-                item_id, limit=query.limit
-            )
-        },
-        CatalogItemsOutput,
-    )
-
-
-@bp.get("/api/catalog/items/<item_id>/similar-images")
-def api_similar_images(item_id: str):
-    query = parse_query(SimilarImageQuery)
-    service = CatalogService(_database())
-    try:
-        payload = CatalogSimilarityService(_database()).similar_images(
-            item_id, limit=query.limit, max_distance=query.max_distance
-        )
-    except LookupError:
-        return api_error("Catalog item not found", 404)
-    payload["items"] = _visible_items(
-        service,
-        payload,
-        CatalogQuery.create(scope="all", sources=CATALOG_SOURCES),
-    )
-    return validated_json(payload, SimilarImagesOutput)
-
-
-@bp.get("/api/catalog/duplicate-review")
-def api_duplicate_review():
-    return validated_json(
-        CatalogSimilarityService(_database()).duplicate_review(),
-        DuplicateReviewOutput,
-    )
-
-
-@bp.post("/api/catalog/duplicate-review/canonical")
-def api_choose_duplicate_canonical():
-    payload = parse_json(DuplicateCanonicalSelectionRequest)
-    try:
-        selected = CatalogSimilarityService(_database()).choose_duplicate_canonical(
-            payload.content_hash, payload.canonical_item_id
-        )
-    except LookupError:
-        return api_error("Duplicate group not found", 404)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    return validated_json(selected, DuplicateCanonicalSelectionOutput)
-
-
-@bp.post("/api/catalog/duplicate-review/items/<item_id>/reveal")
-def api_reveal_duplicate_item(item_id: str):
-    try:
-        path = CatalogSimilarityService(_database()).duplicate_review_path(item_id)
-    except LookupError:
-        return api_error("Duplicate review item not found", 404)
-    except FileNotFoundError:
-        return api_error("Local source file not found", 404)
-    try:
-        path = path.resolve(strict=True)
-    except OSError:
-        return api_error("Local source file not found", 404)
-    if not path.is_file() or not path_is_within_roots(
-        str(path), _duplicate_review_roots()
-    ):
-        return api_error("Local source path is outside configured media roots", 403)
-    try:
-        _reveal_duplicate_path(path)
-    except OSError as exc:
-        current_app.logger.warning("Could not reveal duplicate item %s: %s", item_id, exc)
-        return api_error("Could not reveal Local source file", 500)
-    return validated_json(
-        {"item_id": item_id, "revealed": True}, DuplicateRevealOutput
-    )
-
-
-@bp.post("/api/catalog/relations/rebuild")
-def api_rebuild_relations():
-    return validated_json(
-        DiscoveryService(_database()).rebuild_item_relations(),
-        RelationsRebuildOutput,
-    )
-
-
-@bp.get("/api/catalog/sessions")
-def api_sessions():
-    query = parse_query(SessionLimitQuery)
-    return validated_json(
-        {
-            "items": CatalogService(_database()).recent_sessions(
-                query.limit
-            )
-        },
-        CatalogSessionsOutput,
-    )
-
-
-@bp.post("/api/catalog/sessions")
-def api_session_create():
-    payload = _session_payload(parse_json(CatalogSessionRequest))
-    return validated_json(
-        CatalogService(_database()).save_session(payload), CatalogSessionOutput, 201
-    )
-
-
-@bp.patch("/api/catalog/sessions/<session_id>")
-def api_session_update(session_id: str):
-    payload = _session_payload(parse_json(CatalogSessionRequest))
-    try:
-        return validated_json(
-            CatalogService(_database()).save_session(payload, session_id),
-            CatalogSessionOutput,
-        )
-    except LookupError:
-        return api_error("session_not_found", 404)
-
-
-def _session_payload(payload: CatalogSessionRequest) -> dict:
-    values = payload.model_dump(exclude_none=True)
-    query = values["query"]
-    if query.get("type") and not query.get("item_type"):
-        query["item_type"] = query["type"]
-    query.pop("type", None)
-    query.pop("view", None)
-    return values
-
-
-def _saved_search_payload(payload: SavedCatalogSearchRequest) -> dict:
-    query = payload.query.model_dump()
-    if query.get("type") and not query.get("item_type"):
-        query["item_type"] = query["type"]
-    query.pop("type", None)
-    query.pop("view", None)
-    return {
-        "label": payload.label,
-        "query": query,
-        "pinned": payload.pinned,
-    }
-
-
-@bp.get("/api/catalog/saved-searches")
-def api_saved_searches():
-    query = parse_query(SavedSearchLimitQuery)
-    return validated_json(
-        {"items": CatalogService(_database()).list_saved_searches(query.limit)},
-        SavedCatalogSearchesOutput,
-    )
-
-
-@bp.post("/api/catalog/saved-searches")
-def api_saved_search_create():
-    payload = _saved_search_payload(parse_json(SavedCatalogSearchRequest))
-    try:
-        saved = CatalogService(_database()).save_search(**payload)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    return validated_json(saved, SavedCatalogSearchOutput, 201)
-
-
-@bp.delete("/api/catalog/saved-searches/<saved_search_id>")
-def api_saved_search_delete(saved_search_id: str):
-    try:
-        CatalogService(_database()).delete_saved_search(saved_search_id)
-    except LookupError:
-        return api_error("saved_search_not_found", 404)
-    return validated_json({"id": saved_search_id}, SavedCatalogSearchDeleteOutput)
-
-
-@bp.post("/api/people")
-def api_person_create():
-    payload = parse_json(PersonNameRequest)
-    return validated_json(
-        PersonService(_database()).create(payload.display_name), PersonOutput, 201
-    )
-
-
-@bp.patch("/api/people/<person_id>")
-def api_person_rename(person_id: str):
-    payload = parse_json(PersonNameRequest)
-    try:
-        return validated_json(
-            PersonService(_database()).rename(person_id, payload.display_name),
-            PersonOutput,
-        )
-    except LookupError:
-        return api_error("person_not_found", 404)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-
-
-@bp.post("/api/people/<person_id>/items/<item_id>")
-def api_person_link(person_id: str, item_id: str):
-    payload = parse_json(PersonLinkRequest)
-    try:
-        PersonService(_database()).link(
-            person_id, item_id, confidence=payload.confidence, source="user"
-        )
-        return "", 204
-    except Exception as exc:
-        return api_error(str(exc), 400)
-
-
-@bp.post("/api/catalog/sync")
-def api_sync():
-    payload = parse_json(CatalogSyncRequest)
-    if not current_app.config.get("FLOWINONE_CATALOG_SYNC_INLINE", False):
-        selected_sources = [
-            source for source in CATALOG_SOURCES if source in payload.sources
-        ]
-        job_payload = {
-            "sources": selected_sources,
-            "full_rescan": payload.full_rescan,
-        }
-        job = JobQueue(_database()).queue(
-            "catalog_sync",
-            resource_id=None,
-            payload=job_payload,
-            input_hash=hash_text(
-                json.dumps(job_payload, ensure_ascii=False, sort_keys=True)
-            )[:16],
-            priority=5,
-            force=True,
-        )
-        return validated_json({"job": job}, CatalogSyncJobEnvelope, 202)
-    return validated_json(
-        CatalogSyncService(_database()).sync(
-            payload.sources, full_rescan=payload.full_rescan
-        ),
-        CatalogSyncOutput,
-    )
-
-
-@bp.get("/api/catalog/sync/jobs/<job_id>")
-def api_sync_job(job_id: str):
-    job = JobQueue(_database()).get(job_id)
-    if job is None or job.get("job_type") != "catalog_sync":
-        return api_error("catalog_sync_job_not_found", 404)
-    return validated_json({"job": job}, CatalogSyncJobEnvelope)
-
-
-@bp.get("/api/catalog/sync/status")
-def api_sync_status():
-    """Expose per-source live retry progress to Navigator polling."""
-    return validated_json(
-        {"sources": CatalogService(_database()).sync_status()},
-        CatalogSyncStatusOutput,
-    )
-
-
-@bp.get("/api/catalog/watch")
-def api_catalog_watch_status():
-    return validated_json(
-        CatalogSourceWatcher(_database()).status(),
-        CatalogWatchStatusOutput,
-    )
-
-
-@bp.post("/api/catalog/watch")
-def api_catalog_watch_update():
-    payload = parse_json(CatalogWatchSettingsRequest)
-    return validated_json(
-        CatalogSourceWatcher(_database()).set_enabled(payload.enabled),
-        CatalogWatchStatusOutput,
-    )
-
-
-@bp.get("/api/catalog/similarity/status")
-def api_catalog_similarity_status():
-    return validated_json(
-        CatalogSimilarityService(_database()).status(),
-        CatalogSimilarityStatusOutput,
-    )
-
-
-@bp.post("/api/catalog/similarity/rebuild")
-def api_catalog_similarity_rebuild():
-    payload = parse_json(CatalogSimilarityRebuildRequest)
-    job_payload = {"limit": payload.limit, "force": payload.force}
-    job = JobQueue(_database()).queue(
-        "catalog_similarity",
-        resource_id=None,
-        payload=job_payload,
-        input_hash=hash_text(
-            json.dumps(job_payload, ensure_ascii=False, sort_keys=True)
-        )[:16],
-        priority=25,
-        force=True,
-    )
-    return validated_json({"job": job}, CatalogSimilarityJobEnvelope, 202)
-
-
 def register_catalog(app: Flask) -> None:
     app.config.setdefault(
         "FLOWINONE_CATALOG_SYNC_INLINE", bool(app.config.get("TESTING"))
     )
     app.register_blueprint(bp)
-
-    @app.cli.command("catalog-sync")
-    @click.option("--source", "sources", multiple=True, type=click.Choice((*CATALOG_SOURCES, "all")), default=("all",))
-    @click.option(
-        "--full-rescan",
-        is_flag=True,
-        help="Discard any Eagle checkpoint and rebuild every Eagle projection.",
-    )
-    def catalog_sync(sources: tuple[str, ...], full_rescan: bool) -> None:
-        selected = CATALOG_SOURCES if "all" in sources else sources
-        click.echo(
-            CatalogSyncService(_database()).sync(
-                selected, full_rescan=full_rescan
-            )
-        )
-
-    @app.cli.command("catalog-relations-rebuild")
-    def catalog_relations_rebuild() -> None:
-        click.echo(DiscoveryService(_database()).rebuild_item_relations())
-
-    @app.cli.command("catalog-ocr")
-    @click.argument("item_id")
-    @click.argument("path", type=click.Path(path_type=Path, exists=True, dir_okay=False))
-    def catalog_ocr(item_id: str, path: Path) -> None:
-        click.echo(CatalogArtifactService(_database()).run_ocr(item_id, path))
-
-    @app.cli.command("catalog-similarity-rebuild")
-    @click.option("--force", is_flag=True, help="重新計算所有本機圖片，而不只變更過的檔案。")
-    @click.option("--limit", default=20_000, type=click.IntRange(1, 50_000), show_default=True)
-    def catalog_similarity_rebuild(force: bool, limit: int) -> None:
-        click.echo(
-            CatalogSimilarityService(_database()).analyze_local_images(
-                limit=limit, force=force
-            )
-        )
+    register_catalog_commands(app)
 
 
 __all__ = ["bp", "register_catalog"]
