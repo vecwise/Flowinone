@@ -11,7 +11,7 @@ from sqlalchemy import text
 from routes import register_routes
 from src.eagle_api.models import EaglePage
 from src.flowinone.catalog import blueprint as catalog_blueprint
-from src.flowinone.catalog import service as catalog_service
+from src.flowinone.catalog import eagle_sync
 from src.flowinone.catalog.service import CatalogService, CatalogSyncService
 from src.flowinone.resource_library.database import get_resource_database
 
@@ -40,7 +40,7 @@ def _item(
 
 def _install_eagle(monkeypatch, items: list[dict], offsets: list[int] | None = None):
     monkeypatch.setattr(
-        catalog_service,
+        eagle_sync,
         "get_eagle_catalog_source",
         lambda **_options: {"identity": "library-one", "version": "snapshot-one"},
     )
@@ -55,7 +55,7 @@ def _install_eagle(monkeypatch, items: list[dict], offsets: list[int] | None = N
             limit=limit,
         )
 
-    monkeypatch.setattr(catalog_service, "get_eagle_catalog_page", page)
+    monkeypatch.setattr(eagle_sync, "get_eagle_catalog_page", page)
 
 
 def test_eagle_incremental_sync_skips_unchanged_items_and_full_rescan_fallback(
@@ -68,7 +68,7 @@ def test_eagle_incremental_sync_skips_unchanged_items_and_full_rescan_fallback(
 
     initial = sync.sync(("eagle",))["eagle"]
     assert initial["full_rescan"] is True
-    assert initial["changed"] == 2
+    assert initial["changed"] == 2, initial
     assert initial["skipped"] == 0
 
     original_upsert = sync._upsert
@@ -156,8 +156,8 @@ def test_eagle_sync_resumes_only_after_validating_the_last_committed_page(
     items = [_item(str(index), f"Item {index}") for index in range(4)]
     offsets = []
     _install_eagle(monkeypatch, items, offsets)
-    monkeypatch.setattr(catalog_service, "EAGLE_SYNC_PAGE_SIZE", 2)
-    real_page = catalog_service.get_eagle_catalog_page
+    monkeypatch.setattr(eagle_sync, "EAGLE_SYNC_PAGE_SIZE", 2)
+    real_page = eagle_sync.get_eagle_catalog_page
     fail_once = True
 
     def interrupted_page(offset=0, limit=2):
@@ -168,7 +168,7 @@ def test_eagle_sync_resumes_only_after_validating_the_last_committed_page(
             raise RuntimeError("Eagle temporarily unavailable")
         return real_page(offset=offset, limit=limit)
 
-    monkeypatch.setattr(catalog_service, "get_eagle_catalog_page", interrupted_page)
+    monkeypatch.setattr(eagle_sync, "get_eagle_catalog_page", interrupted_page)
     sync = CatalogSyncService(database)
 
     failed = sync.sync(("eagle",))["eagle"]

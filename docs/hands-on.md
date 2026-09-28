@@ -78,13 +78,13 @@ templates/navigator.html：<form method="get">，input name="q"
   → catalog/blueprint.py：_navigator_query() 讀 request.args
   → CatalogQuery.create() 整理條件
   → navigator_page() 呼叫 CatalogService.list(effective_query)
-  → catalog/service.py：list() 查 Catalog／全文索引
+  → catalog/browse.py：list() 查 Catalog／全文索引
   → render_template("navigator.html", payload=..., query=...)
   → template 的 for item in payload['items'] 畫卡片
 ```
 
 ```bash
-rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_page|def list\(' templates/navigator.html src/flowinone/catalog/blueprint.py src/flowinone/catalog/service.py
+rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_page|def list\(' templates/navigator.html src/flowinone/catalog/blueprint.py src/flowinone/catalog/browse.py
 ```
 
 **換一個條件：** 在搜尋 URL 把 `q` 改成 `flowinonezznomatch987654`。若資料中沒有這個詞，結果應為零；頁面仍正常顯示，零筆不是 server error。
@@ -107,7 +107,7 @@ rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_p
 
 - [navigator.html](../templates/navigator.html) 的 `.navigator-favorite` click handler 先 `fetch()`，成功後改按鈕文字。
 - [catalog/blueprint.py](../src/flowinone/catalog/blueprint.py) 的 `api_event()` 把事件交給 `CatalogService.record_event()`。
-- [catalog/service.py](../src/flowinone/catalog/service.py) 的 `record_event()` 新增 `catalog_events`，並更新 `item_user_state.favorite`；所以刷新後能再讀回。
+- [catalog/browse.py](../src/flowinone/catalog/browse.py) 的 `record_event()` 新增 `catalog_events`，並更新 `item_user_state.favorite`；所以刷新後能再讀回。
 
 ```bash
 rg -n 'navigator-favorite|def api_event|def record_event|UPDATE item_user_state SET favorite' templates/navigator.html src/flowinone/catalog
@@ -240,12 +240,12 @@ conda run -n py3.11 pytest -vv tests/test_catalog_next_phase.py::test_catalog_me
 3. 斷言 `match_reason.field == "content"`，表示命中來源是擷取內容。
 4. 改搜 Eagle 的 `visual` 時，測試預期命中標題；搜 `taxonomy` 時預期命中 tag。
 
-**為什麼／哪段程式：** [catalog/service.py](../src/flowinone/catalog/service.py) 的 `CatalogQuery.create()` 保存條件，`CatalogService.list()` 依來源與文字查詢，並組出 `match_reason`，交給 Navigator 顯示命中理由。
+**為什麼／哪段程式：** [catalog/query.py](../src/flowinone/catalog/query.py) 的 `CatalogQuery.create()` 保存條件，[catalog/browse.py](../src/flowinone/catalog/browse.py) 的 `CatalogService.list()` 依來源與文字查詢，並組出 `match_reason`，交給 Navigator 顯示命中理由。
 
 **再操作一次：**
 
 ```bash
-rg -n 'match_reason|match_field|catalog_fts|def list\(' src/flowinone/catalog/service.py templates/navigator.html
+rg -n 'match_reason|match_field|catalog_fts|def list\(' src/flowinone/catalog/browse.py templates/navigator.html
 ```
 
 **預期：** 同時找到查詢／結果欄位的 Python 與顯示它的 template。你要能指出：改命中規則要看 Python，改「命中」提示的呈現要看 HTML。
@@ -275,7 +275,7 @@ conda run -n py3.11 flask --app run catalog-sync --source local
   → web/local.py：update_item_db_route()
   → file_handler/item_db.py：update_item_database() 掃描 root，更新 item_db.db
   → catalog-sync CLI → CatalogSyncService.sync(("local",))
-  → catalog/service.py：_sync_local() 讀 fetch_items()，寫 Catalog
+  → catalog/sync.py：_sync_local() 讀 fetch_items()，寫 Catalog
   → CatalogService.list() 查到 → navigator.html 顯示
 ```
 

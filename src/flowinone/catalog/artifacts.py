@@ -11,7 +11,7 @@ from sqlalchemy import text
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
-from .service import CatalogService
+from .browse import CatalogService
 
 
 class OCRProvider(Protocol):

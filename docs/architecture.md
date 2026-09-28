@@ -13,7 +13,7 @@ Flowinone 有 **四種進入 Catalog 的來源**。原始資料各有權威位�
 | `bookmarks` | Chrome Default profile 的 `Bookmarks` JSON | Chrome parser → Catalog sync；不安全或非網頁 URL 會略過 |
 | `resources` | Flowinone 自己的 `resources` 等資料表與 `data/content/` | 加入 URL 或匯入書籤建立 Resource → 同步該 Resource 到 Catalog |
 
-四種來源由 [Catalog service](../src/flowinone/catalog/service.py) 的 `CATALOG_SOURCES` 定義。手動 URL、Chrome／JSON／HTML 書籤清單是 **Resource 的匯入方式**；遠端網頁、PDF、YouTube 字幕、GitHub 內容和可選 AI 摘要是 **Resource 的擷取內容**。它們都不會各自變成第五種 Catalog 來源。
+四種來源由 [Catalog query](../src/flowinone/catalog/query.py) 的 `CATALOG_SOURCES` 定義。手動 URL、Chrome／JSON／HTML 書籤清單是 **Resource 的匯入方式**；遠端網頁、PDF、YouTube 字幕、GitHub 內容和可選 AI 摘要是 **Resource 的擷取內容**。它們都不會各自變成第五種 Catalog 來源。
 
 ## 1. 完整資料流
 
@@ -160,7 +160,7 @@ flowchart TB
 
 1. 先看 [README](../README.md) 的「先接回你熟悉的 Flask」和四來源摘要，掌握 request → service → DB／adapter → template。
 2. 用本頁的「完整資料流」分清 **來源、索引、投影**；再看程式架構圖分清 **Web 與 Worker**；最後看資料架構圖確認 **資料實際保存位置**。
-3. 想追搜尋：`templates/navigator.html` → `catalog/blueprint.py` 的 `_navigator_query()`／`navigator_page()` → `catalog/service.py` 的 `CatalogQuery`／`CatalogService.list()`。
-4. 想追本機新檔：`web/local.py` 的 `/update_db` → `file_handler/item_db.py` 的 `update_item_database()` → `catalog/service.py` 的 `_sync_local()`。
+3. 想追搜尋：`templates/navigator.html` → `catalog/blueprint.py` 的 `_navigator_query()`／`navigator_page()` → `catalog/query.py` 的 `CatalogQuery` → `catalog/browse.py` 的 `CatalogService.list()`。
+4. 想追本機新檔：`web/local.py` 的 `/update_db` → `file_handler/item_db.py` 的 `update_item_database()` → `catalog/sync.py` 的 `_sync_local()`。
 5. 想追匯入與擷取：`resource_library/blueprint.py` → `service.py`／`repository.py` → `jobs.py` → `worker.py` → `enrichment.py`／`extractors.py`。
 6. 想驗證每一段，接著做 [動手接手練習](hands-on.md)。實際啟動、同步與故障排除查 [使用手冊](renderer-architecture.md)。

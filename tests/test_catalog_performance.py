@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.flowinone.catalog import service as catalog_service
+from src.flowinone.catalog import sync as catalog_sync
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.resource_library.database import get_resource_database
 
@@ -58,9 +58,9 @@ def test_bookmark_projection_1000_item_baseline(monkeypatch, tmp_path):
         {"url": f"https://example.com/{index}", "title": f"Bookmark {index}"}
         for index in range(1_000)
     ]
-    monkeypatch.setattr(catalog_service, "iter_chrome_bookmark_records", lambda: iter(records))
+    monkeypatch.setattr(catalog_sync, "iter_chrome_bookmark_records", lambda: iter(records))
     monkeypatch.setattr(
-        catalog_service,
+        catalog_sync,
         "lookup_thumbnail_for_bookmark",
         lambda *_args, **_kwargs: SimpleNamespace(route=None, sub_type=None),
     )

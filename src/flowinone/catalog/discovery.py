@@ -13,7 +13,7 @@ from sqlalchemy import text
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import utc_now_text
 
-from .service import CatalogService
+from .browse import CatalogService
 
 
 def _tokens(value: str) -> set[str]:

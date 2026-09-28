@@ -1,5 +1,7 @@
 """Cross-source searchable projection for Flowinone."""
 
-from .service import CatalogQuery, CatalogService, CatalogSyncService
+from .query import CatalogQuery
+from .browse import CatalogService
+from .sync import CatalogSyncService
 
 __all__ = ["CatalogQuery", "CatalogService", "CatalogSyncService"]

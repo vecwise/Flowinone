@@ -20,7 +20,9 @@ from src.flowinone.resource_library.jobs import JobQueue
 from src.flowinone.resource_library.canonical import hash_text
 from src.file_handler.eagle_integration import is_eagle_available
 
-from .service import CATALOG_SOURCES, CatalogQuery, CatalogService, CatalogSyncService
+from .query import CATALOG_SOURCES, CatalogQuery
+from .browse import CatalogService
+from .sync import CatalogSyncService
 from .watch import CatalogSourceWatcher
 from .discovery import DiscoveryService
 from .artifacts import CatalogArtifactService, PersonService

@@ -19,7 +19,7 @@ from src.file_handler.item_db import fetch_item_paths
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
-from .service import CatalogService
+from .browse import CatalogService
 
 
 VISUAL_HASH_ARTIFACT = "visual_hash"
