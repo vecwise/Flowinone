@@ -40,7 +40,7 @@ def upgrade() -> None:
     ):
         op.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-    op.execute("DELETE FROM processing_jobs WHERE job_type='export_obsidian'")
+    op.execute("DELETE FROM processing_jobs WHERE job_type GLOB 'export_*'")
     op.execute("DELETE FROM catalog_events WHERE event_type='add_to_collection'")
     # The FTS schema is retained for compatibility with existing Resource DBs,
     # but renderer search no longer indexes personal-note text.

@@ -57,7 +57,7 @@ Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、匯入的網址*
 
 Navigator 的頁內搜尋保留目前範圍；其他頁面導覽列的搜尋會進「全部內容」。舊 `/gallery/`、`/search/` 是相容轉址，預計 2026-12-31 後移除；已沒有獨立的 `/api/gallery/*`。
 
-OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊 Entries、Projects、Collections、Notes、BUILD／THINK／LEARN 等工作流與 Obsidian export 已移除；跨裝置同步、Notion 等新來源、無限 feed 與 React／FastAPI 全面改寫不在目前產品範圍。
+OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊 Entries、Projects、Collections、Notes、BUILD／THINK／LEARN 等工作流與筆記匯出功能已移除；跨裝置同步、Notion 等新來源、無限 feed 與 React／FastAPI 全面改寫不在目前產品範圍。
 
 ## 啟動
 

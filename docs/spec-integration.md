@@ -26,7 +26,7 @@ This document re-evaluates the five supplied design notes after the renderer-onl
 | Requirement | Decision |
 | --- | --- |
 | BUILD/THINK/LEARN/SCAN/RECOVER/WRITE, Entries, Projects, Decisions, Outputs | Removed from this repository. |
-| Notes, Raw → Wiki, Obsidian export/sync | Removed or out of scope; knowledge capture belongs to another repository. |
+| Notes, Raw → Wiki, note export/sync | Removed or out of scope; knowledge capture belongs to another repository. |
 | Manual/Smart/Generated Collections | Removed for now. Navigator is already the visual browsing surface and is not relabelled as inspiration. |
 | Cross-device sync, OneTab/Keep/Notion/social connectors | Out of scope. |
 | CLIP/FAISS mandatory first version | Deferred. Relation/provider interfaces are enough until a benchmark proves a model helps. |

@@ -87,17 +87,6 @@ def normalize_tag(value: str) -> str:
     return normalized.casefold()[:120]
 
 
-def sanitize_markdown_filename(title: str, fallback: str = "Untitled") -> str:
-    """Return a portable Markdown filename without path traversal characters."""
-    cleaned = unicodedata.normalize("NFKC", title or fallback)
-    cleaned = re.sub(r"[\\/:*?\"<>|\x00-\x1f]", "-", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .-")
-    cleaned = cleaned[:120].strip(" .-") or fallback
-    if cleaned in {".", ".."}:
-        cleaned = fallback
-    return cleaned if cleaned.casefold().endswith(".md") else f"{cleaned}.md"
-
-
 def ensure_within(root: Path, candidate: Path) -> Path:
     """Resolve candidate and reject paths that leave root."""
     root_resolved = root.expanduser().resolve()
@@ -116,5 +105,4 @@ __all__ = [
     "normalize_resource_url",
     "normalize_tag",
     "resource_identity",
-    "sanitize_markdown_filename",
 ]

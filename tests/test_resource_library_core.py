@@ -1,12 +1,9 @@
-from pathlib import Path
-
 import pytest
 from sqlalchemy import inspect
 
 from src.flowinone.resource_library.canonical import (
     InvalidResourceURL,
     normalize_resource_url,
-    sanitize_markdown_filename,
 )
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.importers import (
@@ -56,10 +53,8 @@ def test_migration_creates_domain_and_fts_tables(tmp_path):
         reopened.dispose()
 
 
-def test_resource_url_identity_and_filename_safety():
+def test_resource_url_identity_and_scheme_validation():
     assert normalize_resource_url("HTTPS://Example.COM/a/?utm_source=x#frag") == "https://example.com/a"
-    assert sanitize_markdown_filename('../A:B? "note"') == "A-B- -note.md"
-    assert sanitize_markdown_filename("Already.md") == "Already.md"
     with pytest.raises(InvalidResourceURL):
         normalize_resource_url("file:///etc/passwd")
 

@@ -32,7 +32,7 @@ Last audit observed approximately 7,630 canonical Catalog items and 14,800 origi
 - BUILD, THINK, LEARN, SCAN, RECOVER, and WRITE Entry modes.
 - Entries, Projects, Decisions, Output Assets, and their provenance APIs.
 - Manual, Smart, and Generated Collections.
-- Draft Notes, personal-note workflow, and Obsidian export/mirror code.
+- Draft Notes, personal-note workflow, and note export/mirror code.
 - Resource reading-state, priority, archive, promotion, personal-note storage, and project/mode UI/API flows.
 
 Migration `0008_renderer_resource_schema` removes the inactive Resource workflow and personal-note columns. Renderer routes only expose resource metadata that supports browsing, display, and retrieval.

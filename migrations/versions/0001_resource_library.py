@@ -1,4 +1,4 @@
-"""Create the Resource Library, curation, and Obsidian bridge schema.
+"""Create the Resource Library and curation schema.
 
 Revision ID: 0001_resource_library
 Revises: None
@@ -38,8 +38,6 @@ TABLE_DDL = (
         note_type VARCHAR(24) NOT NULL,
         body TEXT NOT NULL,
         status VARCHAR(20) NOT NULL,
-        obsidian_path TEXT,
-        export_hash VARCHAR(64),
         created_at VARCHAR(40) NOT NULL,
         updated_at VARCHAR(40) NOT NULL,
         CONSTRAINT ck_draft_notes_type CHECK (note_type IN ('literature','synthesis')),
@@ -158,18 +156,6 @@ TABLE_DDL = (
     )
     """,
     """
-    CREATE TABLE note_exports (
-        id VARCHAR(32) NOT NULL PRIMARY KEY,
-        draft_note_id VARCHAR(32) NOT NULL
-            REFERENCES draft_notes(id) ON DELETE CASCADE,
-        target_path TEXT NOT NULL,
-        content_hash VARCHAR(64) NOT NULL,
-        status VARCHAR(20) NOT NULL,
-        error_message TEXT,
-        exported_at VARCHAR(40) NOT NULL
-    )
-    """,
-    """
     CREATE TABLE processing_jobs (
         id VARCHAR(32) NOT NULL PRIMARY KEY,
         job_key VARCHAR(160) NOT NULL UNIQUE,
@@ -260,7 +246,6 @@ INDEX_DDL = (
     "CREATE INDEX idx_ai_artifacts_resource_type ON ai_artifacts (resource_id, artifact_type)",
     "CREATE INDEX idx_collection_items_order ON collection_items (collection_id, position, added_at)",
     "CREATE INDEX idx_draft_note_sources_order ON draft_note_sources (draft_note_id, position)",
-    "CREATE INDEX idx_note_exports_note ON note_exports (draft_note_id, exported_at)",
     "CREATE INDEX idx_processing_jobs_ready ON processing_jobs (status, run_after, priority)",
     "CREATE INDEX idx_processing_jobs_resource ON processing_jobs (resource_id)",
     "CREATE INDEX idx_resource_contents_resource_type ON resource_contents (resource_id, content_type)",
@@ -298,7 +283,6 @@ def downgrade() -> None:
         "resource_note_links",
         "resource_contents",
         "processing_jobs",
-        "note_exports",
         "draft_note_sources",
         "collection_items",
         "ai_artifacts",

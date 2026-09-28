@@ -7,7 +7,7 @@
 
 Flowinone 是一個 local-first、多來源的「資源瀏覽與搜尋器」。它不搬移來源資料，而是把 Local、Eagle、Chrome Bookmarks 與自行匯入的網址投影到同一份 Catalog，再由 Navigator 顯示。
 
-它不是筆記、任務、專案或 Obsidian 工作流系統；舊版 BUILD、THINK、LEARN、SCAN、RECOVER、WRITE、Entry、Project、Collection 與 Note 已不在執行中產品範圍。
+它不是筆記、任務、專案或知識管理工作流系統；舊版 BUILD、THINK、LEARN、SCAN、RECOVER、WRITE、Entry、Project、Collection 與 Note 已不在執行中產品範圍。
 
 ```mermaid
 flowchart LR

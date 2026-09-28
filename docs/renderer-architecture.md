@@ -164,8 +164,8 @@ conda run -n py3.11 flask --app run sidecars-import
 
 ## 7. 產品不處理的事情
 
-- 不建立 knowledge workflow、project、entry、note 或 Obsidian export。
-- 不提供跨裝置同步，也不索引 Obsidian vault。
+- 不建立 knowledge workflow、project、entry、note 或筆記匯出。
+- 不提供跨裝置同步，也不索引外部筆記資料夾。
 - 不連接 OneTab、Keep、Notion 或社群平台。
 - 不做 autoplay、無限推薦 feed 或 agent swarm。
 
