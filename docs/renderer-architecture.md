@@ -1,6 +1,6 @@
 # Flowinone 使用手冊
 
-> 這份文件說明目前版本怎麼安裝、啟動與日常使用。系統設計見 [現況架構](architecture.md)。
+先讀 [README](../README.md) 掌握四個資料來源；需要知道資料流、程式與儲存關係時看 [現行架構](architecture.md)。本頁集中放啟動、日常操作、同步與維護指令。
 
 ## 1. 使用前準備
 
@@ -15,11 +15,10 @@
 從 repo root 執行：
 
 ```bash
-conda activate py3.11
-python -m pip install -r requirements.txt
-flask --app run resources-db-upgrade
-flask --app run flowinone-doctor
-python run.py
+conda run -n py3.11 python -m pip install -r requirements.txt
+conda run -n py3.11 flask --app run resources-db-upgrade
+conda run -n py3.11 flask --app run flowinone-doctor
+conda run --no-capture-output -n py3.11 python run.py
 ```
 
 開啟 `http://localhost:5894`。首頁會導向 Navigator 的「素材」scope。
@@ -143,10 +142,12 @@ conda run -n py3.11 flask --app run catalog-similarity-rebuild
 Local sidecar 稽核、匯出與匯入：
 
 ```bash
-conda run -n py3.11 flask --app run sidecars-audit
-conda run -n py3.11 flask --app run sidecars-export
-conda run -n py3.11 flask --app run sidecars-import
+conda run -n py3.11 flask --app run sidecars-audit "/absolute/path/to/media"
+conda run -n py3.11 flask --app run sidecars-export "/absolute/path/to/media"
+conda run -n py3.11 flask --app run sidecars-import "/absolute/path/to/media"
 ```
+
+Export／import 預設只預覽；確認輸出後加 `--apply` 才會寫入。Import 更新本機索引後，還需同步 Local Catalog。
 
 ## 6. 常見問題
 
@@ -162,11 +163,6 @@ conda run -n py3.11 flask --app run sidecars-import
 | 設定或 DB 路徑不明 | runtime 環境差異 | 執行 `flowinone-doctor`；所有內建 DB 均來自絕對 `FLOWINONE_DATA_DIR` |
 | 舊 `/gallery/` 或 `/search/` URL | 暫時相容 redirect（2026-12-31 sunset） | 改用 `/navigator/?scope=gallery` 或 `scope=all` |
 
-## 7. 產品不處理的事情
+## 7. 現行邊界
 
-- 不建立 knowledge workflow、project、entry、note 或筆記匯出。
-- 不提供跨裝置同步，也不索引外部筆記資料夾。
-- 不連接 OneTab、Keep、Notion 或社群平台。
-- 不做 autoplay、無限推薦 feed 或 agent swarm。
-
-`/debug/` 是開發入口，只在 `FLOWINONE_DEV_TOOLS` 明確啟用時註冊。舊 Gallery Lab 與 `/api/gallery/*` 已移除。
+Flowinone 目前提供四來源瀏覽、Resource 擷取與 Catalog 搜尋；舊筆記／專案工作流已移除，也不提供跨裝置同步。`/debug/` 只在 `FLOWINONE_DEV_TOOLS` 啟用時註冊；舊 Gallery Lab 與 `/api/gallery/*` 已移除。

@@ -1,161 +1,166 @@
-# Flowinone 現況架構
+# Flowinone 現行架構
 
-> 文件角色：這是執行中系統架構的權威說明。最後核對日期：2026-07-26。
-> 問題、優先級與改造順序另見 [架構與 UI 修正計畫](migration-plan.md)，實際操作見 [使用手冊](renderer-architecture.md)。
+> 依 `5b530b0`（2026-09-28）的程式碼核對。這裡描述目前可執行的系統；安裝、操作與維護指令見 [使用手冊](renderer-architecture.md)，實際追碼練習見 [動手接手](hands-on.md)。
 
-## 1. 產品邊界
+## 先記住的模型
 
-Flowinone 是一個 local-first、多來源的「資源瀏覽與搜尋器」。它不搬移來源資料，而是把 Local、Eagle、Chrome Bookmarks 與自行匯入的網址投影到同一份 Catalog，再由 Navigator 顯示。
+Flowinone 有 **四種進入 Catalog 的來源**。原始資料各有權威位置；`Catalog` 是供跨來源瀏覽、篩選與搜尋的投影，不是來源備份。`Gallery`／「素材」只是 Navigator 的查詢範圍，不是另一套資料庫或服務。
 
-它不是筆記、任務、專案或知識管理工作流系統；舊版 BUILD、THINK、LEARN、SCAN、RECOVER、WRITE、Entry、Project、Collection 與 Note 已不在執行中產品範圍。
+| Catalog `source_kind` | 權威資料 | 進入 Catalog 的路徑 |
+| --- | --- | --- |
+| `local` | `config.json` 指定的本機圖片、影片；可選 `.flowinone.json` metadata | 掃描檔案 → `item_db.db` → Local Catalog sync |
+| `eagle` | Eagle library，透過執行中的 Eagle local API 讀取 | Eagle adapter 分頁／增量同步 |
+| `bookmarks` | Chrome Default profile 的 `Bookmarks` JSON | Chrome parser → Catalog sync；不安全或非網頁 URL 會略過 |
+| `resources` | Flowinone 自己的 `resources` 等資料表與 `data/content/` | 加入 URL 或匯入書籤建立 Resource → 同步該 Resource 到 Catalog |
+
+四種來源由 [Catalog service](../src/flowinone/catalog/service.py) 的 `CATALOG_SOURCES` 定義。手動 URL、Chrome／JSON／HTML 書籤清單是 **Resource 的匯入方式**；遠端網頁、PDF、YouTube 字幕、GitHub 內容和可選 AI 摘要是 **Resource 的擷取內容**。它們都不會各自變成第五種 Catalog 來源。
+
+## 1. 完整資料流
 
 ```mermaid
 flowchart LR
-  local["Local media\n檔案系統 + item_db"]
-  eagle["Eagle\nLocal Web API / library"]
-  chrome["Chrome Bookmarks\nBookmarks JSON"]
-  urls["Resources\nURL + 擷取內容"]
+  Files["本機媒體檔"] --> Scan["Local index 掃描"]
+  Sidecar["可選 .flowinone.json"] --> Scan
+  Scan --> ItemDB[("item_db.db")]
 
-  local --> sync["Catalog sync"]
-  eagle --> sync
-  chrome --> sync
-  urls --> sync
-  sync --> catalog["Catalog projection\n身分、來源、標籤、FTS、facets、events、sessions"]
-  catalog --> navigator["Navigator\n素材 / 全部內容"]
-  urls --> detail["Resource 詳情\nmetadata、摘要、全文"]
-  navigator --> viewers["來源對應的 viewer 或原始 URL"]
+  ItemDB --> Sync["CatalogSyncService"]
+  Eagle["Eagle library / local API"] --> Sync
+  Chrome["Chrome Bookmarks JSON"] --> Sync
+
+  Import["手動 URL / 書籤清單匯入"] --> ResourceService["ResourceService"]
+  ResourceService --> ResourceDB[("主 DB: Resources")]
+  ResourceService --> Jobs[("processing_jobs")]
+  Jobs --> Enrich["ResourceWorker: 擷取"]
+  Web["遠端網頁 / PDF / 影片等"] --> Enrich
+  Enrich --> Content["data/content/ 快照"]
+  Enrich --> ResourceDB
+  ResourceDB --> Sync
+  Content --> Sync
+
+  Sync --> Catalog[("主 DB: Catalog + FTS")]
+  Catalog --> Navigator["Navigator: 素材 / 全部內容"]
+  ResourceDB --> ResourcePages["/resources/ 列表與詳情"]
+
+  Files --> SourcePages["來源專屬頁 / viewer"]
+  Eagle --> SourcePages
+  Chrome --> SourcePages
 ```
 
-## 2. 執行時拓撲
+- **Local 有兩層索引**：一般的 Catalog sync 只讀既有 `item_db.db`，不重掃磁碟。新增媒體後先在 `/item_db` 更新本機索引，再同步 Catalog。啟用來源變動偵測後，由它排入的 Local job 可要求先刷新本機索引。
+- **Resource 有自己的資料與頁面**：`/resources/` 讀 Resource；`/navigator/?scope=all` 讀 Catalog 投影。Resource 建立、標籤或擷取內容更新時，service 會同步對應的投影。擷取工作的 worker 未運行時，工作仍在 queue 等待。
+- **同一 URL 可有多個來源**：Bookmark 與 Resource 經 URL canonicalization 後可共用一筆 `catalog_items`，`catalog_origins` 仍保留兩個來源紀錄。
+- **直接來源頁和 Navigator 讀法不同**：`/folders/`、`/chrome/`、`/EAGLE_*` 保留來源的資料夾或樹狀結構；Navigator 讀統一 Catalog。來源同步與來源頁讀取不是同一件事。
+- `gallery` scope 只包含 Local、Eagle、Bookmarks；`all` scope 再加 Resources。舊 `/gallery/` 與 `/search/` 仍是指向 Navigator 的相容轉址，預計 2026-12-31 後移除；舊 Gallery API 已不存在。
 
-系統實際上至少有兩個程序；只啟動 Flask 並不等於所有功能都在運作。
+## 2. 程式架構：請求與背景工作
 
 ```mermaid
 flowchart TB
-  browser["瀏覽器"] --> web["Flask web process\nrun.py · port 5894"]
-  worker["獨立 worker process\nsrc.flowinone.workers"]
+  Browser["瀏覽器"] --> Flask["Flask Web: run.py → routes.py"]
+  Flask --> SourceBP["web Blueprints: Local / Chrome / Eagle / Media"]
+  Flask --> CatalogBP["Catalog Blueprint: Navigator / API"]
+  Flask --> ResourceBP["Resource Blueprint: Resources UI / API"]
 
-  web --> catalogdb[("data/flowinone.sqlite3")]
-  web --> itemdb[("data/item_db.db")]
-  web --> cachedb[("data/cache.db")]
-  worker --> catalogdb
-  worker --> cachedb
-  worker --> content["data/content/"]
+  SourceBP --> Adapters["src/file_handler + src/eagle_api"]
+  CatalogBP --> CatalogService["CatalogService: 查詢 / facet / cursor / 狀態"]
+  CatalogBP --> SyncService["CatalogSyncService: 四來源投影"]
+  ResourceBP --> ResourceService["ResourceService: 匯入 / 編輯 / 排工作"]
+  CatalogService --> MainDB[("flowinone.sqlite3")]
+  SyncService --> MainDB
+  ResourceService --> MainDB
+  ResourceService --> JobQueue[("processing_jobs, 主 DB")]
+  CatalogBP --> JobQueue
 
-  web --> localfs["Local roots"]
-  web --> eagleapi["Eagle local API"]
-  web --> bookmarks["Chrome Bookmarks file"]
-  worker --> internet["受限制的 HTTP fetch"]
+  Runtime["獨立程序: src.flowinone.workers"] --> ResourceWorker["ResourceWorker: 擷取 / Catalog sync / 相似圖片分析"]
+  Runtime --> ThumbnailWorker["ThumbnailWorker: 書籤縮圖"]
+  Runtime --> Watcher["CatalogSourceWatcher: 預設關閉"]
+  ResourceWorker --> JobQueue
+  ResourceWorker --> SyncService
+  ThumbnailWorker --> CacheDB[("cache.db: thumbnail_jobs")]
+  Watcher --> JobQueue
 ```
 
-- `run.py` 建立 Flask app，預設只 bind `127.0.0.1:5894`，debug 與 dev tools 預設關閉。
-- `python -m src.flowinone.workers` 處理 bookmark thumbnail、Resource enrichment 與排程的 Catalog sync。Web process 不會自動啟動它。
-- Web Catalog sync 只 enqueue 持久化 leased job 並回 202；job、source sync state 與 worker heartbeat 都在主 SQLite 可追蹤。CLI `catalog-sync` 則是明確的同步 maintenance command。
-- Eagle 必須正在執行且 local API 可連線，Eagle 頁面與同步才會完整可用。
+`run.py` 建立 Flask app，`routes.py` 註冊 Blueprint、安全檢查與 CLI。HTTP route 負責接收請求、回傳 Jinja HTML／JSON，或把耗時工作寫入持久化 queue。另一個程序 `python -m src.flowinone.workers` 執行 `ResourceWorker`、`ThumbnailWorker` 與來源 watcher。`ResourceWorker` 的名字較窄，實際還處理 Catalog sync 和本機圖片分析。Web 不會自行啟動 worker；只開 Web 可讀既有資料，排隊工作則不會完成。
 
-## 3. 模組責任
+Navigator 的「同步變更」會建立 `processing_jobs` 工作並回 202；CLI `catalog-sync` 則直接執行同步。開啟自動偵測後，watcher 先建立來源基準，再對穩定變化排 job。書籤縮圖另用 `cache.db` 中的 `thumbnail_jobs`，由 `ThumbnailWorker` 處理，不要與主 DB 的 `processing_jobs` 混為一談。
 
-| 位置 | 現行責任 | 備註 |
-| --- | --- | --- |
-| `run.py` | Flask application factory、顯式 startup validation、loopback 開發伺服器 | debug/dev tools 只在顯式 config 啟用 |
-| `routes.py` | 註冊 Blueprint、request security 與 `flowinone-doctor` | `/debug/` 只在 dev tools 模式註冊 |
-| `src/flowinone/web/` | Local、Chrome、Eagle、media HTTP adapters 與 API schema | 包含來源專屬頁面及檔案回應 |
-| `src/flowinone/catalog/` | Navigator、唯一的 Catalog read model、query/sync、FTS、facets、sessions、events、relations、舊瀏覽 URL redirect | `service.py` 同時承擔查詢、同步與 adapter orchestration，責任過多 |
-| `src/flowinone/resource_library/` | URL CRUD、import、metadata/content extraction、job、Resource UI/API | 與 Catalog 共用主 SQLite |
-| `src/file_handler/` | Local/Eagle/Chrome 來源 adapter、item index、sidecar、thumbnail store/worker | item/cache path 已改由絕對 `FLOWINONE_DATA_DIR` 派生 |
-| `src/eagle_api/` | Eagle API client | Eagle 是權威來源，更新應走其 local API |
-| `migrations/` | `flowinone.sqlite3` 的 Alembic schema history | `0007`、`0008` 對舊 workflow 資料具有破壞性 |
-| `templates/`、`static/` | Server-rendered Jinja UI 與 vanilla CSS/JS | 不是 SPA，filter 多以整頁 navigation 更新 |
+| 程式位置 | 主要責任 |
+| --- | --- |
+| [run.py](../run.py)、[routes.py](../routes.py) | app factory、啟動檢查、路由與 CLI 註冊 |
+| [src/flowinone/web/](../src/flowinone/web/) | Local／Chrome／Eagle／media 的 HTTP 頁面與 API |
+| [src/flowinone/catalog/](../src/flowinone/catalog/) | Catalog 投影、Navigator 查詢、同步、事件、搜尋、關聯 |
+| [src/flowinone/resource_library/](../src/flowinone/resource_library/) | Resource 匯入、資料庫存取、擷取、工作佇列與 UI |
+| [src/file_handler/](../src/file_handler/)、[src/eagle_api/](../src/eagle_api/) | 本機索引、sidecar、Chrome parser、縮圖與 Eagle client |
+| [src/flowinone/workers.py](../src/flowinone/workers.py) | 背景程序與 worker／watcher 的生命週期 |
+| [templates/](../templates/)、[static/](../static/) | Jinja 畫面與 CSS／原生 JavaScript |
+| [migrations/](../migrations/) | 主 SQLite 的 Alembic schema 版本 |
 
-## 4. 資料權威與儲存層
-
-| 資料 | 權威來源 | Flowinone 中的角色 | 可否重建 |
-| --- | --- | --- | --- |
-| Local media | 原始檔案系統 | `item_db.db` 索引；`.flowinone.json` sidecar 保存可攜 metadata | item index 可重建；sidecar 不應任意丟棄 |
-| Eagle items | Eagle library / local API | Catalog origin 與來源專屬 view | Catalog 可重建，不應直接改 Eagle `.info/metadata.json` |
-| Chrome bookmarks | Chrome `Bookmarks` JSON | Catalog origin、bookmark thumbnail job | Catalog/thumbnail 可重建 |
-| Resources | `flowinone.sqlite3` + `data/content/` | Flowinone 自有 URL、metadata、標籤、擷取內容 | 原始 URL 可重抓，但使用者標籤與狀態需備份 |
-| Catalog | `flowinone.sqlite3` | 多來源的可重建 projection | 可由四個來源重建 |
-
-目前有三套 SQLite 管理方式：
-
-1. `data/flowinone.sqlite3`：SQLAlchemy + Alembic，容納 Resource 與 Catalog。
-2. `data/item_db.db`：raw `sqlite3`，Local media index，程式內就地補 schema。
-3. `data/cache.db`：raw `sqlite3`，thumbnail/job/cache，程式內就地補 schema。
-
-三者現在都從絕對 `FLOWINONE_DATA_DIR` 派生（並可用各自 env override），不再因 process current working directory 而產生另一組 DB。不過 item/cache DB 仍是 runtime 內自管 schema，尚未與 Alembic lifecycle 統一。
-
-## 5. 主要資料流程
-
-### 5.1 Navigator / Catalog
-
-1. `CatalogSyncService` 從 Local、Eagle、Bookmarks、Resources 讀取來源資料。
-2. 將來源記錄正規化成 item 與 origin；同 URL 的 Bookmark/Resource 可指向同一 canonical item，但保留各自 origin。
-3. 建立 FTS、facets、tag、user state、event、session 與 relation projection。
-4. `/navigator/` 使用 `CatalogService` 查詢，依 scope 顯示：
-   - `gallery`（素材）：Local、Eagle、Bookmarks。
-   - `all`（全部內容）：上述三者加 Resources，並使用全文搜尋。
-5. 使用者開卡片時依 origin 導向 Local/Eagle viewer 或原始 URL。
-
-Catalog 是 projection，不應成為覆寫來源 metadata 的捷徑。Eagle metadata 先在 Eagle 透過 API 修改，再執行 Catalog sync；EAGLE資料處理 repo 的維護腳本也屬於這個上游流程。
-
-### 5.2 Resource enrichment
+## 3. 資料架構：權威、投影與儲存位置
 
 ```mermaid
-sequenceDiagram
-  actor U as 使用者
-  participant W as Flask web
-  participant DB as flowinone.sqlite3
-  participant P as Worker
-  participant Net as Public HTTP
-  U->>W: 匯入 URL / Chrome bookmarks
-  W->>DB: 建立 Resource 與待處理 job
-  P->>DB: claim job
-  P->>Net: 安全抓取 metadata / content
-  P->>DB: 寫入狀態、摘要、asset 路徑
-  U->>W: 開啟 Resources / 詳情
-  W->>DB: 讀取並 render
+flowchart TB
+  subgraph Upstream["外部權威資料"]
+    Files["本機媒體檔 + 可選 sidecar"]
+    Eagle["Eagle library"]
+    Chrome["Chrome Bookmarks"]
+  end
+
+  subgraph Item["data/item_db.db: sqlite3"]
+    LocalItems["本機 item / 路徑 / metadata"]
+  end
+
+  subgraph Main["data/flowinone.sqlite3: SQLAlchemy + Alembic"]
+    Resources["resources / resource_origins / resource_contents"]
+    ResourceMeta["tags / resource_tags / ai_artifacts / resource_fts / resource_state"]
+    Jobs["processing_jobs / runtime_state"]
+    CatalogItems["catalog_items"]
+    Origins["catalog_origins"]
+    CatalogTags["catalog_tags / catalog_item_tags / catalog_fts"]
+    Browse["item_user_state / catalog_events / browse_sessions / saved_catalog_searches"]
+    Discovery["item_relations / catalog_artifacts / people / item_people / catalog_duplicate_reviews"]
+    SyncState["catalog_sync_state"]
+  end
+
+  subgraph Filesystem["Flowinone 管理的檔案"]
+    Content["data/content/: 擷取內容與版本"]
+    Thumbnails["data/thumbnails/: 縮圖檔"]
+  end
+
+  Cache[("data/cache.db: 縮圖 cache / thumbnail_jobs")]
+
+  Files --> LocalItems
+  LocalItems -. "投影" .-> CatalogItems
+  Eagle -. "投影" .-> CatalogItems
+  Chrome -. "投影" .-> CatalogItems
+  Resources --> ResourceMeta
+  Resources --> Content
+  Resources -. "投影" .-> CatalogItems
+  Jobs --> Content
+  CatalogItems --> Origins
+  CatalogItems --> CatalogTags
+  CatalogItems --> Browse
+  CatalogItems --> Discovery
+  CatalogItems --> SyncState
+  Cache --> Thumbnails
 ```
 
-HTTP fetch 層已有 public-IP 驗證、redirect 重新驗證、回應大小與 redirect 次數上限；worker 未啟動時，job 只會留在 pending。
-
-## 6. 使用者介面與 routes
-
-| Surface | Route | 用途 |
+| 位置 | 是否為可重建 cache | 保存時的重點 |
 | --- | --- | --- |
-| 首頁 | `/` | redirect 至 `/navigator/?scope=gallery` |
-| Navigator · 素材 | `/navigator/?scope=gallery` | Local、Eagle、Bookmarks 的視覺瀏覽 |
-| Navigator · 全部內容 | `/navigator/?scope=all` | 四來源搜尋、facets、收藏與分頁 |
-| Resources | `/resources/` | 匯入與管理網址、查看 enrichment 狀態 |
-| 來源總覽 | `/library/` | 顯示來源狀態與入口 |
-| Eagle | `/EAGLE_folders/`、`/EAGLE_tags/`、`/EAGLE_smart_folders/`、`/EAGLE_stream/` | Eagle 專屬瀏覽 |
-| Chrome | `/chrome/` | 書籤 tree 瀏覽 |
-| Local | `/folders/`、`/item_db`、`/grid/...`、`/slide/...` | 資料夾、index 與 viewer |
-| 暫時相容入口 | `/gallery/`、`/search/` | 分別 redirect 到 Navigator 的 `gallery`、`all` scope；保留 query、記錄使用、回傳 deprecation/sunset headers，預計 2026-12-31 後移除 |
-| 開發頁 | `/debug/` | 僅 `FLOWINONE_DEV_TOOLS` 啟用時可用 |
+| 本機媒體、sidecar、Eagle library、Chrome Bookmarks | 否，都是上游資料 | Catalog 同步不是來源備份；sidecar 的自訂 metadata 要跟素材一起保留 |
+| `data/item_db.db` | 檔案索引可重掃 | 若 metadata 只在 index、未匯出 sidecar，仍要先保留 |
+| `data/flowinone.sqlite3` | **不能整庫當 cache 刪** | Catalog 投影可重建；Resources、使用者標籤、收藏、儲存搜尋、工作狀態等需備份 |
+| `data/content/` | 歷史版本無法保證重抓 | `resource_contents` 保存檔案路徑，兩者需一起保留 |
+| `data/cache.db`、`data/thumbnails/` | 縮圖通常可重建 | 刪除會失去現有 cache／縮圖 job 狀態 |
 
-Navigator 只顯示頁內的 scope-aware 搜尋，避免與全域搜尋重複；其他頁面的導覽列搜尋預設 `scope=all`。
+預設路徑在 repo 的 `data/`；`FLOWINONE_DATA_DIR` 可改共用根目錄，部分 DB 可各自覆寫路徑。主 DB 用 SQLAlchemy／Alembic；本機索引與縮圖 cache 各用 Python `sqlite3` 管理。`resource_contents` 只記錄內容檔路徑；Catalog sync 會讀最新擷取文字，放入 `catalog_fts` 供跨來源搜尋。
 
-舊 `src/flowinone/gallery/`、`/api/gallery/items`、`/api/gallery/sources` 與 Gallery Lab 已刪除。Repo 稽核時沒有 production template、JavaScript 或 Python caller；唯一 runtime 使用者是自含的 dev-only Lab，其餘皆為舊 Gallery 專屬測試。所有列表與篩選現在只查 Catalog projection。
+歷史 migration 仍留在 repo 供舊庫升級，但 `0007`、`0008` 已移除 Entries／Projects／Collections／Notes 等舊工作流或欄位。它們不是目前的資料流。`/debug/` 只在 `FLOWINONE_DEV_TOOLS` 啟用時註冊，舊 Gallery Lab 已移除。
 
-## 7. 啟動、設定與 migration 的實際行為
+## 4. 從畫面追到程式：建議讀法
 
-- import `config.py` 只讀取設定，不會開 Tkinter 或寫檔。交互式 root setup 只在明確建立 non-testing app 時執行。
-- `FLOWINONE_HEADLESS=1` 在路徑缺失時 fail fast；也可用 `FLOWINONE_DB_ROUTE_EXTERNAL/INTERNAL` override。
-- production runtime 不自動執行 Alembic DDL；schema 不是 head 時會拒絕開啟 DB 並給出 upgrade 指令。
-- `resources-db-upgrade` 先建立 timestamped SQLite backup，來源與備份皆通過 `PRAGMA integrity_check` 後才 upgrade。
-- 舊資料庫升級時要使用 `resources-db-upgrade`；它會自動備份 `flowinone.sqlite3`。`0007_renderer_only_cleanup` 與 `0008_renderer_resource_schema` 會刪除舊 workflow/curation/personal-note 資料，仍應先確認備份位置。
-- config 讀取與 migration 現已分離；`flowinone-doctor` 可在啟動 web 前檢查 roots 與 schema revision。
-
-## 8. 可靠性與安全邊界
-
-本機 request boundary 現在包含 loopback Host allowlist、unsafe method Origin gate、HTML form CSRF token，media path 也必須位於 allowlist roots 並符合圖片 extension。系統仍沒有多使用者認證與授權，所以運行時仍應只供 loopback 本機使用，不要透過 reverse proxy、tunnel 或 LAN 暴露。
-
-## 9. 專案間邊界
-
-`Flowinone` 與相鄰的 `EAGLE資料處理` 是兩個不同責任的 repo：
-
-- `EAGLE資料處理`：掃描、判斷及批次修正 Eagle metadata；寫入應使用 Eagle local API、保留 audit JSONL，並以 API 驗證結果。
-- `Flowinone`：讀取 Eagle 並建立 Catalog projection，供瀏覽與搜尋；不應複製一套 Eagle metadata 寫入邏輯。
-
-因此完整鏈路是「Eagle API 更新 → Eagle API 驗證 → Flowinone 執行 Eagle Catalog sync → Navigator 看見新 projection」。
+1. 先看 [README](../README.md) 的「先接回你熟悉的 Flask」和四來源摘要，掌握 request → service → DB／adapter → template。
+2. 用本頁的「完整資料流」分清 **來源、索引、投影**；再看程式架構圖分清 **Web 與 Worker**；最後看資料架構圖確認 **資料實際保存位置**。
+3. 想追搜尋：`templates/navigator.html` → `catalog/blueprint.py` 的 `_navigator_query()`／`navigator_page()` → `catalog/service.py` 的 `CatalogQuery`／`CatalogService.list()`。
+4. 想追本機新檔：`web/local.py` 的 `/update_db` → `file_handler/item_db.py` 的 `update_item_database()` → `catalog/service.py` 的 `_sync_local()`。
+5. 想追匯入與擷取：`resource_library/blueprint.py` → `service.py`／`repository.py` → `jobs.py` → `worker.py` → `enrichment.py`／`extractors.py`。
+6. 想驗證每一段，接著做 [動手接手練習](hands-on.md)。實際啟動、同步與故障排除查 [使用手冊](renderer-architecture.md)。

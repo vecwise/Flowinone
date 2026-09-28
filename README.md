@@ -1,13 +1,30 @@
 # Flowinone — 快速接手指南
 
-Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、匯入的網址** 放到同一個介面瀏覽與搜尋。技術主體仍是 **Python + Flask + Jinja HTML template + SQLite**，互動功能再用少量 JavaScript 呼叫 API。
+Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、Flowinone 匯入的網址 Resources** 放到同一個介面瀏覽與搜尋。技術主體是 **Python + Flask + Jinja HTML template + SQLite**，互動功能用少量 JavaScript 呼叫 API。本頁以 commit `5b530b0` 的程式碼為核對基準；完整三張圖見 [現行架構](docs/architecture.md)。
 
 這份 README 的目標：讓你快速知道 **有什麼能用、如何驗證、結果由哪段程式造成、要改哪裡**。完成第一輪後，你應該能自己追完一個「操作 → route → 資料 → 畫面」的流程。
 
-- 想先用起來：看 [功能清單](#功能清單) 與 [啟動](#啟動)。
-- 想動手學會：開 [動手接手練習](docs/hands-on.md)，每題都有 action、預期結果、原因與程式位置。
-- 想確認程式行為：看 [測試](#測試)。
-- 想定位問題或修改：看 [從結果追原因](#從結果追原因) 與 [程式入口地圖](#程式入口地圖)。
+- 第一次讀：本頁 → [現行架構](docs/architecture.md) → [動手接手練習](docs/hands-on.md)。先認識四個來源，再看資料流和 Web／Worker，最後用一個操作驗證。
+- 要安裝、日常使用或排錯：查 [使用手冊](docs/renderer-architecture.md)；要驗證程式行為：看本頁 [測試](#測試) 與 [從結果追原因](#從結果追原因)。
+
+## 四個資料來源，一份 Catalog
+
+| Catalog 來源 | 原始資料在哪裡 | 如何進入統一搜尋 |
+| --- | --- | --- |
+| Local | 設定的本機圖片／影片資料夾，可附 `.flowinone.json` | 先掃描到 `item_db.db`，再同步到 Catalog |
+| Eagle | Eagle library／執行中的 Eagle local API | 經 Eagle adapter 同步 |
+| Chrome Bookmarks | Chrome Default profile 的 `Bookmarks` JSON | 解析書籤檔並同步；不安全或非網頁 URL 略過 |
+| Resources | Flowinone 主 SQLite 中自行匯入的 URL 與 `data/content/` | 建立／更新 Resource 後投影到 Catalog |
+
+```text
+Local 檔案 → item_db.db ─┐
+Eagle API ───────────────┼→ Catalog（主 SQLite）→ Navigator 素材／全部內容
+Chrome Bookmarks ────────┤
+匯入 URL → Resources ────┘
+                └→ processing_jobs → Worker 擷取 → data/content/ → Catalog 全文索引
+```
+
+「素材」只查 Local、Eagle、Chrome；「全部內容」再加入 Resources。`/resources/` 讀 Resource 自己的資料，Navigator 讀 Catalog 投影。同一 URL 可同時有 Chrome 與 Resource 兩個 origin，但在 Catalog 合成一個 item。網頁／PDF 文字、字幕和可選 AI 摘要是 Resource 的內容，並非額外 Catalog 來源。三張可追程式與儲存層的圖見 [現行架構](docs/architecture.md)。
 
 ## 先接回你熟悉的 Flask
 
@@ -57,7 +74,7 @@ Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、匯入的網址*
 
 Navigator 的頁內搜尋保留目前範圍；其他頁面導覽列的搜尋會進「全部內容」。舊 `/gallery/`、`/search/` 是相容轉址，預計 2026-12-31 後移除；已沒有獨立的 `/api/gallery/*`。
 
-OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊 Entries、Projects、Collections、Notes、BUILD／THINK／LEARN 等工作流與筆記匯出功能已移除；跨裝置同步、Notion 等新來源、無限 feed 與 React／FastAPI 全面改寫不在目前產品範圍。
+OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊筆記／專案工作流與筆記匯出功能已移除；目前也沒有跨裝置同步。
 
 ## 啟動
 
@@ -123,7 +140,7 @@ conda run --no-capture-output -n py3.11 python -m src.flowinone.workers
 
 Web 不會自動啟動 worker。只開 A 可以讀取已有資料，但排隊工作會等 B 啟動才執行。兩個程序需要使用相同資料路徑設定；預設都用 repo 的 `data/`，可透過 `FLOWINONE_DATA_DIR` 覆寫。
 
-Chrome 預設讀平台的 Default profile 書籤檔；Resources 的 Chrome 匯入表單可指定其他路徑。Eagle 來源需要 Eagle app 正在執行。此服務只設計給本機 loopback 使用，沒有多使用者認證，請勿透過 LAN／proxy／tunnel 對外開放。
+Chrome 來源預設讀平台的 Default profile `Bookmarks` 檔。Resources 的 Chrome 匯入表單也預設讀這個檔案；若要把其他書籤檔匯入 **Resources**，可用 `resources-sync --path`。這不會改變 Chrome 來源的讀取路徑。Eagle 來源需要 Eagle app 正在執行。此服務只設計給本機 loopback 使用，沒有多使用者認證，請勿透過 LAN／proxy／tunnel 對外開放。
 
 ### 第一次開起來沒有素材？
 
@@ -132,21 +149,6 @@ Chrome 預設讀平台的 Default profile 書籤檔；Resources 的 Chrome 匯�
 3. 重新整理 Navigator，先只勾本機來源驗證。
 
 這是兩個步驟：**檔案 → 本機索引 → Catalog → 畫面**。一般 Catalog 同步讀取既有本機索引，不會替你重新掃描磁碟。自動偵測到 Local 變化所排入的 job 才會先要求更新本機索引。
-
-## 第一次接手的四個實驗
-
-完整可複製指令與逐步操作在 [動手接手練習](docs/hands-on.md)。尚未啟動 app 時，先做其中第 5～7 題；已開 Web 時從第 1 題開始。第 6 題還能用 debugger 暫停在 worker 執行前後，親眼比較同一個 job 的狀態。
-
-每次只改一個條件，先寫下預期，再操作並觀察。下面的收藏、儲存搜尋與匯入會保存資料；可用測試用素材或已存在的 Resource 練習。
-
-| 實驗 | 操作 | 預期結果 | 你驗證的因果 |
-| --- | --- | --- | --- |
-| 1. 一次搜尋怎麼變成 HTML | 在 Navigator 只選本機，搜一個已同步的檔名；再清空搜尋 | URL 的 `q`／`source` 改變，卡片隨結果改變 | query string → `_navigator_query()` → `CatalogService.list()` → `navigator.html` |
-| 2. 一個動作如何被記住 | 收藏一張卡片，重新整理，再切收藏篩選；最後取消收藏 | 收藏在重新整理後保留，取消後不再出現在收藏篩選 | JavaScript POST event → SQLite user state → 下次查詢 |
-| 3. Web 與 worker 怎麼分工 | 在 worker 閒置時以 `Ctrl+C` 停止 B；於 Resource 詳情按「重新擷取」，觀察後再啟動 B | Web 仍能開頁面；job 先等待，worker 啟動後才執行或回報失敗 | 建立 job ≠ 完成工作；失敗應查 error，而非持續重按 |
-| 4. 來源變化為何沒立刻顯示 | 先關閉自動偵測，在測試媒體資料夾加入一張圖；同步本機索引，再同步 Catalog | 每一步完成後分別查 `/item_db` 與 Navigator | 能判斷資料停在磁碟、本機索引或 Catalog 哪一層 |
-
-第 3 個實驗會抓取你選的 URL；先不用 AI。網路抓取失敗也能驗證 worker 確實領取了工作，但不代表內容擷取成功。完成後確認 B 已重新啟動。
 
 ## 測試
 
@@ -262,28 +264,12 @@ conda run -n py3.11 flask --app run catalog-sync --source bookmarks
 | `sidecars-export "/absolute/path/to/media"` | 預覽匯出；加 `--apply` 才寫 manifest |
 | `sidecars-import "/absolute/path/to/media"` | 預覽匯入；加 `--apply` 才更新本機索引，之後再同步 Catalog |
 
-## 什麼時候算接手成功？
+## 建議閱讀順序
 
-- [ ] 能啟停 Web／Worker，說出少開其中一個會發生什麼。
-- [ ] 能從 Navigator 的 `q` 追到 Python query，再找到 template 裡的卡片迴圈。
-- [ ] 能跑一個測試，解釋它的輸入、操作與 `assert`。
-- [ ] 能分辨「沒進本機索引」「沒同步 Catalog」「被篩選掉」「job 尚未完成」。
-- [ ] 想改一個畫面或功能時，能先指出 route、資料來源與驗證方式。
-
-下一步的小練習：把一個 template 的提示文字改成自己看得懂的說法，重啟 Web 確認，再還原那一處文字。當你能預測修改會影響哪個畫面，就已經開始掌握這個 repo。
-
-## 文件入口
-
-| 想知道什麼 | 看這份 |
-| --- | --- |
-| 照指令／點擊練習，預測結果，再追到程式碼 | [動手接手：8 個操作練習](docs/hands-on.md) |
-| 目前產品有哪些／哪些已移除 | [現況摘要](docs/current-state.md) |
-| 模組如何連起來、接下來讀哪個檔案 | [程式碼架構圖](docs/repo-code-map.md) |
-| 執行時拓撲、資料權威與邊界 | [現況架構](docs/architecture.md) |
-| 安裝、日常操作、同步與故障排除 | [使用手冊](docs/renderer-architecture.md) |
-| table 與資料關係／操作流程 | [資料 schema](docs/schema.md)、[操作流程](docs/workflows.md) |
-| 待解決問題與後續改造 | [架構與 UI 修正計畫](docs/migration-plan.md)（計畫不等於已實作） |
-| 一次改動改了什麼、如何驗證 | [Commit 改動紀錄](docs/commit-change-log.md) |
+1. **[README](README.md)**：先看「四個資料來源」與「先接回你熟悉的 Flask」，知道頁面從哪裡來。
+2. **[現行架構](docs/architecture.md)**：依序讀資料流、程式架構、資料架構三張圖；需要找實作時看末段讀碼路線。
+3. **[動手接手練習](docs/hands-on.md)**：先做第 1、2 題，從真實 request 追到 Catalog 與畫面；要理解同步再做第 8 題。
+4. **[使用手冊](docs/renderer-architecture.md)**：實際啟動、同步、維護與排錯時查對應章節；無須先通讀。
 
 ## License
 
