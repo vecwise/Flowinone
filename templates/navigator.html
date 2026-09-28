@@ -200,10 +200,14 @@
   <section aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
       <div><p class="eyebrow">{{ 'Browse' if query.scope == 'gallery' else 'Results' }}</p><h2 id="navigator-results-heading">{{ payload.total_estimate }} 個項目</h2></div>
-      <div class="gallery-view-label">{{ '素材範圍' if query.scope == 'gallery' else '全部內容範圍' }}</div>
+      {% if payload['items'] %}<div class="navigator-view-switch" role="group" aria-label="結果檢視方式">
+        <button type="button" data-gallery-view-option="grid" aria-pressed="true">網格</button>
+        <button type="button" data-gallery-view-option="list" aria-pressed="false">列表</button>
+        <button type="button" data-gallery-view-option="shelf" aria-pressed="false">橫向瀏覽</button>
+      </div>{% endif %}
     </div>
     {% if payload['items'] %}
-    <div class="gallery-grid">
+    <div class="gallery-grid" data-gallery-view="grid">
       {% for item in payload['items'] %}
       <article class="gallery-card" data-navigator-item="{{ item.id }}">
         <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="開啟 {{ item.title }}">
@@ -387,6 +391,7 @@
 })();
 </script>
 <script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_similarity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>
