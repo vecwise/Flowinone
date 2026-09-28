@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from flask import current_app
+from flask import current_app, request
 
 from src.flowinone.resource_library.canonical import hash_text
 from src.flowinone.resource_library.jobs import JobQueue
@@ -49,8 +49,11 @@ def api_items():
 @bp.get("/api/catalog/items/<item_id>")
 def api_item(item_id: str):
     try:
+        service = CatalogService(_database())
+        item = service.get(item_id)
+        visible = visible_items(service, {"items": [item]}, _preview_query())
         return validated_json(
-            CatalogService(_database()).get(item_id), CatalogItemOutput
+            visible[0] if visible else item, CatalogItemOutput
         )
     except LookupError:
         return api_error("Catalog item not found", 404)
@@ -94,15 +97,27 @@ def api_event(item_id: str):
 
 @bp.get("/api/catalog/items/<item_id>/related")
 def api_related(item_id: str):
-    query = parse_query(RelatedLimitQuery)
+    query = parse_query(RelatedLimitQuery, list_fields=("source",))
+    service = CatalogService(_database())
+    try:
+        related = DiscoveryService(_database()).related_items(item_id, limit=query.limit)
+    except LookupError:
+        return api_error("Catalog item not found", 404)
     return validated_json(
         {
-            "items": DiscoveryService(_database()).related_items(
-                item_id, limit=query.limit
+            "items": visible_items(
+                service,
+                {"items": related},
+                _preview_query(),
             )
         },
         CatalogItemsOutput,
     )
+
+
+def _preview_query() -> CatalogQuery:
+    requested = tuple(source for source in request.args.getlist("source") if source in CATALOG_SOURCES)
+    return CatalogQuery.create(scope="all", sources=requested or CATALOG_SOURCES)
 
 
 @bp.get("/api/catalog/items/<item_id>/similar-images")

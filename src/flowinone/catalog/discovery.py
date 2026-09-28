@@ -95,11 +95,12 @@ class DiscoveryService:
         return {"items": len(rows), "relations": inserted}
 
     def related_items(self, item_id: str, *, limit: int = 18) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 100))
         with self.database.engine.connect() as conn:
             rows = list(
                 conn.execute(
                     text("SELECT target_item_id,relation_type,score,reason_json FROM item_relations WHERE source_item_id=:id ORDER BY score DESC LIMIT :limit"),
-                    {"id": item_id, "limit": max(1, min(limit, 100))},
+                    {"id": item_id, "limit": limit},
                 ).mappings()
             )
         output = []
@@ -108,5 +109,38 @@ class DiscoveryService:
                 item = self.catalog.get(row["target_item_id"])
             except LookupError:
                 continue
+            if item["hidden"]:
+                continue
             output.append({**item, "relation_type": row["relation_type"], "score": row["score"], "reason": json.loads(row["reason_json"] or "{}")})
+        if len(output) >= limit:
+            return output[:limit]
+
+        # New imports should still lead somewhere before a relation rebuild runs.
+        with self.database.engine.connect() as conn:
+            candidates = list(conn.execute(text("""
+                WITH base_tags AS (
+                    SELECT DISTINCT tag_id FROM catalog_item_tags WHERE catalog_item_id=:id
+                )
+                SELECT i.id, COUNT(DISTINCT tags.tag_id) AS shared_count
+                FROM catalog_items i
+                JOIN catalog_item_tags tags ON tags.catalog_item_id=i.id
+                JOIN base_tags ON base_tags.tag_id=tags.tag_id
+                LEFT JOIN item_user_state state ON state.catalog_item_id=i.id
+                WHERE i.id!=:id AND i.is_deleted=0 AND COALESCE(state.hidden,0)=0
+                  AND EXISTS (SELECT 1 FROM catalog_origins origin
+                              WHERE origin.catalog_item_id=i.id AND origin.stale=0)
+                GROUP BY i.id
+                ORDER BY shared_count DESC, i.captured_at DESC
+                LIMIT :candidate_limit
+            """), {"id": item_id, "candidate_limit": limit * 3}).mappings())
+        seen = {item["id"] for item in output}
+        source_tags = set(self.catalog.get(item_id)["tags"])
+        for candidate in candidates:
+            if candidate["id"] in seen:
+                continue
+            item = self.catalog.get(candidate["id"])
+            shared_tags = sorted(source_tags.intersection(item["tags"]))
+            output.append({**item, "relation_type": "shared_tags", "score": float(candidate["shared_count"]), "reason": {"shared_tags": shared_tags}})
+            if len(output) >= limit:
+                break
         return output

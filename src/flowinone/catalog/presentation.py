@@ -25,7 +25,7 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             if origin:
                 origins.append(origin)
         if not origins:
-            for source in item.get("sources") or []:
+            for source in item.get("sources") or available:
                 origin = available.get(source)
                 if origin:
                     origins.append(origin)

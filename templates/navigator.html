@@ -210,14 +210,14 @@
     <div class="gallery-grid" data-gallery-view="grid">
       {% for item in payload['items'] %}
       <article class="gallery-card" data-navigator-item="{{ item.id }}">
-        <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="開啟 {{ item.title }}">
+        <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
           <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async">
           <span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>
           {% if item.duration_seconds %}<span class="gallery-type-badge" style="left:auto;right:.6rem">{{ item.duration_seconds|int }}s</span>{% endif %}
         </a>
         <div class="gallery-card-body">
           <div class="gallery-card-source"><span>{{ item.launch_source_label }}</span>{% if item.duration_seconds %}<span>{{ item.duration_seconds|int }}s</span>{% endif %}</div>
-          <h3><a href="{{ item.launch_uri or '#' }}" {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+          <h3><a href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
           {% if item.match_reason %}
           <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
           {% endif %}
@@ -325,6 +325,35 @@
   </div>
 </dialog>
 
+<dialog class="navigator-detail-dialog" data-gallery-detail aria-labelledby="navigator-detail-title">
+  <div class="navigator-detail-shell">
+    <header class="navigator-detail-heading">
+      <div class="navigator-detail-navigation">
+        <button class="action-button" type="button" data-gallery-detail-back hidden>返回上個項目</button>
+        <span class="eyebrow">素材詳情</span>
+      </div>
+      <button class="navigator-dialog-close" type="button" data-gallery-detail-close aria-label="關閉詳情">關閉</button>
+    </header>
+    <p class="navigator-detail-status" data-gallery-detail-status role="status"></p>
+    <div class="navigator-detail-layout" data-gallery-detail-content hidden>
+      <section class="navigator-detail-main">
+        <img data-gallery-detail-image src="{{ url_for('static', filename='default_thumbnail.svg') }}" alt="">
+        <p class="navigator-detail-source" data-gallery-detail-source></p>
+        <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
+        <p class="navigator-detail-description" data-gallery-detail-description></p>
+        <div class="gallery-tags" data-gallery-detail-tags aria-label="Tags"></div>
+        <div class="navigator-detail-actions">
+          <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>
+        </div>
+      </section>
+      <aside class="navigator-detail-related" aria-labelledby="navigator-detail-related-title">
+        <h3 id="navigator-detail-related-title">接著看</h3>
+        <div data-gallery-detail-related></div>
+      </aside>
+    </div>
+  </div>
+</dialog>
+
 <script>
 (() => {
   const page = document.querySelector('[data-navigator-query]');
@@ -356,7 +385,7 @@
     const item = link.closest('[data-navigator-item]');
     if (!item) return;
     saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
-    navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: 'open'})], {type: 'application/json'}));
+    navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: link.hasAttribute('data-gallery-detail-open') ? 'view' : 'open'})], {type: 'application/json'}));
   }));
 
   document.querySelectorAll('.navigator-favorite').forEach((button) => button.addEventListener('click', async () => {
@@ -392,6 +421,7 @@
 </script>
 <script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_detail.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_similarity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>

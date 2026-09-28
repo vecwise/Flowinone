@@ -433,6 +433,33 @@ def test_item_relations_are_explainable_renderer_recommendations(tmp_path):
     assert all(item["reason"] for item in related)
 
 
+def test_gallery_detail_has_a_source_launch_and_related_items_before_rebuild(tmp_path):
+    database, first, second, third = _catalog(tmp_path)
+    app = Flask(
+        "catalog-gallery-detail",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(
+        TESTING=True,
+        FLOWINONE_RESOURCE_DB_PATH=str(database.path),
+        FLOWINONE_RESOURCE_LINK_THUMBNAILS=False,
+    )
+    register_routes(app)
+    client = app.test_client()
+
+    bookmark = client.get(f"/api/catalog/items/{first}?source=bookmarks").get_json()
+    resource = client.get(f"/api/catalog/items/{first}?source=resources").get_json()
+    related_response = client.get(f"/api/catalog/items/{first}/related?source=bookmarks")
+
+    assert bookmark["launch_uri"] == "https://example.com/one"
+    assert resource["launch_uri"] == "/resources/resource-1/"
+    assert related_response.status_code == 200
+    related = related_response.get_json()["items"]
+    assert {item["id"] for item in related} == {second, third}
+    assert all(item["launch_uri"] and item["reason"]["shared_tags"] for item in related)
+
+
 def test_sidecar_roundtrip_preserves_portable_identity(monkeypatch, tmp_path):
     root = tmp_path / "library"
     root.mkdir()

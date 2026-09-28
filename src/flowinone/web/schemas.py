@@ -163,6 +163,7 @@ class LimitQuery(ApiQuery):
 
 class RelatedLimitQuery(ApiQuery):
     limit: int = Field(default=18, ge=1, le=100)
+    source: list[CatalogSource] = []
 
 
 class SimilarImageQuery(ApiQuery):
