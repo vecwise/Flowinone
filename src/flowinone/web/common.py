@@ -9,7 +9,7 @@ from typing import Any
 
 from flask import abort, current_app, g, request, url_for
 
-from config import DB_route_external, DB_route_internal
+from src.flowinone.config import DB_route_external, DB_route_internal
 from src.file_handler import (
     is_eagle_available,
     has_chrome_bookmarks,

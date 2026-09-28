@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
+import config
 from run import create_app
+from src.flowinone import config as app_config
 from src.flowinone.workers import WorkerRuntime
 
 
@@ -13,6 +16,15 @@ def _test_config(tmp_path):
         "CHROME_BOOKMARK_PATH": str(tmp_path / "Bookmarks"),
         "FLOWINONE_RESOURCE_LINK_THUMBNAILS": False,
     }
+
+
+def test_root_entry_points_keep_shared_config_and_assets(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    assert config is app_config
+    assert config.CONFIG_JSON_PATH == root / "config.json"
+    app = create_app(_test_config(tmp_path))
+    assert Path(app.root_path) == root
+    assert app.test_client().get("/static/css/main_styles.css").status_code == 200
 
 
 def test_application_factory_registers_source_blueprints_without_workers(tmp_path):

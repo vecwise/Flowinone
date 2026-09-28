@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote, quote_plus
 
-from config import CHROME_BOOKMARK_PATH
+from src.flowinone.config import CHROME_BOOKMARK_PATH
 from .media_cache import CACHE_DATA_DIR, extract_youtube_id, lookup_thumbnail_for_bookmark
 from .models import BookmarkError, BookmarkNotFound, MediaEntry, PageMetadata
 from .paths import DEFAULT_THUMBNAIL_ROUTE

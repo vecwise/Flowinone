@@ -56,7 +56,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Browser["瀏覽器"] --> Flask["Flask Web: run.py → routes.py"]
+  Browser["瀏覽器"] --> Flask["Flask Web: run.py → app.py → registration.py"]
   Flask --> SourceBP["web Blueprints: Local / Chrome / Eagle / Media"]
   Flask --> CatalogBP["Catalog Blueprint: Navigator / API"]
   Flask --> ResourceBP["Resource Blueprint: Resources UI / API"]
@@ -83,18 +83,19 @@ flowchart TB
   Watcher --> JobQueue
 ```
 
-`run.py` 建立 Flask app，`routes.py` 註冊 Blueprint、安全檢查與 CLI。HTTP route 負責接收請求、回傳 Jinja HTML／JSON，或把耗時工作寫入持久化 queue。另一個程序 `python -m src.flowinone.workers` 執行 `ResourceWorker`、`ThumbnailWorker` 與來源 watcher。`ResourceWorker` 的名字較窄，實際還處理 Catalog sync 和本機圖片分析。Web 不會自行啟動 worker；只開 Web 可讀既有資料，排隊工作則不會完成。
+`run.py` 是啟動入口；`src/flowinone/app.py` 建立 Flask app，`src/flowinone/web/registration.py` 註冊 Blueprint、安全檢查與 CLI。根目錄的 `config.py`、`routes.py` 保留舊匯入相容性，實作位於 `src`。HTTP route 負責接收請求、回傳 Jinja HTML／JSON，或把耗時工作寫入持久化 queue。另一個程序 `python -m src.flowinone.workers` 執行 `ResourceWorker`、`ThumbnailWorker` 與來源 watcher。`ResourceWorker` 的名字較窄，實際還處理 Catalog sync 和本機圖片分析。Web 不會自行啟動 worker；只開 Web 可讀既有資料，排隊工作則不會完成。
 
 Navigator 的「同步變更」會建立 `processing_jobs` 工作並回 202；CLI `catalog-sync` 則直接執行同步。開啟自動偵測後，watcher 先建立來源基準，再對穩定變化排 job。書籤縮圖另用 `cache.db` 中的 `thumbnail_jobs`，由 `ThumbnailWorker` 處理，不要與主 DB 的 `processing_jobs` 混為一談。
 
 | 程式位置 | 主要責任 |
 | --- | --- |
-| [run.py](../run.py)、[routes.py](../routes.py) | app factory、啟動檢查、路由與 CLI 註冊 |
+| [src/flowinone/app.py](../src/flowinone/app.py)、[src/flowinone/web/registration.py](../src/flowinone/web/registration.py)、[src/flowinone/config.py](../src/flowinone/config.py) | app factory、啟動檢查、路由與 CLI 註冊、設定讀寫；根目錄只留入口與相容匯入 |
 | [src/flowinone/web/](../src/flowinone/web/) | Local／Chrome／Eagle／media 的 HTTP 頁面與 API |
 | [src/flowinone/catalog/](../src/flowinone/catalog/) | Catalog 投影、Navigator 查詢、同步、事件、搜尋、關聯 |
 | [src/flowinone/resource_library/](../src/flowinone/resource_library/) | Resource 匯入、資料庫存取、擷取、工作佇列與 UI |
 | [src/file_handler/](../src/file_handler/)、[src/eagle_api/](../src/eagle_api/) | 本機索引、sidecar、Chrome parser、縮圖與 Eagle client |
 | [src/flowinone/workers.py](../src/flowinone/workers.py) | 背景程序與 worker／watcher 的生命週期 |
+| [scripts/](../scripts/) | 維護指令與 macOS 啟停入口；應用程式邏輯由 `src/` 提供 |
 | [templates/](../templates/)、[static/](../static/) | Jinja 畫面與 CSS／原生 JavaScript |
 | [migrations/](../migrations/) | 主 SQLite 的 Alembic schema 版本 |
 

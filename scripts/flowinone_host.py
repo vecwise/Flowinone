@@ -181,7 +181,7 @@ class Host:
 def preflight() -> None:
     # Validate before starting a worker which could otherwise upgrade a DB.
     sys.path.insert(0, str(ROOT))
-    import config
+    from src.flowinone import config
     from src.flowinone.resource_library.database import ensure_database_current
     from src.flowinone.resource_library.settings import ResourceSettings
 

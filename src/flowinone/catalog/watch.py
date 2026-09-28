@@ -19,7 +19,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from config import CHROME_BOOKMARK_PATH, DB_route_external
+from src.flowinone.config import CHROME_BOOKMARK_PATH, DB_route_external
 from src.file_handler.eagle_integration import get_eagle_catalog_source
 from src.flowinone.paths import item_database_path
 from src.flowinone.resource_library.canonical import hash_text

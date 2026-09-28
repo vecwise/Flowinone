@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import current_app, request
 
-from config import CHROME_BOOKMARK_PATH
+from src.flowinone.config import CHROME_BOOKMARK_PATH
 from src.flowinone.web.api import api_error, parse_json, parse_payload, parse_query, validated_json
 from src.flowinone.web.schemas import (
     EnrichmentRequest, ChromeImportFormRequest, ImportSummaryOutput, JobsOutput,

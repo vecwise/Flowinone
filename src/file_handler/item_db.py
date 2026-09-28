@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from config import DB_route_external
+from src.flowinone.config import DB_route_external
 from src.flowinone.paths import data_dir, item_database_path
 from .paths import (
     DEFAULT_THUMBNAIL_ROUTE,

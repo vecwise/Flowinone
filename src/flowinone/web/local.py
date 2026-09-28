@@ -14,7 +14,7 @@ from urllib.parse import unquote
 import click
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
-from config import DB_route_external, DB_route_internal
+from src.flowinone.config import DB_route_external, DB_route_internal
 from src.file_handler import (
     AccessDenied,
     BookmarkNotFound,

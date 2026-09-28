@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app
 
-from config import DB_route_external, DB_route_internal
+from src.flowinone.config import DB_route_external, DB_route_internal
 from src.flowinone.web.database import request_database
 
 bp = Blueprint("catalog", __name__)

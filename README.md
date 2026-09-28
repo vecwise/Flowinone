@@ -1,6 +1,6 @@
 # Flowinone — 快速接手指南
 
-Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、Flowinone 匯入的網址 Resources** 放到同一個介面瀏覽與搜尋。技術主體是 **Python + Flask + Jinja HTML template + SQLite**，互動功能用少量 JavaScript 呼叫 API。本頁以 commit `5b530b0` 的程式碼為核對基準；完整三張圖見 [現行架構](docs/architecture.md)。
+Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、Flowinone 匯入的網址 Resources** 放到同一個介面瀏覽與搜尋。技術主體是 **Python + Flask + Jinja HTML template + SQLite**，互動功能用少量 JavaScript 呼叫 API。完整三張圖見 [現行架構](docs/architecture.md)。
 
 這份 README 的目標：讓你快速知道 **有什麼能用、如何驗證、結果由哪段程式造成、要改哪裡**。完成第一輪後，你應該能自己追完一個「操作 → route → 資料 → 畫面」的流程。
 
@@ -25,6 +25,8 @@ Chrome Bookmarks ────────┤
 ```
 
 「素材」只查 Local、Eagle、Chrome；「全部內容」再加入 Resources。`/resources/` 讀 Resource 自己的資料，Navigator 讀 Catalog 投影。同一 URL 可同時有 Chrome 與 Resource 兩個 origin，但在 Catalog 合成一個 item。網頁／PDF 文字、字幕和可選 AI 摘要是 Resource 的內容，並非額外 Catalog 來源。三張可追程式與儲存層的圖見 [現行架構](docs/architecture.md)。
+
+找程式碼時，先看 `src/` 的應用邏輯；`scripts/` 是匯入、維護與 macOS 啟停的執行入口。根目錄的 `run.py` 供 Flask 與手動啟動使用，`config.py`、`routes.py` 只保留舊匯入相容性；設定與路由實作已在 `src/flowinone/`。
 
 ## 先接回你熟悉的 Flask
 
@@ -229,7 +231,7 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 
 | 我想理解／修改 | 閱讀順序 |
 | --- | --- |
-| 啟動與 route 註冊 | [run.py](run.py) → [routes.py](routes.py) |
+| 啟動與 route 註冊 | [run.py](run.py) → [app.py](src/flowinone/app.py) → [registration.py](src/flowinone/web/registration.py)；根目錄 [routes.py](routes.py) 只保留舊匯入相容性 |
 | Navigator 搜尋／篩選 | [catalog/blueprint.py](src/flowinone/catalog/blueprint.py) 的 `navigator_page()` → [catalog/query.py](src/flowinone/catalog/query.py) 的 `CatalogQuery` → [catalog/browse.py](src/flowinone/catalog/browse.py) 的 `CatalogService.list()` → [navigator.html](templates/navigator.html) |
 | 同步按鈕 | [navigator_sync.js](static/js/navigator_sync.js) → [catalog/api.py](src/flowinone/catalog/api.py) 的 `api_sync()` → [jobs.py](src/flowinone/resource_library/jobs.py) → [worker.py](src/flowinone/resource_library/worker.py) → [catalog/sync.py](src/flowinone/catalog/sync.py) 的 `CatalogSyncService`；Eagle 續傳在 [eagle_sync.py](src/flowinone/catalog/eagle_sync.py) |
 | URL 匯入／全文擷取 | [Resource UI／API](src/flowinone/resource_library/blueprint.py)（JSON route 在 [api.py](src/flowinone/resource_library/api.py)）→ [ResourceService](src/flowinone/resource_library/service.py)／[Repository](src/flowinone/resource_library/repository.py) → jobs → [EnrichmentService](src/flowinone/resource_library/enrichment.py)／[Extractors](src/flowinone/resource_library/extractors.py)；提交後由 [projection.py](src/flowinone/resource_library/projection.py) 刷新 Catalog |

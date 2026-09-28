@@ -41,7 +41,7 @@ curl -sS -D - -o /dev/null http://127.0.0.1:5894/
 
 **預期：** status 是 `302`，header 有 `Location: /navigator/?scope=gallery`。`curl` 沒加 `-L`，所以你看見的是轉址本身；一般瀏覽器會自動繼續載入 Navigator。
 
-**為什麼／哪段程式：** [run.py](../run.py) 的 `create_app()` 呼叫 [routes.py](../routes.py) 的 `register_routes()`，註冊各 Blueprint。[web/local.py](../src/flowinone/web/local.py) 的 `index()` 回傳：
+**為什麼／哪段程式：** 根目錄 [run.py](../run.py) 是啟動入口；[app.py](../src/flowinone/app.py) 的 `create_app()` 呼叫 [registration.py](../src/flowinone/web/registration.py) 的 `register_routes()`，註冊各 Blueprint。[web/local.py](../src/flowinone/web/local.py) 的 `index()` 回傳：
 
 ```python
 return redirect(url_for("catalog.navigator_page", scope="gallery"))
@@ -50,7 +50,7 @@ return redirect(url_for("catalog.navigator_page", scope="gallery"))
 搜尋位置：
 
 ```bash
-rg -n 'def create_app|def register_routes|def index|def navigator_page|def api_items' run.py routes.py src/flowinone
+rg -n 'def create_app|def register_routes|def index|def navigator_page|def api_items' src/flowinone
 ```
 
 **換一個條件：** 開 `http://127.0.0.1:5894/navigator/?scope=all&q=hello`。預期直接載入跨來源搜尋頁，搜尋字保留為 `hello`。

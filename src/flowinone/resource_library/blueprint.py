@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, abort, current_app, redirect, render_template, request, send_file, url_for
 
-from config import CHROME_BOOKMARK_PATH
+from src.flowinone.config import CHROME_BOOKMARK_PATH
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .canonical import ensure_within

@@ -88,6 +88,8 @@ def test_rendered_form_with_session_csrf_token_can_submit(tmp_path):
 def test_debug_route_is_not_registered_in_normal_runtime(tmp_path):
     client = _app(tmp_path, FLOWINONE_DEV_TOOLS=False).test_client()
     assert client.get("/debug/").status_code == 404
+    debug_client = _app(tmp_path, FLOWINONE_DEV_TOOLS=True).test_client()
+    assert debug_client.get("/debug/").status_code == 200
 
 
 def test_runtime_refuses_to_implicitly_create_or_upgrade_database(tmp_path):

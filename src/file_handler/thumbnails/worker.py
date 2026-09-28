@@ -18,7 +18,7 @@ from urllib.parse import urljoin, urlsplit
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
-from config import CHROME_BOOKMARK_PATH
+from src.flowinone.config import CHROME_BOOKMARK_PATH
 
 from .providers import provider_for_url
 from .store import (

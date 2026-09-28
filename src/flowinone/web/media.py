@@ -9,7 +9,7 @@ from urllib.parse import unquote
 
 from flask import Blueprint, abort, current_app, render_template, request, send_file
 
-import config
+from src.flowinone import config
 from src.file_handler.paths import IMAGE_EXTENSIONS
 from src.flowinone.paths import data_dir
 

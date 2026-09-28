@@ -5,7 +5,7 @@ import os
 import random
 from datetime import datetime
 
-from config import DB_route_internal, DB_route_external
+from src.flowinone.config import DB_route_internal, DB_route_external
 from .models import (
     AccessDenied,
     FolderNotFound,
