@@ -1,6 +1,8 @@
 import pytest
 from sqlalchemy import inspect
 
+from src.flowinone.catalog.browse import CatalogService
+from src.flowinone.catalog.query import CatalogQuery
 from src.flowinone.resource_library.canonical import (
     InvalidResourceURL,
     normalize_resource_url,
@@ -139,6 +141,33 @@ def test_renderer_metadata_tags_and_job_retry(resource_service):
     claimed = queue.claim("test-owner")
     assert [row["id"] for row in claimed] == [job["id"]]
     assert queue.fail(job["id"], "temporary") == "retry"
+
+
+def test_resource_edits_refresh_catalog_after_commit(resource_service):
+    resource = resource_service.create_url(
+        "https://example.com/projected", title="Original", enqueue=False
+    )["resource"]
+    catalog = CatalogService(resource_service.database)
+    query = CatalogQuery.create(sources=["resources"])
+    assert catalog.list(query)["items"][0]["title"] == "Original"
+
+    resource_service.update_resource(resource["id"], {"title": "Updated"})
+    resource_service.replace_tags(resource["id"], ["Architecture"])
+    item = catalog.list(query)["items"][0]
+    assert item["title"] == "Updated"
+    assert "Architecture" in item["tags"]
+
+
+def test_file_import_refreshes_resource_catalog(resource_service, tmp_path):
+    bookmarks = tmp_path / "bookmarks.html"
+    bookmarks.write_text(
+        '<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p>'
+        '<DT><A HREF="https://example.com/imported">Imported</A></DL><p>',
+        encoding="utf-8",
+    )
+    assert resource_service.import_file(bookmarks, format_hint="html", enqueue=False).created == 1
+    query = CatalogQuery.create(sources=["resources"])
+    assert CatalogService(resource_service.database).list(query)["items"][0]["title"] == "Imported"
 
 
 def test_find_similar_uses_explainable_tag_and_type_overlap(resource_service):

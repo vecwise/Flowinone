@@ -24,6 +24,7 @@ from .database import ResourceDatabase, get_resource_database
 from .extractors import ExtractedContent, ExtractedMetadata, extractor_for
 from .jobs import JobQueue
 from .models import AIArtifact, Resource, ResourceContent, ResourceTag, new_id, utc_now_text
+from .projection import refresh_resource_catalog
 from .repository import ResourceNotFound, ResourceRepository
 from .settings import ResourceSettings, get_resource_settings
 
@@ -210,8 +211,7 @@ class EnrichmentService:
             stored.enrichment_error = None
             stored.updated_at = utc_now_text()
             self.repository._sync_fts(session, stored)
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync_resource(resource_id)
+        refresh_resource_catalog(self.database, resource_id)
         return metadata
 
     def extract_content(self, resource_id: str) -> dict:
@@ -305,8 +305,7 @@ class EnrichmentService:
                     payload={"url": stored.canonical_url},
                     input_hash=text_digest,
                 )
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync_resource(resource_id)
+        refresh_resource_catalog(self.database, resource_id)
         return {
             "text_path": str(text_path),
             "markdown_path": str(markdown_path) if markdown_path else None,
@@ -383,8 +382,7 @@ class EnrichmentService:
             for tag_name in result.tags:
                 self.repository._add_tag(session, stored, tag_name, "ai")
             self.repository._sync_fts(session, stored, content)
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync_resource(resource_id)
+        refresh_resource_catalog(self.database, resource_id)
         return artifact_payload
 
     def ask_question(self, resource_id: str, question: str) -> dict:

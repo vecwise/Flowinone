@@ -13,6 +13,7 @@ from .database import ResourceDatabase, get_resource_database
 from .importers import BookmarkRecord, load_bookmarks
 from .jobs import JobQueue
 from .models import AppState, utc_now_text
+from .projection import refresh_all_resource_catalog, refresh_resource_catalog
 from .repository import ResourceRepository
 
 
@@ -130,8 +131,7 @@ class ResourceService:
             else:
                 state.value = value
                 state.updated_at = utc_now_text()
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync(("resources",))
+        refresh_all_resource_catalog(self.database)
         return summary
 
     def import_file_if_changed(
@@ -173,20 +173,17 @@ class ResourceService:
         )
         canonical = normalize_resource_url(url)
         resource = self.repository.get_by_canonical_url(canonical)
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync_resource(resource["id"])
+        refresh_resource_catalog(self.database, resource["id"])
         return {"resource": resource, "import": summary.to_dict()}
 
     def update_resource(self, resource_id: str, changes: dict) -> dict:
         resource = self.repository.update(resource_id, changes)
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync_resource(resource_id)
+        refresh_resource_catalog(self.database, resource_id)
         return resource
 
     def replace_tags(self, resource_id: str, tags: Iterable[str]) -> dict:
         resource = self.repository.replace_user_tags(resource_id, tags)
-        from src.flowinone.catalog.service import CatalogSyncService
-        CatalogSyncService(self.database).sync_resource(resource_id)
+        refresh_resource_catalog(self.database, resource_id)
         return resource
 
     def enqueue_enrichment(self, resource_id: str, *, include_ai: bool = False, force: bool = False) -> list[dict]:

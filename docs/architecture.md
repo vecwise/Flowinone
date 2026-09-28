@@ -47,7 +47,7 @@ flowchart LR
 ```
 
 - **Local 有兩層索引**：一般的 Catalog sync 只讀既有 `item_db.db`，不重掃磁碟。新增媒體後先在 `/item_db` 更新本機索引，再同步 Catalog。啟用來源變動偵測後，由它排入的 Local job 可要求先刷新本機索引。
-- **Resource 有自己的資料與頁面**：`/resources/` 讀 Resource；`/navigator/?scope=all` 讀 Catalog 投影。Resource 建立、標籤或擷取內容更新時，service 會同步對應的投影。擷取工作的 worker 未運行時，工作仍在 queue 等待。
+- **Resource 有自己的資料與頁面**：`/resources/` 讀 Resource；`/navigator/?scope=all` 讀 Catalog 投影。Resource 建立、標籤或擷取內容更新並提交後，透過 `resource_library/projection.py` 刷新對應投影。擷取工作的 worker 未運行時，工作仍在 queue 等待。
 - **同一 URL 可有多個來源**：Bookmark 與 Resource 經 URL canonicalization 後可共用一筆 `catalog_items`，`catalog_origins` 仍保留兩個來源紀錄。
 - **直接來源頁和 Navigator 讀法不同**：`/folders/`、`/chrome/`、`/EAGLE_*` 保留來源的資料夾或樹狀結構；Navigator 讀統一 Catalog。來源同步與來源頁讀取不是同一件事。
 - `gallery` scope 只包含 Local、Eagle、Bookmarks；`all` scope 再加 Resources。瀏覽入口是 `/navigator/`，舊 `/gallery/`、`/search/` 與 Gallery API 已移除。
@@ -68,6 +68,8 @@ flowchart TB
   CatalogService --> MainDB[("flowinone.sqlite3")]
   SyncService --> MainDB
   ResourceService --> MainDB
+  ResourceService --> Projection["Resource projection: 更新後刷新 Catalog"]
+  Projection --> SyncService
   ResourceService --> JobQueue[("processing_jobs, 主 DB")]
   CatalogBP --> JobQueue
 
@@ -75,6 +77,7 @@ flowchart TB
   Runtime --> ThumbnailWorker["ThumbnailWorker: 書籤縮圖"]
   Runtime --> Watcher["CatalogSourceWatcher: 預設關閉"]
   ResourceWorker --> JobQueue
+  ResourceWorker --> Projection
   ResourceWorker --> SyncService
   ThumbnailWorker --> CacheDB[("cache.db: thumbnail_jobs")]
   Watcher --> JobQueue

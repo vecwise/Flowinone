@@ -7,6 +7,8 @@ import fitz
 import pytest
 
 from run import create_app
+from src.flowinone.catalog.browse import CatalogService
+from src.flowinone.catalog.query import CatalogQuery
 from src.flowinone.resource_library.ai import AIAnswer, AIUnavailable, OpenAICompatibleClient
 from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.enrichment import EnrichmentService
@@ -178,6 +180,9 @@ def test_enrichment_persists_content_and_updates_fts(monkeypatch, tmp_path):
     detail = service.repository.get(resource_id)
     assert detail["enrichment_status"] == "complete"
     assert service.repository.list(query="hippocampus").total == 1
+    assert CatalogService(database).list(
+        CatalogQuery.create(q="hippocampus", sources=["resources"])
+    )["total_estimate"] == 1
     monkeypatch.setattr(
         enrichment.ai,
         "ask",
