@@ -93,6 +93,13 @@ def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
     return f"{url_for('catalog.navigator_page')}?{urlencode(_navigator_query_pairs(query, cursor=cursor))}"
 
 
+def _quick_filter_url(query: CatalogQuery, **changes) -> str:
+    values = query.public_dict()
+    values.update(changes)
+    values["cursor"] = ""
+    return _navigator_url(CatalogQuery.create(**values))
+
+
 def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
     values = query.public_dict()
     values.update({"scope": scope, "sources": NAVIGATOR_SCOPE_SOURCES[scope], "cursor": ""})
@@ -206,6 +213,7 @@ def navigator_page():
         title="Navigator · Flowinone",
         payload=payload,
         query=query,
+        scope_sources=scope_sources,
         source_options=[
             {
                 "key": source,
@@ -241,6 +249,17 @@ def navigator_page():
                 )
             ),
         },
+        quick_type_urls={
+            item_type: _quick_filter_url(query, type=item_type)
+            for item_type in ("", "image", "video", "bookmark")
+        },
+        quick_source_urls={
+            source: _quick_filter_url(query, sources=(source,))
+            for source in scope_sources
+        },
+        quick_all_sources_url=_quick_filter_url(query, sources=scope_sources),
+        quick_favorite_url=_quick_filter_url(query, favorite=not query.favorite),
+        quick_unviewed_url=_quick_filter_url(query, unviewed=not query.unviewed),
         source_watch_status=CatalogSourceWatcher(_database()).status(),
         similarity_status=CatalogSimilarityService(_database()).status(),
         eagle_available=eagle_available,

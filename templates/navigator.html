@@ -9,8 +9,8 @@
   <header class="gallery-hero navigator-hero">
     <div>
       <p class="eyebrow">Cross-source navigator</p>
-      <h1>{% if query.scope == 'gallery' %}在同一處探索視覺素材{% else %}在同一處搜尋所有內容{% endif %}</h1>
-      <p>{% if query.scope == 'gallery' %}本機、Eagle 與書籤以扁平 item 瀏覽；資料夾只作為描述或 tag。{% else %}本機、Eagle、書籤與 Resources 共用可搜尋索引；包含標題、摘要、tag 與已擷取內容。{% endif %}</p>
+      <h1>{% if query.scope == 'gallery' %}探索素材{% else %}搜尋所有內容{% endif %}</h1>
+      <p>{% if query.scope == 'gallery' %}本機、Eagle、書籤{% else %}素材、Resources 與已擷取全文{% endif %}，在同一處接著逛。</p>
     </div>
     <div class="navigator-hero-actions">
       <button class="action-button navigator-command-trigger" type="button" data-command-palette-open aria-haspopup="dialog">
@@ -108,32 +108,6 @@
     </a>
   </nav>
 
-  <section class="navigator-saved-searches" aria-labelledby="navigator-saved-searches-heading">
-    <div class="gallery-results-heading">
-      <div>
-        <p class="eyebrow">Quick views</p>
-        <h2 id="navigator-saved-searches-heading">已儲存搜尋</h2>
-      </div>
-      <button class="action-button" type="button" data-save-search-open>儲存目前搜尋</button>
-    </div>
-    {% if saved_searches %}
-    <div class="navigator-saved-search-grid">
-      {% for saved in saved_searches %}
-      <article class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
-        <a href="{{ saved.url }}">
-          <span class="navigator-session-meta">{{ saved.scope_label }}</span>
-          <strong>{{ saved.label }}</strong>
-          <span>{{ saved.summary }}</span>
-        </a>
-        <button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除儲存搜尋：{{ saved.label }}">移除</button>
-      </article>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="navigator-saved-search-empty">把常用條件儲存起來；例如「未看設計參考」或「本週新加入」。</p>
-    {% endif %}
-  </section>
-
   {% if not eagle_available and 'eagle' in query.sources %}
   <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
   {% endif %}
@@ -144,18 +118,6 @@
       <label for="navigator-q">搜尋</label>
       <input id="navigator-q" type="search" name="q" value="{{ query.q }}" placeholder="{% if query.scope == 'gallery' %}標題、tag 或素材描述{% else %}標題、摘要、tag 或擷取內容{% endif %}">
     </div>
-
-    <fieldset class="gallery-source-filter">
-      <legend>來源</legend>
-      <div class="gallery-source-options {% if source_options|length == 4 %}has-four-sources{% endif %}">
-        {% for source in source_options %}
-        <label class="source-option {% if source.error %}has-warning{% endif %}">
-          <input type="checkbox" name="source" value="{{ source.key }}" {% if source.key in query.sources %}checked{% endif %}>
-          <span><strong>{{ source.label }}</strong><small>{{ source.count }} items{% if source.error %} · {{ source.error }}{% endif %}</small></span>
-        </label>
-        {% endfor %}
-      </div>
-    </fieldset>
 
     <div class="gallery-select-field">
       <label for="navigator-type">類型</label>
@@ -185,9 +147,20 @@
       <button class="action-button" type="button" data-save-search-open>儲存搜尋</button>
       <a class="action-button" href="{{ reset_url }}">重設</a>
     </div>
-    <details class="navigator-advanced" {% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
-      <summary>進階篩選{% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
+    <details class="navigator-advanced" {% if query.sources != scope_sources or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
+      <summary>更多篩選{% if query.sources != scope_sources or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
       <div class="navigator-advanced-grid">
+        <fieldset class="gallery-source-filter">
+          <legend>來源</legend>
+          <div class="gallery-source-options {% if source_options|length == 4 %}has-four-sources{% endif %}">
+            {% for source in source_options %}
+            <label class="source-option {% if source.error %}has-warning{% endif %}">
+              <input type="checkbox" name="source" value="{{ source.key }}" {% if source.key in query.sources %}checked{% endif %}>
+              <span><strong>{{ source.label }}</strong><small>{{ source.count }} items{% if source.error %} · {{ source.error }}{% endif %}</small></span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
         <div class="gallery-search-field">
           <label for="navigator-tags">Tags（逗號分隔）</label>
           <input id="navigator-tags" name="tags" value="{{ query.tags|join(',') }}" placeholder="例如：reference, motion">
@@ -203,6 +176,26 @@
       </div>
     </details>
   </form>
+
+  <nav class="navigator-quick-filters" aria-label="快速篩選">
+    <div class="navigator-chip-group" aria-label="類型">
+      <span>類型</span>
+      {% for item_type, label in [('', '全部'), ('image', '圖片'), ('video', '影片'), ('bookmark', '書籤')] %}
+      <a class="navigator-chip {% if query.item_type == item_type %}is-active{% endif %}" href="{{ quick_type_urls[item_type] }}" {% if query.item_type == item_type %}aria-current="true"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </div>
+    <div class="navigator-chip-group" aria-label="來源">
+      <span>來源</span>
+      <a class="navigator-chip {% if query.sources == scope_sources %}is-active{% endif %}" href="{{ quick_all_sources_url }}" {% if query.sources == scope_sources %}aria-current="true"{% endif %}>全部</a>
+      {% for source in source_options %}
+      <a class="navigator-chip {% if query.sources == (source.key,) %}is-active{% endif %}" href="{{ quick_source_urls[source.key] }}" {% if query.sources == (source.key,) %}aria-current="true"{% endif %}>{{ source.label }}</a>
+      {% endfor %}
+    </div>
+    <div class="navigator-chip-group" aria-label="瀏覽狀態">
+      <a class="navigator-chip {% if query.favorite %}is-active{% endif %}" href="{{ quick_favorite_url }}" {% if query.favorite %}aria-current="true"{% endif %}>我的最愛</a>
+      <a class="navigator-chip {% if query.unviewed %}is-active{% endif %}" href="{{ quick_unviewed_url }}" {% if query.unviewed %}aria-current="true"{% endif %}>尚未瀏覽</a>
+    </div>
+  </nav>
 
   <section aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
@@ -236,6 +229,25 @@
   </section>
 
   {% if next_url %}<nav class="gallery-pagination" aria-label="Navigator 批次載入"><a class="action-button primary" href="{{ next_url }}">載入下一批</a></nav>{% endif %}
+
+  <section class="navigator-saved-searches" aria-labelledby="navigator-saved-searches-heading">
+    <div class="gallery-results-heading">
+      <div><p class="eyebrow">Quick views</p><h2 id="navigator-saved-searches-heading">已儲存搜尋</h2></div>
+      <button class="action-button" type="button" data-save-search-open>儲存目前搜尋</button>
+    </div>
+    {% if saved_searches %}
+    <div class="navigator-saved-search-grid">
+      {% for saved in saved_searches %}
+      <article class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
+        <a href="{{ saved.url }}"><span class="navigator-session-meta">{{ saved.scope_label }}</span><strong>{{ saved.label }}</strong><span>{{ saved.summary }}</span></a>
+        <button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除儲存搜尋：{{ saved.label }}">移除</button>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="navigator-saved-search-empty">把常用條件儲存起來；例如「未看設計參考」或「本週新加入」。</p>
+    {% endif %}
+  </section>
 
   {% if recent_sessions %}
   <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">

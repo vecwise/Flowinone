@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+from bs4 import BeautifulSoup
+from urllib.parse import parse_qs, urlsplit
 
 from run import create_app
 
@@ -46,3 +48,21 @@ def test_navigator_and_catalog_are_the_only_browser_read_surfaces(client):
     assert "/api/catalog/items" in rules
     assert not any(rule.startswith("/api/gallery/") for rule in rules)
     assert not any(rule.startswith("/gallery/lab") for rule in rules)
+
+
+def test_gallery_quick_filters_preserve_context_and_show_results_first(client):
+    response = client.get("/navigator/?scope=gallery&source=local&q=design&type=image")
+    assert response.status_code == 200
+    soup = BeautifulSoup(response.data, "html.parser")
+    video = next(
+        link for link in soup.select('.navigator-chip-group[aria-label="類型"] a')
+        if link.get_text(strip=True) == "影片"
+    )
+    query = parse_qs(urlsplit(video["href"]).query)
+    assert query["q"] == ["design"]
+    assert query["source"] == ["local"]
+    assert query["type"] == ["video"]
+    assert soup.select_one(".navigator-advanced[open]") is not None
+    assert response.data.index(b'id="navigator-results-heading"') < response.data.index(
+        b'id="navigator-saved-searches-heading"'
+    )
