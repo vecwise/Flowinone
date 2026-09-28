@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 from flask import current_app, request
@@ -17,7 +16,7 @@ from src.flowinone.web.schemas import (
     ResourceVersionDiffOutput, ResourceVersionLimitQuery, ResourceVersionsOutput, LimitQuery,
 )
 
-from .http import bp, _database, _list_params, _service, decorate_resource
+from .http import bp, _database, _list_params, _service, decorate_resource, import_uploaded_bookmarks
 from .repository import ResourceNotFound
 from .versions import ResourceVersionService
 
@@ -210,23 +209,10 @@ def api_import_chrome():
         except Exception as exc:
             return api_error(str(exc), 400)
         return validated_json(summary.to_dict(), ImportSummaryOutput)
-    format_hint = options.format or Path(upload.filename or "").suffix.lstrip(".")
-    suffix = ".html" if format_hint.lower() in {"html", "htm"} else ".json"
-    temporary_path = None
     try:
-        with tempfile.NamedTemporaryFile(
-            prefix="flowinone-api-bookmarks-", suffix=suffix, delete=False
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            upload.save(temporary)
-        summary = service.import_file(
-            temporary_path,
-            format_hint=format_hint,
-            enqueue=True,
+        summary = import_uploaded_bookmarks(
+            service, upload, format_hint=options.format, enqueue=True
         )
         return validated_json(summary.to_dict(), ImportSummaryOutput)
     except Exception as exc:
         return api_error(str(exc), 400)
-    finally:
-        if temporary_path:
-            temporary_path.unlink(missing_ok=True)

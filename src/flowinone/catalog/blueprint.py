@@ -39,18 +39,6 @@ ITEM_TYPE_LABELS = {
 }
 
 
-def _query(scope: str | None = None) -> CatalogQuery:
-    return CatalogQuery.create(
-        q=request.args.get("q"), scope=scope or request.args.get("scope"),
-        sources=request.args.getlist("source"), item_type=request.args.get("type"),
-        tags=request.args.getlist("tags") or request.args.get("tags"), tag_mode=request.args.get("tag_mode"),
-        favorite=request.args.get("favorite"), unviewed=request.args.get("unviewed"),
-        duration_min=request.args.get("duration_min"), duration_max=request.args.get("duration_max"),
-        added_from=request.args.get("added_from"), added_to=request.args.get("added_to"),
-        sort=request.args.get("sort"), seed=request.args.get("seed"), limit=request.args.get("limit"), cursor=request.args.get("cursor"),
-    )
-
-
 def _navigator_query() -> CatalogQuery:
     """Build a query whose source defaults always match the chosen scope."""
     scope = request.args.get("scope", "gallery").strip().lower()

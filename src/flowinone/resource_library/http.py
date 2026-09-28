@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from flask import Blueprint, current_app, redirect, request, url_for
+from werkzeug.datastructures import FileStorage
 
 from src.file_handler.thumbnails.store import get_thumbnail_store
 
 from src.flowinone.web.database import request_database
-from .service import ResourceService
+from .service import ImportSummary, ResourceService
 
 bp = Blueprint("resource_library", __name__)
 
@@ -22,6 +26,33 @@ def _service() -> ResourceService:
             current_app.config.get("FLOWINONE_RESOURCE_LINK_THUMBNAILS", True)
         ),
     )
+
+
+def import_uploaded_bookmarks(
+    service: ResourceService,
+    upload: FileStorage,
+    *,
+    format_hint: str | None,
+    enqueue: bool,
+) -> ImportSummary:
+    """Own the temporary file lifecycle shared by page and API imports."""
+    selected_format = format_hint or Path(upload.filename or "").suffix.lstrip(".")
+    suffix = ".html" if selected_format.lower() in {"html", "htm"} else ".json"
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix="flowinone-bookmarks-", suffix=suffix, delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            upload.save(temporary)
+        return service.import_file(
+            temporary_path,
+            format_hint=selected_format,
+            enqueue=enqueue,
+        )
+    finally:
+        if temporary_path:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _list_params(payload=None) -> dict:

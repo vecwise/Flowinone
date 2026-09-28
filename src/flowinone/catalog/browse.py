@@ -320,11 +320,13 @@ class CatalogService:
             sort_expression, direction = "COALESCE(us.favorite,0)", "DESC"
         else:
             sort_expression, direction = "COALESCE(i.captured_at,i.indexed_at)", "DESC"
+        filter_conditions = conditions
+        page_conditions = conditions.copy()
         if cursor:
             params["cursor_sort"] = cursor.get("sort")
             params["cursor_id"] = cursor.get("id")
             comparator = ">" if direction == "ASC" else "<"
-            conditions.append(f"(({sort_expression}) {comparator} :cursor_sort OR (({sort_expression})=:cursor_sort AND i.id>:cursor_id))")
+            page_conditions.append(f"(({sort_expression}) {comparator} :cursor_sort OR (({sort_expression})=:cursor_sort AND i.id>:cursor_id))")
 
         sql = f"""
             SELECT i.*, COALESCE(us.favorite,0) AS favorite, COALESCE(us.hidden,0) AS hidden,
@@ -334,7 +336,7 @@ class CatalogService:
                    (SELECT GROUP_CONCAT(name, char(31)) FROM (SELECT DISTINCT t.name AS name FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id WHERE it.catalog_item_id=i.id ORDER BY t.name)) AS tag_names,
                    (SELECT GROUP_CONCAT(DISTINCT source_kind) FROM catalog_origins o WHERE o.catalog_item_id=i.id AND o.stale=0) AS source_names
             FROM catalog_items i {' '.join(joins)}
-            WHERE {' AND '.join(conditions)}
+            WHERE {' AND '.join(page_conditions)}
             ORDER BY sort_value {direction}, i.id ASC LIMIT :limit
         """
         cache_key, cache_revision = self._browse_cache_context(query)
@@ -342,7 +344,7 @@ class CatalogService:
             rows = list(conn.execute(text(sql), params).mappings())
             total = self._browse_cache.get_total(cache_key, cache_revision)
             if total is None:
-                count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(conditions[:-1] if cursor else conditions)}"
+                count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(filter_conditions)}"
                 count_params = {key: value for key, value in params.items() if key not in {"limit", "cursor_sort", "cursor_id"}}
                 total = int(conn.execute(text(count_sql), count_params).scalar() or 0)
                 self._browse_cache.store_total(cache_key, cache_revision, total)

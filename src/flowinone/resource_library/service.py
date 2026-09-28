@@ -8,7 +8,7 @@ from typing import Iterable, Optional
 
 from src.file_handler.thumbnails.store import compute_media_id, get_thumbnail_store
 
-from .canonical import InvalidResourceURL, normalize_resource_url
+from .canonical import normalize_resource_url
 from .database import ResourceDatabase, get_resource_database
 from .importers import BookmarkRecord, load_bookmarks
 from .jobs import JobQueue
@@ -102,10 +102,6 @@ class ResourceService:
                     else:
                         summary.duplicates += 1
                     summary.jobs_queued += queued_for_record
-                except (InvalidResourceURL, ValueError, OSError) as exc:
-                    summary.failed += 1
-                    if len(summary.errors or []) < 50:
-                        summary.errors.append({"url": record.url, "error": str(exc)})
                 except Exception as exc:
                     summary.failed += 1
                     if len(summary.errors or []) < 50:

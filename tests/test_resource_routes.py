@@ -1,5 +1,7 @@
 import io
+import tempfile
 from pathlib import Path
+from urllib.parse import unquote_plus
 
 import pytest
 from bs4 import BeautifulSoup
@@ -101,3 +103,35 @@ def test_chrome_upload_api_imports_json(resource_app):
     )
     assert response.status_code == 200
     assert response.get_json()["created"] == 1
+
+
+def test_bookmark_upload_pages_share_import_and_cleanup(resource_app, monkeypatch, tmp_path):
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    payload = b'{"roots":{"bookmark_bar":{"type":"folder","children":[{"type":"url","name":"Shared upload","url":"https://example.com/shared-upload"}]}}}'
+    client = resource_app.test_client()
+    index = BeautifulSoup(client.get("/resources/").data, "html.parser")
+    csrf_token = index.select_one('form[action="/resources/import/upload"] input[name="csrf_token"]')["value"]
+
+    page = client.post(
+        "/resources/import/upload",
+        data={"csrf_token": csrf_token, "enqueue": "0", "file": (io.BytesIO(payload), "bookmarks.json")},
+        content_type="multipart/form-data",
+    )
+    assert page.status_code == 302
+    assert "匯入完成：新增 1" in unquote_plus(page.headers["Location"])
+
+    api = client.post(
+        "/api/imports/chrome",
+        data={"file": (io.BytesIO(payload), "bookmarks.json")},
+        content_type="multipart/form-data",
+    )
+    assert api.status_code == 200
+    assert api.get_json()["duplicates"] == 1
+
+    invalid = client.post(
+        "/api/imports/chrome",
+        data={"file": (io.BytesIO(b"invalid JSON"), "bookmarks.json")},
+        content_type="multipart/form-data",
+    )
+    assert invalid.status_code == 400
+    assert list(tmp_path.glob("flowinone-bookmarks-*")) == []

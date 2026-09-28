@@ -654,6 +654,20 @@ def test_catalog_browse_metadata_cache_reuses_paging_and_is_filter_keyed(tmp_pat
         event.remove(database.engine, "before_cursor_execute", capture)
 
 
+def test_catalog_cold_cursor_keeps_unpaged_total(tmp_path):
+    database, _first, _second, _third = _catalog(tmp_path)
+    service = CatalogService(database)
+    first = service.list(CatalogQuery.create(sort="title", limit=1))
+    service._browse_cache.clear()
+
+    next_page = service.list(
+        CatalogQuery.create(sort="title", limit=1, cursor=first["next_cursor"])
+    )
+
+    assert len(next_page["items"]) == 1
+    assert next_page["total_estimate"] == first["total_estimate"] == 3
+
+
 def test_catalog_browse_metadata_cache_invalidates_after_sync(monkeypatch, tmp_path):
     database, _first, _second, local_id = _catalog(tmp_path)
     query = CatalogQuery.create(scope="gallery", sources=["local"])

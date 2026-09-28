@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import tempfile
 from pathlib import Path
 
 from flask import Flask, abort, current_app, redirect, render_template, request, send_file, url_for
@@ -14,7 +13,7 @@ from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .canonical import ensure_within
 from .commands import register_resource_commands
 from .enrichment import EnrichmentService
-from .http import bp, _database, _form_error, _list_params, _service, decorate_resource
+from .http import bp, _database, _form_error, _list_params, _service, decorate_resource, import_uploaded_bookmarks
 from .repository import ResourceNotFound
 from .settings import get_resource_settings
 from .versions import ResourceVersionService
@@ -97,18 +96,11 @@ def resource_import_upload():
     upload = request.files.get("file")
     if upload is None or not upload.filename:
         return _form_error("resource_library.resource_index", ValueError("請選擇書籤檔案"))
-    format_hint = request.form.get("format") or Path(upload.filename).suffix.lstrip(".")
-    suffix = ".html" if format_hint.lower() in {"html", "htm"} else ".json"
-    temporary_path = None
     try:
-        with tempfile.NamedTemporaryFile(
-            prefix="flowinone-bookmarks-", suffix=suffix, delete=False
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            upload.save(temporary)
-        summary = _service().import_file(
-            temporary_path,
-            format_hint=format_hint,
+        summary = import_uploaded_bookmarks(
+            _service(),
+            upload,
+            format_hint=request.form.get("format"),
             enqueue=request.form.get("enqueue", "1") != "0",
         )
         message = (
@@ -117,9 +109,6 @@ def resource_import_upload():
         )
     except Exception as exc:
         return _form_error("resource_library.resource_index", exc)
-    finally:
-        if temporary_path:
-            temporary_path.unlink(missing_ok=True)
     return redirect(url_for("resource_library.resource_index", notice=message))
 
 
