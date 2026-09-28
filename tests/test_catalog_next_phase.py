@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
@@ -703,45 +702,3 @@ def test_catalog_browse_metadata_cache_invalidates_after_sync(monkeypatch, tmp_p
     assert refreshed["facets"]["sources"]["local"] == 2
     assert any("COUNT(DISTINCT i.id)" in statement for statement in statements)
     assert any("GROUP BY source_kind" in statement for statement in statements)
-
-
-def test_catalog_100k_keyset_query_contract(tmp_path):
-    """The materialized projection must avoid the former load-every-source request path."""
-    database = get_resource_database(tmp_path / "catalog-100k.db")
-    now = "2026-07-11T00:00:00+00:00"
-    items = [
-        (f"{index:032x}", f"synthetic:{index}", "image", f"Item {index:06d}", now, now, "available", "{}")
-        for index in range(100_000)
-    ]
-    origins = [
-        (f"o{index:031x}", f"{index:032x}", "local", str(index), now)
-        for index in range(100_000)
-    ]
-    with database.engine.begin() as conn:
-        conn.exec_driver_sql(
-            "INSERT INTO catalog_items(id,identity_key,item_type,title,indexed_at,captured_at,availability,metadata_json) VALUES(?,?,?,?,?,?,?,?)",
-            items,
-        )
-        conn.exec_driver_sql(
-            "INSERT INTO catalog_origins(id,catalog_item_id,source_kind,source_key,last_seen_at) VALUES(?,?,?,?,?)",
-            origins,
-        )
-    query = CatalogQuery.create(
-        scope="gallery", sources=["local"], sort="recently_added", limit=48
-    )
-    started = time.perf_counter()
-    page = CatalogService(database).list(query)
-    elapsed = time.perf_counter() - started
-    assert page["total_estimate"] == 100_000
-    assert len(page["items"]) == 48
-    assert page["next_cursor"]
-    assert elapsed < 2.5
-
-    # The warm browse keeps the keyset data query but must not repeat exact
-    # COUNT or facet aggregation work over all 100k projected records.
-    started = time.perf_counter()
-    warm_page = CatalogService(database).list(query)
-    warm_elapsed = time.perf_counter() - started
-    assert warm_page["total_estimate"] == 100_000
-    assert len(warm_page["items"]) == 48
-    assert warm_elapsed < 0.75

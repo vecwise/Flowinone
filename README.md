@@ -177,13 +177,23 @@ conda run -n py3.11 pytest -vv tests/test_security_and_runtime.py::test_catalog_
 | 相同／相似圖片、重複檢閱 | `tests/test_catalog_similarity.py` |
 | Resource 匯入、頁面、內容擷取與版本 | `tests/test_resource_library_core.py`、`tests/test_resource_routes.py`、`tests/test_resource_enrichment.py` |
 | 縮圖、安全 URL、provider、Chrome 不在 request 抓網路 | `tests/test_thumbnail_store.py`、`tests/test_thumbnail_urls.py`、`tests/test_thumbnail_providers.py`、`tests/test_thumbnail_extensions.py`、`tests/test_chrome_no_network.py` |
-| 舊路徑相容、同步按鈕重試 | `tests/test_navigator_compatibility.py`、`tests/test_navigator_sync_browser.py` |
+| Navigator 路徑、同步按鈕重試 | `tests/test_navigator_compatibility.py`、`tests/test_navigator_sync_browser.py` |
 
 較完整的本機回歸（排除顯式標記的 public-site smoke 與效能測試）：
 
 ```bash
 conda run -n py3.11 pytest -q -m "not online and not performance"
 ```
+
+重構時先固定以下行為：首頁／Navigator／Catalog JSON 用 `test_app_architecture.py`、`test_navigator_compatibility.py`；Resource 頁面與 API 用 `test_resource_routes.py`；Eagle 增量續傳與故障恢復用 `test_eagle_catalog_sync.py`；同步工作狀態與重試用 `test_catalog_next_phase.py`、`test_security_and_runtime.py`。這些測試都在上面的本機回歸內。
+
+效能基線獨立執行，避免一般回歸每次建立 10 萬筆資料：
+
+```bash
+conda run --no-capture-output -n py3.11 pytest -q -s -m performance
+```
+
+2026-09-28 在本機 `py3.11`、臨時 SQLite 的單次量測：10 萬筆 Navigator 首次查詢 `0.293s`、快取後 `0.119s`；1,000 筆 Chrome 書籤投影 `0.533s`。測試會印出當次秒數，供重構前後在同一台機器比較。前兩者的硬性門檻仍是 `2.5s`、`0.75s`；書籤同步目前只記錄時間與結果，不以單次耗時判斷回歸。
 
 `test_navigator_sync_browser.py` 需要 Node.js，缺少時會 skip；它用模擬 DOM／fetch 驗證 JavaScript 控制流程，並未開真正瀏覽器。因此畫面布局與真實來源仍需做上面的手動實驗。
 
