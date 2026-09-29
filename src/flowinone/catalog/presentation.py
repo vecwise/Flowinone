@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit
+
+from src.file_handler.thumbnails.store import get_thumbnail_store
 
 from .browse import CatalogService
 from .query import CatalogQuery
@@ -13,6 +16,7 @@ SOURCE_LABELS = {
     "bookmarks": "Chrome 書籤",
     "resources": "Resources",
 }
+BOOKMARK_THUMBNAIL_ROUTE = re.compile(r"^/api/bookmark-thumbnails/([0-9a-f]{40})/image$")
 
 
 def _card_description(value: object, folder_path: str = "") -> str:
@@ -26,6 +30,7 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
     origins_by_item = service.get_origins_for_items(
         (item["id"] for item in payload["items"]), folder=query.folder
     )
+    bookmark_thumbnails: list[tuple[dict, str]] = []
     for item in payload["items"]:
         available = origins_by_item.get(item["id"], {})
         origins = []
@@ -51,6 +56,11 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             else chosen.get("detail_uri")
         )
         item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
+        item["thumbnail_is_fallback"] = source == "bookmarks" and not item["thumbnail_ref"]
+        if source == "bookmarks" and item["thumbnail_ref"]:
+            match = BOOKMARK_THUMBNAIL_ROUTE.fullmatch(str(item["thumbnail_ref"]))
+            if match:
+                bookmark_thumbnails.append((item, match.group(1)))
         item["folder_path"] = metadata.get("folder_path") or ""
         item["target_blank"] = source == "bookmarks"
         item["card_description"] = _card_description(item.get("description"), item["folder_path"])
@@ -77,4 +87,10 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             if source != "bookmarks" or tag.casefold() not in folder_tags
         ][:2]
         visible_items.append(item)
+    if bookmark_thumbnails:
+        providers = get_thumbnail_store().get_thumbnail_providers(
+            media_id for _, media_id in bookmark_thumbnails
+        )
+        for item, media_id in bookmark_thumbnails:
+            item["thumbnail_is_fallback"] = providers.get(media_id) in {None, "site-tile"}
     return visible_items

@@ -259,20 +259,25 @@
     <div class="gallery-grid" data-gallery-view="grid">
       {% for item in payload['items'] %}
       <article class="gallery-card" data-navigator-item="{{ item.id }}" data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
-        <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
+        <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
+          {% if item.thumbnail_is_fallback %}
+          <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
+          <span class="gallery-fallback-copy"><strong>{{ item.site_domain or '網站' }}</strong><small>{{ item_type_labels.get(item.item_type, item.item_type) }} · 暫無預覽圖片</small></span>
+          {% else %}
           <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async">
-          <span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>
+          {% endif %}
+          {% if not item.thumbnail_is_fallback %}<span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>{% endif %}
           {% if item.duration_seconds %}<span class="gallery-type-badge" style="left:auto;right:.6rem">{{ item.duration_seconds|int }}s</span>{% endif %}
         </a>
         <div class="gallery-card-body">
           <div class="gallery-card-source">
-            {% if item.launch_source == 'bookmarks' and item.site_domain %}
+            {% if item.launch_source == 'bookmarks' and item.site_domain and not item.thumbnail_is_fallback %}
             <span class="gallery-site-mark" aria-hidden="true">{{ item.site_mark }}</span>
             <span class="gallery-site-domain" title="{{ item.site_domain }}">{{ item.site_domain }}</span>
             <span class="gallery-card-source-label">Chrome 書籤</span>
             {% else %}
             <span>{{ item.launch_source_label }}</span>
-            {% if item.collection_label %}<span class="gallery-card-collection" title="{{ item.collection_path }}">{{ item.collection_label }}</span>{% endif %}
+            {% if item.collection_label and item.launch_source != 'bookmarks' %}<span class="gallery-card-collection" title="{{ item.collection_path }}">{{ item.collection_label }}</span>{% endif %}
             {% endif %}
           </div>
           <h3><a href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>

@@ -357,8 +357,36 @@
     overflow: hidden;
     background: var(--fo-muted);
 }
+.gallery-card .gallery-card-media.is-site-fallback {
+    display: flex;
+    min-height: 96px;
+    align-items: center;
+    gap: 11px;
+    aspect-ratio: auto;
+    padding: 12px;
+    border-top: 3px solid var(--fo-primary);
+    background: var(--fo-surface-2);
+    color: var(--fo-text);
+    text-decoration: none;
+}
+.gallery-fallback-mark {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--fo-primary-soft);
+    color: var(--fo-primary);
+    font-size: .9rem;
+    font-weight: 850;
+}
+.gallery-fallback-copy { display: grid; min-width: 0; gap: 3px; }
+.gallery-fallback-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gallery-fallback-copy small { color: var(--fo-muted-text); font-size: .72rem; }
 .gallery-card[data-card-source="bookmarks"] .gallery-card-media { aspect-ratio: 16 / 10; }
 .gallery-card[data-card-type="video"] .gallery-card-media { aspect-ratio: 16 / 9; }
+.gallery-card .gallery-card-media.is-site-fallback { aspect-ratio: auto; }
 
 .gallery-card-media img {
     width: 100%;
@@ -389,7 +417,14 @@
 .gallery-card-collection { flex: 0 0 auto; margin-inline-start: auto; color: var(--fo-muted-text); }
 .gallery-card-collection { max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gallery-card h3 { margin: 0; font-size: 1rem; line-height: 1.4; }
-.gallery-card h3 a { color: var(--fo-text); text-decoration: none; }
+.gallery-card h3 a {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    color: var(--fo-text);
+    text-decoration: none;
+}
 .gallery-card-description { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 0; color: var(--fo-muted-text); font-size: .77rem; line-height: 1.45; }
 .gallery-card[data-card-type="image"] .gallery-card-description { -webkit-line-clamp: 1; }
 .gallery-card-context { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; color: var(--fo-muted-text); font-size: .72rem; }

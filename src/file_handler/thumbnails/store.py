@@ -533,6 +533,23 @@ class ThumbnailStore:
         unique_ids = list(dict.fromkeys(str(value) for value in media_ids if value))[:200]
         return [self.get_status(media_id) for media_id in unique_ids]
 
+    def get_thumbnail_providers(self, media_ids: Iterable[str]) -> dict[str, str]:
+        """Read visual providers for one page of bookmark cards in one query."""
+        unique_ids = list(dict.fromkeys(str(value) for value in media_ids if value))[:200]
+        if not unique_ids:
+            return {}
+        placeholders = ",".join("?" for _ in unique_ids)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"SELECT media_id, source, local_path FROM thumbnails WHERE media_id IN ({placeholders})",
+                unique_ids,
+            ).fetchall()
+        return {
+            str(row["media_id"]): str(row["source"] or "")
+            for row in rows
+            if row["local_path"] and os.path.isfile(str(row["local_path"]))
+        }
+
     def sync_missing(self, *, force: bool = False, domain: Optional[str] = None, limit: Optional[int] = None) -> dict:
         normalized_domain = (domain or "").lower().strip().lstrip(".")
         with self.connect() as conn:

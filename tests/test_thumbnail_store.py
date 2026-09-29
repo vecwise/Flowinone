@@ -61,6 +61,25 @@ def test_migration_preserves_legacy_thumbnail(tmp_path):
         }
 
 
+def test_thumbnail_providers_only_include_existing_cached_files(tmp_path):
+    store = ThumbnailStore(str(tmp_path / "cache.db"), str(tmp_path / "thumbnails"))
+    tile = store.register_bookmark("https://tile.example/article", "Tile")
+    image = store.register_bookmark("https://image.example/article", "Image")
+    tile_path = tmp_path / "tile.webp"
+    image_path = tmp_path / "image.webp"
+    tile_path.write_bytes(b"tile")
+    image_path.write_bytes(b"image")
+    store.record_thumbnail(tile.media_id, str(tile_path), provider="site-tile", source_url=None, width=640, height=400)
+    store.record_thumbnail(image.media_id, str(image_path), provider="metadata", source_url=None, width=640, height=400)
+
+    assert store.get_thumbnail_providers([tile.media_id, image.media_id, tile.media_id]) == {
+        tile.media_id: "site-tile",
+        image.media_id: "metadata",
+    }
+    image_path.unlink()
+    assert store.get_thumbnail_providers([tile.media_id, image.media_id]) == {tile.media_id: "site-tile"}
+
+
 def test_queue_deduplicates_canonical_youtube_urls(tmp_path):
     store = ThumbnailStore(str(tmp_path / "cache.db"), str(tmp_path / "thumbs"))
     first = store.register_bookmark("https://youtu.be/abcdefghijk?si=one", "First")

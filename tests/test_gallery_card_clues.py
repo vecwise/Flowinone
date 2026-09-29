@@ -11,14 +11,17 @@ from sqlalchemy import text
 
 from routes import register_routes
 from src.file_handler import chrome_bookmarks
+from src.flowinone.catalog import presentation
 from src.flowinone.catalog import sync as catalog_sync
 from src.flowinone.catalog.service import CatalogService, CatalogSyncService
 from src.flowinone.resource_library.database import get_resource_database
 
 
-def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(tmp_path: Path):
+def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(monkeypatch, tmp_path: Path):
     database = get_resource_database(tmp_path / "catalog.db")
     sync = CatalogSyncService(database)
+    site_tile_id = "a" * 40
+    real_image_id = "b" * 40
     with database.engine.begin() as conn:
         bookmark_id = sync._upsert(
             conn, identity_key="url:reference", source_kind="bookmarks",
@@ -27,6 +30,18 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(tmp_path: P
             original_url="https://www.example.org/reference", detail_uri="https://www.example.org/reference",
             tags=(("Design", "folder"), ("Typography", "folder"), ("inspiration", "manual")),
             metadata={"folder_path": "Design / Typography"},
+        )
+        sync._upsert(
+            conn, identity_key="url:tile", source_kind="bookmarks",
+            source_key="https://tile.example/article", item_type="bookmark", title="Site tile",
+            original_url="https://tile.example/article", detail_uri="https://tile.example/article",
+            metadata={"thumbnail_ref": f"/api/bookmark-thumbnails/{site_tile_id}/image"},
+        )
+        sync._upsert(
+            conn, identity_key="url:photo", source_kind="bookmarks",
+            source_key="https://photo.example/article", item_type="bookmark", title="Real preview",
+            original_url="https://photo.example/article", detail_uri="https://photo.example/article",
+            metadata={"thumbnail_ref": f"/api/bookmark-thumbnails/{real_image_id}/image"},
         )
         sync._upsert(
             conn, identity_key="local:portrait", source_kind="local", source_key="portrait",
@@ -41,6 +56,12 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(tmp_path: P
             metadata={"folder_path": "Design / Typography"},
         )
     CatalogService(database).record_event(bookmark_id, "open")
+    monkeypatch.setattr(
+        presentation, "get_thumbnail_store",
+        lambda: SimpleNamespace(get_thumbnail_providers=lambda _ids: {
+            site_tile_id: "site-tile", real_image_id: "metadata",
+        }),
+    )
     app = Flask(
         "gallery-card-clues",
         template_folder=str(Path(__file__).parents[1] / "templates"),
@@ -54,8 +75,10 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(tmp_path: P
     cards = {card.select_one("h3").get_text(strip=True): card for card in soup.select(".gallery-card")}
 
     bookmark = cards["Type reference"]
-    assert bookmark.select_one(".gallery-site-domain").get_text(strip=True) == "example.org"
-    assert bookmark.select_one(".gallery-site-mark").get_text(strip=True) == "EX"
+    assert bookmark.select_one(".gallery-card-media.is-site-fallback") is not None
+    assert bookmark.select_one(".gallery-fallback-copy strong").get_text(strip=True) == "example.org"
+    assert bookmark.select_one(".gallery-fallback-mark").get_text(strip=True) == "EX"
+    assert bookmark.select_one(".gallery-card-media img") is None
     assert bookmark.select_one(".gallery-card-description").get_text(strip=True) == "A concise typography reference."
     assert bookmark.select_one(".gallery-card-context").get_text(strip=True) == "資料夾：Typography"
     assert [tag.get_text(strip=True) for tag in bookmark.select(".gallery-tags span")] == ["inspiration"]
@@ -65,6 +88,11 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(tmp_path: P
     assert "開啟 1 次" in bookmark.get_text()
     assert bookmark.select_one(".navigator-favorite").get_text(strip=True) == "加入最愛"
     assert bookmark.select_one(".navigator-favorite")["aria-label"] == "加入我的最愛：Type reference"
+
+    assert cards["Site tile"].select_one(".gallery-card-media.is-site-fallback") is not None
+    assert cards["Site tile"].select_one(".gallery-card-media img") is None
+    assert cards["Real preview"].select_one(".gallery-card-media.is-site-fallback") is None
+    assert cards["Real preview"].select_one(".gallery-card-media img")["src"].endswith(f"/{real_image_id}/image")
 
     image = cards["Portrait study"]
     assert image.select_one(".gallery-card-media img") is not None
