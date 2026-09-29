@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlencode
 
 from flask import Flask, abort, current_app, redirect, render_template, request, url_for
 
 from src.file_handler.eagle_integration import is_eagle_available
+from src.flowinone.config import CHROME_BOOKMARK_PATH
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .browse import CatalogService
@@ -37,6 +39,35 @@ ITEM_TYPE_LABELS = {
     "folder": "資料夾",
     "unknown": "其他",
 }
+
+
+def _bookmark_source_health(path: Path, sync_state: dict, indexed_count: int) -> dict[str, str | int]:
+    """Describe whether the visible bookmark index still reflects its source."""
+    raw_synced_at = sync_state.get("synced_at")
+    synced_at = None
+    if raw_synced_at:
+        try:
+            synced_at = datetime.fromisoformat(str(raw_synced_at).replace("Z", "+00:00"))
+            if synced_at.tzinfo is None:
+                synced_at = synced_at.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    display_time = synced_at.astimezone().strftime("%Y-%m-%d %H:%M") if synced_at else "尚未同步"
+    count = indexed_count
+    try:
+        source_mtime = path.stat().st_mtime
+    except OSError:
+        state = "unavailable"
+    else:
+        if sync_state.get("status") == "failed":
+            state = "failed"
+        elif not synced_at:
+            state = "never_synced"
+        elif source_mtime > synced_at.timestamp() + 1:
+            state = "changed"
+        else:
+            state = "current"
+    return {"state": state, "count": count, "synced_at": display_time}
 
 
 def _navigator_query() -> CatalogQuery:
@@ -204,6 +235,11 @@ def navigator_page():
     except ValueError as exc:
         abort(400, description=str(exc))
     payload["items"] = visible_items(service, payload, effective_query)
+    bookmark_source_health = _bookmark_source_health(
+        Path(CHROME_BOOKMARK_PATH),
+        payload["facets"]["sync"].get("bookmarks", {}),
+        payload["facets"]["sources"].get("bookmarks", 0),
+    ) if "bookmarks" in query.sources else None
     if not payload["next_cursor"]:
         payload["total_estimate"] = len(payload["items"])
     next_url = None
@@ -286,6 +322,7 @@ def navigator_page():
         source_watch_status=CatalogSourceWatcher(_database()).status(),
         similarity_status=CatalogSimilarityService(_database()).status(),
         eagle_available=eagle_available,
+        bookmark_source_health=bookmark_source_health,
         item_type_labels=ITEM_TYPE_LABELS,
     )
 

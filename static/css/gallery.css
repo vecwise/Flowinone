@@ -231,6 +231,23 @@
     color: var(--fo-muted-text);
 }
 
+.bookmark-source-health {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: center;
+    padding: 9px 12px;
+    border: 1px solid var(--fo-border);
+    border-radius: 8px;
+    background: var(--fo-surface);
+    color: var(--fo-muted-text);
+    font-size: .8rem;
+}
+.bookmark-source-health strong { color: var(--fo-text); }
+.bookmark-source-health[data-state="unavailable"],
+.bookmark-source-health[data-state="failed"],
+.bookmark-source-health[data-state="changed"] { border-inline-start: 4px solid var(--fo-accent); }
+
 .gallery-results-heading {
     display: flex;
     align-items: end;

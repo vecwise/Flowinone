@@ -16,6 +16,7 @@ from sqlalchemy import event
 from routes import register_routes
 from src.file_handler import item_db
 from src.file_handler.sidecars import SidecarService
+from src.flowinone.catalog.blueprint import _bookmark_source_health
 from src.flowinone.catalog.discovery import DiscoveryService
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.resource_library.database import get_resource_database
@@ -48,6 +49,17 @@ def _catalog(tmp_path: Path):
         )
     assert first == merged
     return database, first, second, third
+
+
+def test_bookmark_source_health_distinguishes_missing_and_changed_sources(tmp_path):
+    source = tmp_path / "Bookmarks"
+    old_sync = {"status": "complete", "item_count": 12, "synced_at": "2000-01-01T00:00:00+00:00"}
+    assert _bookmark_source_health(source, old_sync, 11)["state"] == "unavailable"
+    source.write_text("{}", encoding="utf-8")
+    assert _bookmark_source_health(source, old_sync, 11)["state"] == "changed"
+    assert _bookmark_source_health(source, {**old_sync, "synced_at": "2099-01-01T00:00:00+00:00"}, 11)["state"] == "current"
+    assert _bookmark_source_health(source, {"status": "failed", "item_count": 12}, 11)["state"] == "failed"
+    assert _bookmark_source_health(source, {}, 11)["state"] == "never_synced"
 
 
 def test_initial_catalog_sync_is_single_flight(monkeypatch, tmp_path):
@@ -539,7 +551,8 @@ def test_sidecar_roundtrip_preserves_portable_identity(monkeypatch, tmp_path):
     assert after["absolute_path"] == str(moved)
 
 
-def test_new_catalog_routes_render(tmp_path):
+def test_new_catalog_routes_render(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.flowinone.catalog.blueprint.CHROME_BOOKMARK_PATH", tmp_path / "missing-bookmarks")
     database = get_resource_database(tmp_path / "web.db")
     sync = CatalogSyncService(database)
     with database.engine.begin() as conn:
@@ -561,6 +574,9 @@ def test_new_catalog_routes_render(tmp_path):
     gallery = client.get("/navigator/?scope=gallery")
     assert gallery.status_code == 200
     assert b"Cross-source navigator" in gallery.data
+    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+        '[data-bookmark-source-health][data-state="unavailable"]'
+    )
     assert gallery.data.count(b'type="checkbox" name="source"') == 3
     sync_rows = BeautifulSoup(gallery.data, "html.parser").select("[data-catalog-sync-source]")
     assert [row["data-status"] for row in sync_rows] == [
