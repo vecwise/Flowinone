@@ -10,7 +10,7 @@ from .query import CatalogQuery
 SOURCE_LABELS = {
     "local": "本機",
     "eagle": "EAGLE",
-    "bookmarks": "書籤",
+    "bookmarks": "Chrome 書籤",
     "resources": "Resources",
 }
 

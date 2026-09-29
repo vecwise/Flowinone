@@ -606,7 +606,7 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
         False,
         True,
     ]
-    assert retry_buttons[2]["aria-label"] == "重試書籤同步"
+    assert retry_buttons[2]["aria-label"] == "重試 Chrome 書籤同步"
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         'script[src$="/static/js/navigator_sync.js"]'
     )
@@ -658,6 +658,11 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
     bookmark_search = client.get("/navigator/?scope=all&source=bookmarks")
     assert b"https://example.com/web" in bookmark_search.data
     assert b"/resources/resource-web/" not in bookmark_search.data
+    legacy_bookmark_filter = BeautifulSoup(
+        client.get("/navigator/?scope=gallery&type=bookmark").data, "html.parser"
+    )
+    assert legacy_bookmark_filter.select_one('.navigator-chip-group[aria-label="來源"] .is-active').get_text(strip=True) == "Chrome 書籤"
+    assert legacy_bookmark_filter.select_one('#navigator-type').get_text(" ", strip=True).startswith("全部類型")
     explained_search = client.get("/navigator/?scope=all&source=bookmarks&q=web")
     assert "命中：標題" in explained_search.get_data(as_text=True)
     explained_api = client.get("/api/catalog/items?source=bookmarks&q=web")

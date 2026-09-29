@@ -10,7 +10,7 @@
     <div>
       <p class="eyebrow">Cross-source navigator</p>
       <h1>{% if query.scope == 'gallery' %}探索素材{% else %}搜尋所有內容{% endif %}</h1>
-      <p>{% if query.scope == 'gallery' %}本機、Eagle、書籤{% else %}素材、Resources 與已擷取全文{% endif %}，在同一處接著逛。</p>
+      <p>{% if query.scope == 'gallery' %}本機、Eagle、Chrome 書籤{% else %}素材、Resources 與已擷取全文{% endif %}，在同一處接著逛。</p>
     </div>
     <div class="navigator-hero-actions">
       <button class="action-button navigator-command-trigger" type="button" data-command-palette-open aria-haspopup="dialog">
@@ -40,7 +40,7 @@
                   class="action-button catalog-sync-retry"
                   type="button"
                   data-catalog-sync-retry="{{ source.key }}"
-                  aria-label="重試{{ source.label }}同步"
+                  aria-label="重試 {{ source.label }}同步"
                   {% if status != 'failed' %}hidden{% endif %}
                 >重試</button>
                 <small data-catalog-sync-detail>
@@ -101,7 +101,7 @@
 
   <nav class="navigator-scope" aria-label="Navigator 範圍">
     <a class="navigator-scope-option {% if query.scope == 'gallery' %}is-active{% endif %}" href="{{ scope_urls.gallery }}" {% if query.scope == 'gallery' %}aria-current="page"{% endif %}>
-      <strong>素材</strong><span>本機、Eagle、書籤</span>
+      <strong>素材</strong><span>本機、Eagle、Chrome 書籤</span>
     </a>
     <a class="navigator-scope-option {% if query.scope == 'all' %}is-active{% endif %}" href="{{ scope_urls.all }}" {% if query.scope == 'all' %}aria-current="page"{% endif %}>
       <strong>全部內容</strong><span>素材加上 Resources 與全文</span>
@@ -146,7 +146,9 @@
       <select id="navigator-type" name="type">
         <option value="">全部類型</option>
         {% for item_type, count in payload.facets.types.items() %}
+        {% if item_type != 'bookmark' %}
         <option value="{{ item_type }}" {% if query.item_type == item_type %}selected{% endif %}>{{ item_type_labels.get(item_type, item_type) }} ({{ count }})</option>
+        {% endif %}
         {% endfor %}
       </select>
     </div>
@@ -202,7 +204,7 @@
   <nav class="navigator-quick-filters" aria-label="快速篩選">
     <div class="navigator-chip-group" aria-label="類型">
       <span>類型</span>
-      {% for item_type, label in [('', '全部'), ('image', '圖片'), ('video', '影片'), ('bookmark', '書籤')] %}
+      {% for item_type, label in [('', '全部'), ('image', '圖片'), ('video', '影片')] %}
       <a class="navigator-chip {% if query.item_type == item_type %}is-active{% endif %}" href="{{ quick_type_urls[item_type] }}" {% if query.item_type == item_type %}aria-current="true"{% endif %}>{{ label }}</a>
       {% endfor %}
     </div>
@@ -224,7 +226,7 @@
     <div class="navigator-explore-content">
       <section aria-labelledby="navigator-folders-heading">
         <div class="navigator-explore-heading">
-          <h2 id="navigator-folders-heading">書籤資料夾</h2>
+          <h2 id="navigator-folders-heading">Chrome 書籤資料夾</h2>
           <a href="{{ folder_clear_url }}">全部資料夾</a>
         </div>
         {% if folder_crumbs %}<nav class="navigator-folder-crumbs" aria-label="資料夾階層">
@@ -267,7 +269,7 @@
             {% if item.launch_source == 'bookmarks' and item.site_domain %}
             <span class="gallery-site-mark" aria-hidden="true">{{ item.site_mark }}</span>
             <span class="gallery-site-domain" title="{{ item.site_domain }}">{{ item.site_domain }}</span>
-            <span class="gallery-card-source-label">書籤</span>
+            <span class="gallery-card-source-label">Chrome 書籤</span>
             {% else %}
             <span>{{ item.launch_source_label }}</span>
             {% if item.collection_label %}<span class="gallery-card-collection" title="{{ item.collection_path }}">{{ item.collection_label }}</span>{% endif %}
@@ -278,10 +280,10 @@
           <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
           {% endif %}
           {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
-          {% if item.launch_source == 'bookmarks' and item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">收藏於 {{ item.collection_label }}</p>{% endif %}
+          {% if item.launch_source == 'bookmarks' and item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">資料夾：{{ item.collection_label }}</p>{% endif %}
           {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="navigator-card-actions">
-            <button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>
+            <button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}" aria-label="{{ '移出我的最愛：' if item.favorite else '加入我的最愛：' }}{{ item.title }}">{{ '移出最愛' if item.favorite else '加入最愛' }}</button>
             {% if item.launch_source == 'bookmarks' and item.launch_uri %}<a class="action-button gallery-card-open" href="{{ item.launch_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
             {% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似</button>{% endif %}
             {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
@@ -464,8 +466,10 @@
       const next = !enabled;
       button.dataset.favorite = next ? '1' : '0';
       button.setAttribute('aria-pressed', String(next));
-      button.textContent = next ? '已收藏' : '收藏';
-      status.textContent = next ? `已收藏 ${item.querySelector('h3').textContent}` : '已移除收藏';
+      button.textContent = next ? '移出最愛' : '加入最愛';
+      const title = item.querySelector('h3').textContent;
+      button.setAttribute('aria-label', `${next ? '移出我的最愛' : '加入我的最愛'}：${title}`);
+      status.textContent = next ? `已加入我的最愛：${title}` : `已從我的最愛移除：${title}`;
     } catch (error) {
       status.textContent = error.message;
     } finally {

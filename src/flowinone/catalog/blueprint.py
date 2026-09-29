@@ -29,7 +29,7 @@ NAVIGATOR_SCOPE_SOURCES = {
 ITEM_TYPE_LABELS = {
     "image": "圖片",
     "video": "影片",
-    "bookmark": "書籤",
+    "bookmark": "網頁",
     "article": "文章",
     "web_page": "網頁",
     "pdf": "PDF",
@@ -78,9 +78,14 @@ def _navigator_query() -> CatalogQuery:
     allowed_sources = NAVIGATOR_SCOPE_SOURCES[scope]
     requested_sources = request.args.getlist("source")
     sources = tuple(source for source in requested_sources if source in allowed_sources) or allowed_sources
+    item_type = request.args.get("type")
+    if item_type == "bookmark":
+        # Older links used bookmark as a type, although it denotes an origin.
+        sources = ("bookmarks",)
+        item_type = None
     return CatalogQuery.create(
         q=request.args.get("q"), scope=scope, sources=sources,
-        item_type=request.args.get("type"),
+        item_type=item_type,
         folder=request.args.get("folder"),
         tags=request.args.getlist("tags") or request.args.get("tags"),
         tag_mode=request.args.get("tag_mode"), favorite=request.args.get("favorite"),
@@ -299,7 +304,7 @@ def navigator_page():
         },
         quick_type_urls={
             item_type: _quick_filter_url(query, type=item_type)
-            for item_type in ("", "image", "video", "bookmark")
+            for item_type in ("", "image", "video")
         },
         quick_source_urls={
             source: _quick_filter_url(query, sources=(source,))

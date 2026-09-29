@@ -57,13 +57,14 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(tmp_path: P
     assert bookmark.select_one(".gallery-site-domain").get_text(strip=True) == "example.org"
     assert bookmark.select_one(".gallery-site-mark").get_text(strip=True) == "EX"
     assert bookmark.select_one(".gallery-card-description").get_text(strip=True) == "A concise typography reference."
-    assert bookmark.select_one(".gallery-card-context").get_text(strip=True) == "收藏於 Typography"
+    assert bookmark.select_one(".gallery-card-context").get_text(strip=True) == "資料夾：Typography"
     assert [tag.get_text(strip=True) for tag in bookmark.select(".gallery-tags span")] == ["inspiration"]
     assert bookmark.select_one(".gallery-card-open")["href"] == "https://www.example.org/reference"
     assert bookmark.select_one(".gallery-card-open")["target"] == "_blank"
     assert "data-gallery-detail-open" not in bookmark.select_one(".gallery-card-open").attrs
     assert "開啟 1 次" in bookmark.get_text()
-    assert bookmark.select_one(".navigator-favorite") is not None
+    assert bookmark.select_one(".navigator-favorite").get_text(strip=True) == "加入最愛"
+    assert bookmark.select_one(".navigator-favorite")["aria-label"] == "加入我的最愛：Type reference"
 
     image = cards["Portrait study"]
     assert image.select_one(".gallery-card-media img") is not None
