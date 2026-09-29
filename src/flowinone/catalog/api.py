@@ -107,6 +107,10 @@ def api_facets():
 
 def _validated_api_query() -> CatalogQuery:
     query = parse_query(CatalogListQuery, list_fields=("source", "tags"))
+    return _catalog_query_from_params(query)
+
+
+def _catalog_query_from_params(query: CatalogListQuery) -> CatalogQuery:
     values = query.model_dump()
     values["sources"] = values.pop("source")
     values["item_type"] = values.pop("type")
@@ -135,10 +139,11 @@ def api_event(item_id: str):
 
 @bp.get("/api/catalog/items/<item_id>/related")
 def api_related(item_id: str):
-    query = parse_query(RelatedLimitQuery, list_fields=("source",))
+    query = parse_query(RelatedLimitQuery, list_fields=("source", "tags"))
+    context = _catalog_query_from_params(query)
     service = CatalogService(_database())
     try:
-        related = DiscoveryService(_database()).related_items(item_id, limit=query.limit)
+        related = DiscoveryService(_database()).related_items(item_id, limit=query.limit, context=context)
     except LookupError:
         return api_error("Catalog item not found", 404)
     return validated_json(
@@ -146,7 +151,7 @@ def api_related(item_id: str):
             "items": visible_items(
                 service,
                 {"items": related},
-                _preview_query(),
+                context,
             )
         },
         CatalogItemsOutput,

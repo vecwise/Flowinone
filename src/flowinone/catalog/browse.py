@@ -265,11 +265,25 @@ class CatalogService:
             result["match_reason"] = match_reason
         return result
 
-    def list(self, query: CatalogQuery) -> dict[str, Any]:
+    def list(
+        self,
+        query: CatalogQuery,
+        *,
+        candidate_ids: tuple[str, ...] | None = None,
+        include_facets: bool = True,
+    ) -> dict[str, Any]:
+        if candidate_ids is not None and not candidate_ids:
+            return {"items": [], "next_cursor": None, "total_estimate": 0, "query": query.public_dict(), "facets": self.facets(query) if include_facets else {}}
         cursor = self._decode_cursor(query)
         params: dict[str, Any] = {"limit": query.limit + 1, "seed": query.seed or 1}
         joins = ["LEFT JOIN item_user_state us ON us.catalog_item_id=i.id"]
         conditions = ["i.is_deleted=0", "COALESCE(us.hidden,0)=0"]
+        if candidate_ids is not None:
+            placeholders = []
+            for index, item_id in enumerate(candidate_ids):
+                params[f"candidate_{index}"] = item_id
+                placeholders.append(f":candidate_{index}")
+            conditions.append(f"i.id IN ({','.join(placeholders)})")
         if query.scope == "gallery":
             conditions.append("EXISTS (SELECT 1 FROM catalog_origins go WHERE go.catalog_item_id=i.id AND go.source_kind IN ('local','eagle','bookmarks') AND go.stale=0)")
         elif query.scope == "resources":
@@ -334,7 +348,7 @@ class CatalogService:
         if query.q:
             fts = _fts_query(query.q)
             if not fts:
-                return {"items": [], "next_cursor": None, "total_estimate": 0, "query": query.public_dict(), "facets": self.facets(query)}
+                return {"items": [], "next_cursor": None, "total_estimate": 0, "query": query.public_dict(), "facets": self.facets(query) if include_facets else {}}
             joins.append("JOIN catalog_fts f ON f.catalog_item_id=i.id")
             conditions.append("catalog_fts MATCH :fts")
             params["fts"] = fts
@@ -387,19 +401,32 @@ class CatalogService:
             WHERE {' AND '.join(page_conditions)}
             ORDER BY sort_value {direction}, i.id ASC LIMIT :limit
         """
-        cache_key, cache_revision = self._browse_cache_context(query)
+        cache_context = self._browse_cache_context(query) if candidate_ids is None else None
         with self.database.engine.connect() as conn:
             rows = list(conn.execute(text(sql), params).mappings())
-            total = self._browse_cache.get_total(cache_key, cache_revision)
+            total = self._browse_cache.get_total(*cache_context) if cache_context else None
             if total is None:
                 count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(filter_conditions)}"
                 count_params = {key: value for key, value in params.items() if key not in {"limit", "cursor_sort", "cursor_id"}}
                 total = int(conn.execute(text(count_sql), count_params).scalar() or 0)
-                self._browse_cache.store_total(cache_key, cache_revision, total)
+                if cache_context:
+                    self._browse_cache.store_total(*cache_context, total)
         has_more = len(rows) > query.limit
         rows = rows[: query.limit]
         next_cursor = self._encode_cursor(query, rows[-1]["sort_value"], rows[-1]["id"]) if has_more and rows else None
-        return {"items": [self._row(row) for row in rows], "next_cursor": next_cursor, "total_estimate": total, "query": query.public_dict(), "facets": self.facets(query, cache_context=(cache_key, cache_revision))}
+        return {"items": [self._row(row) for row in rows], "next_cursor": next_cursor, "total_estimate": total, "query": query.public_dict(), "facets": self.facets(query, cache_context=cache_context) if include_facets else {}}
+
+    def matching_ids(self, query: CatalogQuery, candidate_ids: list[str]) -> set[str]:
+        """Apply the same Navigator filters to a bounded related-item pool."""
+        matches: set[str] = set()
+        unique_ids = list(dict.fromkeys(candidate_ids))
+        for start in range(0, len(unique_ids), 100):
+            chunk = tuple(unique_ids[start:start + 100])
+            values = query.public_dict()
+            values.update({"limit": len(chunk), "cursor": None})
+            page = self.list(CatalogQuery.create(**values), candidate_ids=chunk, include_facets=False)
+            matches.update(item["id"] for item in page["items"])
+        return matches
 
     def facets(
         self,

@@ -257,7 +257,11 @@ def navigator_page():
     for depth in range(1, len(folder_parts) + 1):
         path = " / ".join(folder_parts[:depth])
         folder_crumbs.append({"name": path.rsplit(" / ", 1)[-1], "url": _quick_filter_url(query, folder=path, sources=("bookmarks",))})
-    topics = payload["facets"]["tags"][:12]
+    item_count = sum(payload["facets"]["types"].values())
+    topics = [
+        tag for tag in payload["facets"]["tags"]
+        if tag["count"] < item_count * 0.9
+    ][:12]
     reset_query = CatalogQuery.create(scope=query.scope, sources=scope_sources)
     random_values = query.public_dict()
     random_values.update({"sort": "random", "seed": 0, "cursor": ""})

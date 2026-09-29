@@ -7,6 +7,7 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from bs4 import BeautifulSoup
@@ -463,7 +464,7 @@ def test_gallery_detail_has_a_source_launch_and_related_items_before_rebuild(tmp
 
     bookmark = client.get(f"/api/catalog/items/{first}?source=bookmarks").get_json()
     resource = client.get(f"/api/catalog/items/{first}?source=resources").get_json()
-    related_response = client.get(f"/api/catalog/items/{first}/related?source=bookmarks")
+    related_response = client.get(f"/api/catalog/items/{first}/related")
 
     assert bookmark["launch_uri"] == "https://example.com/one"
     assert resource["launch_uri"] == "/resources/resource-1/"
@@ -471,6 +472,19 @@ def test_gallery_detail_has_a_source_launch_and_related_items_before_rebuild(tmp
     related = related_response.get_json()["items"]
     assert {item["id"] for item in related} == {second, third}
     assert all(item["launch_uri"] and item["reason"]["shared_tags"] for item in related)
+
+    # The detail panel should stay within the selected topic and source.
+    context = "scope=gallery&source=local&tags=knowledge&type=image&q=reference"
+    themed = client.get(f"/api/catalog/items/{first}/related?{context}")
+    assert themed.status_code == 200
+    assert [item["id"] for item in themed.get_json()["items"]] == [third]
+    assert client.get(
+        f"/api/catalog/items/{first}/related?scope=gallery&source=bookmarks&tags=knowledge"
+    ).get_json()["items"] == []
+
+    DiscoveryService(database).rebuild_item_relations()
+    rebuilt = client.get(f"/api/catalog/items/{first}/related?{context}")
+    assert [item["id"] for item in rebuilt.get_json()["items"]] == [third]
 
 
 def test_bookmark_folders_browse_descendants_and_preserve_multiple_placements(tmp_path, monkeypatch):
@@ -556,8 +570,8 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
     database = get_resource_database(tmp_path / "web.db")
     sync = CatalogSyncService(database)
     with database.engine.begin() as conn:
-        sync._upsert(conn, identity_key="local:web", source_kind="local", source_key="web", item_type="image", title="Web item", detail_uri="/image/web.jpg")
-        sync._upsert(conn, identity_key="url:web", source_kind="bookmarks", source_key="https://example.com/web", item_type="bookmark", title="Web bookmark", detail_uri="https://example.com/web", original_url="https://example.com/web")
+        sync._upsert(conn, identity_key="local:web", source_kind="local", source_key="web", item_type="image", title="Web item", detail_uri="/image/web.jpg", tags=(("inspiration", "user"), ("all-items", "user")))
+        sync._upsert(conn, identity_key="url:web", source_kind="bookmarks", source_key="https://example.com/web", item_type="bookmark", title="Web bookmark", detail_uri="https://example.com/web", original_url="https://example.com/web", tags=(("all-items", "user"),))
         sync._upsert(conn, identity_key="url:web", source_kind="resources", source_key="resource-web", item_type="article", title="Web resource", detail_uri="/resources/resource-web/", original_url="https://example.com/web", prefer=True)
     database.set_catalog_sync_status("local", status="complete", item_count=1, retry_count=0)
     database.set_catalog_sync_status("eagle", status="retrying", next_attempt=2, max_attempts=4)
@@ -626,7 +640,14 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
         f'[data-saved-search-id="{saved["id"]}"]'
     )
     assert saved_card is not None
-    assert saved_card.select_one("a").get_text(" ", strip=True).startswith("素材 未看書籤")
+    assert saved_card.select_one("a").get_text(strip=True) == "未看書籤"
+    soup = BeautifulSoup(gallery.data, "html.parser")
+    assert soup.select_one(".navigator-theme-entry") is not None
+    assert gallery.data.index(b'data-saved-search-id') < gallery.data.index(b'id="navigator-results-heading"')
+    topic = soup.select_one('.navigator-theme-entry .navigator-topic-list a[href*="tags="]')
+    assert topic is not None
+    assert parse_qs(urlsplit(topic["href"]).query)["tags"] == ["inspiration"]
+    assert "all-items" not in soup.select_one(".navigator-topic-list").get_text()
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         "[data-command-palette]"
     )

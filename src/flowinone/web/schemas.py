@@ -162,12 +162,6 @@ class LimitQuery(ApiQuery):
     limit: int = Field(default=8, ge=1, le=100)
 
 
-class RelatedLimitQuery(ApiQuery):
-    limit: int = Field(default=18, ge=1, le=100)
-    source: list[CatalogSource] = []
-    folder: str = Field(default="", max_length=500)
-
-
 class SimilarImageQuery(ApiQuery):
     limit: int = Field(default=12, ge=1, le=40)
     max_distance: int = Field(default=8, ge=0, le=32)
@@ -208,6 +202,10 @@ class CatalogListQuery(ApiQuery):
     seed: int = Field(default=0, ge=0)
     limit: int = Field(default=48, ge=1, le=100)
     cursor: str = Field(default="", max_length=500)
+
+
+class RelatedLimitQuery(CatalogListQuery):
+    limit: int = Field(default=18, ge=1, le=100)
 
 
 class ResourceOutput(ApiOutput):

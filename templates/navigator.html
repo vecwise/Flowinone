@@ -221,8 +221,30 @@
     </div>
   </nav>
 
-  <details class="navigator-explore" {% if query.folder or query.tags %}open{% endif %}>
-    <summary>按資料夾與主題逛{% if query.folder %}<span>目前：{{ query.folder }}</span>{% elif query.tags %}<span>主題：{{ query.tags|join('、') }}</span>{% endif %}</summary>
+  <section class="navigator-theme-entry" aria-labelledby="navigator-theme-heading">
+    <div class="navigator-theme-row navigator-topic-list" aria-label="熱門主題">
+      <h2 id="navigator-theme-heading">今天想看什麼</h2>
+      {% if query.tags %}<span class="navigator-theme-current">目前：{{ query.tags|join('、') }}</span>{% endif %}
+      {% for topic in topics[:6] %}<a class="navigator-chip {% if topic.name|lower in query.tags %}is-active{% endif %}" href="{{ topic.url }}" {% if topic.name|lower in query.tags %}aria-current="true"{% endif %}>{{ topic.name }} <small>{{ topic.count }}</small></a>{% endfor %}
+      {% if query.tags %}<a class="navigator-theme-clear" href="{{ topic_clear_url }}">清除主題</a>{% endif %}
+      {% if not topics %}<span class="navigator-explore-empty">同步來源後即可選擇主題。</span>{% endif %}
+      <button class="action-button" type="button" data-save-search-open>儲存目前條件</button>
+    </div>
+    {% if saved_searches %}
+    <div class="navigator-theme-row" aria-label="已儲存主題">
+      <span class="navigator-theme-label">已儲存</span>
+      {% for saved in saved_searches %}
+      <span class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
+        <a href="{{ saved.url }}" title="{{ saved.summary }}">{{ saved.label }}</a>
+        <button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除儲存搜尋：{{ saved.label }}">×</button>
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <details class="navigator-explore" {% if query.folder %}open{% endif %}>
+    <summary>按 Chrome 資料夾逛{% if query.folder %}<span>目前：{{ query.folder }}</span>{% endif %}</summary>
     <div class="navigator-explore-content">
       <section aria-labelledby="navigator-folders-heading">
         <div class="navigator-explore-heading">
@@ -236,12 +258,6 @@
         {% if folder_children %}<div class="navigator-folder-grid">
           {% for folder in folder_children %}<a class="navigator-folder-card" href="{{ folder.url }}"><strong>{{ folder.name }}</strong><small>{{ folder.count }} 個項目</small></a>{% endfor %}
         </div>{% else %}<p class="navigator-explore-empty">{% if query.folder %}此資料夾沒有子資料夾；下方仍可搜尋目前項目。{% else %}同步 Chrome 書籤後，資料夾會顯示在這裡。{% endif %}</p>{% endif %}
-      </section>
-      <section aria-labelledby="navigator-topics-heading">
-        <div class="navigator-explore-heading"><h2 id="navigator-topics-heading">熱門主題</h2>{% if query.tags %}<a href="{{ topic_clear_url }}">清除主題</a>{% endif %}</div>
-        {% if topics %}<div class="navigator-topic-list">
-          {% for topic in topics %}<a class="navigator-chip {% if topic.name|lower in query.tags %}is-active{% endif %}" href="{{ topic.url }}" {% if topic.name|lower in query.tags %}aria-current="true"{% endif %}>{{ topic.name }} <small>{{ topic.count }}</small></a>{% endfor %}
-        </div>{% else %}<p class="navigator-explore-empty">同步來源後，常見標籤會顯示在這裡。</p>{% endif %}
       </section>
     </div>
   </details>
@@ -303,25 +319,6 @@
   </section>
 
   {% if next_url %}<nav class="gallery-pagination" aria-label="Navigator 批次載入"><a class="action-button primary" href="{{ next_url }}">載入下一批</a></nav>{% endif %}
-
-  <section class="navigator-saved-searches" aria-labelledby="navigator-saved-searches-heading">
-    <div class="gallery-results-heading">
-      <div><p class="eyebrow">Quick views</p><h2 id="navigator-saved-searches-heading">已儲存搜尋</h2></div>
-      <button class="action-button" type="button" data-save-search-open>儲存目前搜尋</button>
-    </div>
-    {% if saved_searches %}
-    <div class="navigator-saved-search-grid">
-      {% for saved in saved_searches %}
-      <article class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
-        <a href="{{ saved.url }}"><span class="navigator-session-meta">{{ saved.scope_label }}</span><strong>{{ saved.label }}</strong><span>{{ saved.summary }}</span></a>
-        <button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除儲存搜尋：{{ saved.label }}">移除</button>
-      </article>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="navigator-saved-search-empty">把常用條件儲存起來；例如「未看設計參考」或「本週新加入」。</p>
-    {% endif %}
-  </section>
 
   {% if recent_sessions %}
   <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">

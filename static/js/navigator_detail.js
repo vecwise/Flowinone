@@ -10,8 +10,17 @@
     const params = new URLSearchParams();
     (query.sources || []).forEach((source) => params.append('source', source));
     if (query.folder) params.set('folder', query.folder);
-    const sourceQuery = params.toString();
-    const suffix = sourceQuery ? `?${sourceQuery}` : '';
+    const itemSuffix = params.toString() ? `?${params}` : '';
+    const relatedParams = new URLSearchParams(params);
+    ['q', 'scope', 'type', 'tag_mode', 'duration_min', 'duration_max', 'added_from', 'added_to'].forEach((key) => {
+      if (query[key] !== null && query[key] !== undefined && query[key] !== '') {
+        relatedParams.set(key, query[key]);
+      }
+    });
+    (query.tags || []).forEach((tag) => relatedParams.append('tags', tag));
+    if (query.favorite) relatedParams.set('favorite', '1');
+    if (query.unviewed) relatedParams.set('unviewed', '1');
+    const relatedSuffix = relatedParams.toString() ? `?${relatedParams}` : '';
     const status = dialog.querySelector('[data-gallery-detail-status]');
     const content = dialog.querySelector('[data-gallery-detail-content]');
     const image = dialog.querySelector('[data-gallery-detail-image]');
@@ -138,14 +147,14 @@
       content.hidden = true;
       back.hidden = trail.length === 0;
       try {
-        const item = await requestJson(`/api/catalog/items/${encodeURIComponent(id)}${suffix}`);
+        const item = await requestJson(`/api/catalog/items/${encodeURIComponent(id)}${itemSuffix}`);
         if (current !== sequence) return;
         renderItem(item);
         status.textContent = '';
         related.textContent = '正在尋找相關內容…';
         if (recordView) postView(id);
         try {
-          const result = await requestJson(`/api/catalog/items/${encodeURIComponent(id)}/related${suffix}`);
+          const result = await requestJson(`/api/catalog/items/${encodeURIComponent(id)}/related${relatedSuffix}`);
           if (current === sequence) renderRelated(result.items || []);
         } catch (_) {
           if (current === sequence) related.textContent = '暫時無法載入相關內容。';

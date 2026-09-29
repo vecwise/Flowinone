@@ -14,6 +14,7 @@ from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import utc_now_text
 
 from .browse import CatalogService
+from .query import CatalogQuery
 
 
 def _tokens(value: str) -> set[str]:
@@ -94,17 +95,23 @@ class DiscoveryService:
                     inserted += 1
         return {"items": len(rows), "relations": inserted}
 
-    def related_items(self, item_id: str, *, limit: int = 18) -> list[dict[str, Any]]:
+    def related_items(
+        self, item_id: str, *, limit: int = 18, context: CatalogQuery | None = None
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 100))
+        source_item = self.catalog.get(item_id)
         with self.database.engine.connect() as conn:
             rows = list(
                 conn.execute(
                     text("SELECT target_item_id,relation_type,score,reason_json FROM item_relations WHERE source_item_id=:id ORDER BY score DESC LIMIT :limit"),
-                    {"id": item_id, "limit": limit},
+                    {"id": item_id, "limit": max(48, limit * 6)},
                 ).mappings()
             )
+        matching = self.catalog.matching_ids(context, [row["target_item_id"] for row in rows]) if context else None
         output = []
         for row in rows:
+            if matching is not None and row["target_item_id"] not in matching:
+                continue
             try:
                 item = self.catalog.get(row["target_item_id"])
             except LookupError:
@@ -112,8 +119,8 @@ class DiscoveryService:
             if item["hidden"]:
                 continue
             output.append({**item, "relation_type": row["relation_type"], "score": row["score"], "reason": json.loads(row["reason_json"] or "{}")})
-        if len(output) >= limit:
-            return output[:limit]
+            if len(output) >= limit:
+                return output
 
         # New imports should still lead somewhere before a relation rebuild runs.
         with self.database.engine.connect() as conn:
@@ -132,11 +139,12 @@ class DiscoveryService:
                 GROUP BY i.id
                 ORDER BY shared_count DESC, i.captured_at DESC
                 LIMIT :candidate_limit
-            """), {"id": item_id, "candidate_limit": limit * 3}).mappings())
+            """), {"id": item_id, "candidate_limit": max(100, min(limit * 12, 500))}).mappings())
         seen = {item["id"] for item in output}
-        source_tags = set(self.catalog.get(item_id)["tags"])
+        matching = self.catalog.matching_ids(context, [row["id"] for row in candidates]) if context else None
+        source_tags = set(source_item["tags"])
         for candidate in candidates:
-            if candidate["id"] in seen:
+            if candidate["id"] in seen or (matching is not None and candidate["id"] not in matching):
                 continue
             item = self.catalog.get(candidate["id"])
             shared_tags = sorted(source_tags.intersection(item["tags"]))

@@ -50,7 +50,7 @@ def test_navigator_and_catalog_are_the_only_browser_read_surfaces(client):
     assert not any(rule.startswith("/gallery/lab") for rule in rules)
 
 
-def test_gallery_quick_filters_preserve_context_and_show_results_first(client):
+def test_gallery_quick_filters_preserve_context_and_show_compact_theme_entry(client):
     response = client.get("/navigator/?scope=gallery&source=local&q=design&type=image")
     assert response.status_code == 200
     soup = BeautifulSoup(response.data, "html.parser")
@@ -64,6 +64,6 @@ def test_gallery_quick_filters_preserve_context_and_show_results_first(client):
     assert query["type"] == ["video"]
     assert soup.select_one(".navigator-advanced[open]") is None
     assert "已套用" in soup.select_one(".navigator-advanced summary").get_text()
-    assert response.data.index(b'id="navigator-results-heading"') < response.data.index(
-        b'id="navigator-saved-searches-heading"'
+    assert response.data.index(b'id="navigator-theme-heading"') < response.data.index(
+        b'id="navigator-results-heading"'
     )

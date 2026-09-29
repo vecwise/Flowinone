@@ -34,7 +34,7 @@ function harness() {
   dialog.close = () => { dialog.open = false; dialog.listeners.close?.(); };
   const link = new Element();
   link.closest = () => ({dataset: {navigatorItem: 'first'}});
-  const page = new Element({navigatorQueryPayload: JSON.stringify({sources: ['bookmarks']})});
+  const page = new Element({navigatorQueryPayload: JSON.stringify({scope: 'gallery', sources: ['bookmarks'], q: 'old', tags: ['design'], tag_mode: 'all', favorite: true})});
   const document = {
     querySelector: (selector) => selector === '[data-gallery-detail]' ? dialog : page,
     querySelectorAll: () => [link],
@@ -76,6 +76,12 @@ test('gallery detail stays in place, follows related items, and returns focus', 
   assert.equal(new URL(parts.tags.children[0].href, 'http://localhost').searchParams.get('tags'), 'design');
   assert.equal(parts.related.children.length, 1);
   assert.match(requests[0].url, /source=bookmarks/);
+  const relatedUrl = new URL(requests.find((request) => request.url.includes('/related')).url, 'http://localhost');
+  assert.equal(relatedUrl.searchParams.get('scope'), 'gallery');
+  assert.equal(relatedUrl.searchParams.get('q'), 'old');
+  assert.equal(relatedUrl.searchParams.get('tags'), 'design');
+  assert.equal(relatedUrl.searchParams.get('tag_mode'), 'all');
+  assert.equal(relatedUrl.searchParams.get('favorite'), '1');
 
   parts.related.children[0].click();
   await flush();

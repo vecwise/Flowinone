@@ -166,8 +166,6 @@
 .navigator-explore > summary span { color: var(--fo-muted-text); font-size: .78rem; font-weight: 600; }
 .navigator-explore-content {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 22px;
     border-top: 1px solid var(--fo-border);
     padding: 14px;
 }
@@ -589,33 +587,35 @@
     padding: 2px 5px;
 }
 
-.navigator-saved-searches {
+.navigator-theme-entry {
     display: grid;
-    gap: 12px;
-    padding: 16px;
+    gap: 6px;
+    padding: 6px 10px;
     border: 1px solid var(--fo-border);
     border-radius: 10px;
     background: var(--fo-surface);
 }
-
-.navigator-saved-searches .gallery-results-heading { margin-bottom: 0; }
-.navigator-saved-search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.navigator-theme-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.navigator-theme-row h2 { margin: 0 6px 0 0; font-size: .9rem; }
+.navigator-theme-row > .action-button { min-height: 30px; margin-inline-start: auto; padding: 4px 8px; }
+.navigator-theme-label { color: var(--fo-muted-text); font-size: .75rem; font-weight: 700; margin-inline-end: 3px; }
+.navigator-theme-current { color: var(--fo-muted-text); font-size: .78rem; font-weight: 700; }
+.navigator-theme-clear { color: var(--fo-primary); font-size: .78rem; font-weight: 700; }
 .navigator-saved-search {
     display: flex;
     min-width: 0;
-    align-items: stretch;
+    align-items: center;
     border: 1px solid var(--fo-border);
-    border-radius: 8px;
+    border-radius: 999px;
     overflow: hidden;
     background: var(--fo-bg);
 }
-.navigator-saved-search > a { display: grid; flex: 1; gap: 4px; min-width: 0; padding: 11px; color: var(--fo-text); text-decoration: none; }
+.navigator-saved-search > a { min-width: 0; overflow: hidden; padding: 5px 8px; color: var(--fo-text); font-size: .78rem; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .navigator-saved-search > a:hover,
 .navigator-saved-search > a:focus-visible { background: var(--fo-primary-soft); outline: 3px solid var(--fo-ring); outline-offset: -3px; }
-.navigator-saved-search > a > span:last-child { overflow: hidden; color: var(--fo-muted-text); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
 .navigator-saved-search-delete {
     align-self: stretch;
-    min-width: 44px;
+    min-width: 28px;
     border: 0;
     border-inline-start: 1px solid var(--fo-border);
     background: transparent;
@@ -624,11 +624,10 @@
     font: inherit;
     font-size: .72rem;
     font-weight: 800;
-    padding: 8px;
+    padding: 4px;
 }
 .navigator-saved-search-delete:hover,
 .navigator-saved-search-delete:focus-visible { background: var(--fo-danger-soft, #fff0ee); color: var(--fo-danger, #b42318); outline: 3px solid var(--fo-ring); outline-offset: -3px; }
-.navigator-saved-search-empty { margin: 0; color: var(--fo-muted-text); font-size: .86rem; }
 
 .navigator-command-dialog,
 .navigator-save-search-dialog {
@@ -905,7 +904,7 @@
     .navigator-scope { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .navigator-sessions { padding: 14px; }
     .navigator-session-grid { grid-template-columns: 1fr; }
-    .navigator-saved-searches { padding: 14px; }
+    .navigator-theme-entry { padding: 8px; }
     .navigator-maintenance-panel { right: auto; left: 0; }
     .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
     .gallery-card-body { padding: 10px; }
