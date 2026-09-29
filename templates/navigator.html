@@ -235,20 +235,36 @@
     {% if payload['items'] %}
     <div class="gallery-grid" data-gallery-view="grid">
       {% for item in payload['items'] %}
-      <article class="gallery-card" data-navigator-item="{{ item.id }}">
+      <article class="gallery-card" data-navigator-item="{{ item.id }}" data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
         <a class="gallery-card-media" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
           <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async">
           <span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>
           {% if item.duration_seconds %}<span class="gallery-type-badge" style="left:auto;right:.6rem">{{ item.duration_seconds|int }}s</span>{% endif %}
         </a>
         <div class="gallery-card-body">
-          <div class="gallery-card-source"><span>{{ item.launch_source_label }}</span>{% if item.duration_seconds %}<span>{{ item.duration_seconds|int }}s</span>{% endif %}</div>
+          <div class="gallery-card-source">
+            {% if item.launch_source == 'bookmarks' and item.site_domain %}
+            <span class="gallery-site-mark" aria-hidden="true">{{ item.site_mark }}</span>
+            <span class="gallery-site-domain" title="{{ item.site_domain }}">{{ item.site_domain }}</span>
+            <span class="gallery-card-source-label">書籤</span>
+            {% else %}
+            <span>{{ item.launch_source_label }}</span>
+            {% if item.collection_label %}<span class="gallery-card-collection" title="{{ item.collection_path }}">{{ item.collection_label }}</span>{% endif %}
+            {% endif %}
+          </div>
           <h3><a href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
           {% if item.match_reason %}
           <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
           {% endif %}
-          {% if item.tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.tags[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
-          <div class="navigator-card-actions"><button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>{% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似</button>{% endif %}{% if item.open_count %}<span class="small-note">開啟 {{ item.open_count }} 次</span>{% endif %}</div>
+          {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
+          {% if item.launch_source == 'bookmarks' and item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">收藏於 {{ item.collection_label }}</p>{% endif %}
+          {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
+          <div class="navigator-card-actions">
+            <button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}">{{ '已收藏' if item.favorite else '收藏' }}</button>
+            {% if item.launch_source == 'bookmarks' and item.launch_uri %}<a class="action-button gallery-card-open" href="{{ item.launch_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
+            {% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似</button>{% endif %}
+            {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
+          </div>
         </div>
       </article>
       {% endfor %}

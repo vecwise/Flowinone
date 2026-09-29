@@ -246,10 +246,12 @@ def iter_chrome_bookmark_records():
                 yield from _walk(child, current_path)
         elif node_type == "url" and node.get("url"):
             url = str(node["url"])
+            meta_info = node.get("meta_info") if isinstance(node.get("meta_info"), dict) else {}
             yield {
                 "url": url,
                 "title": node.get("name") or url,
                 "folder_path": " / ".join(path_labels),
+                "description": node.get("description") or meta_info.get("description") or "",
             }
 
     for key in ("bookmark_bar", "other", "synced", "mobile"):

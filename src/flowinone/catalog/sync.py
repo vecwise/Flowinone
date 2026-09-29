@@ -271,12 +271,13 @@ class CatalogSyncService(EagleSyncMixin):
                 # entries. They remain in Chrome but are not safe Catalog links.
                 continue
             folder = str(record.get("folder_path") or "")
+            description = str(record.get("description") or "")
             tags = [(part, "folder") for part in re.split(r"\s*/\s*|\s+\/\s+", folder) if part]
             thumbnail = lookup_thumbnail_for_bookmark(url, str(record.get("title") or canonical), {"folder_path": folder})
             self._upsert(
                 conn, identity_key=identity, source_kind="bookmarks", source_key=f"{url}\n{folder}",
                 item_type="bookmark", title=str(record.get("title") or canonical),
-                description=folder, thumbnail_ref=str(thumbnail.route or ""), original_url=canonical, detail_uri=canonical,
+                description=description, thumbnail_ref=str(thumbnail.route or ""), original_url=canonical, detail_uri=canonical,
                 tags=tags, captured_at=str(record.get("date_added") or ""), metadata={"folder_path": folder, "thumbnail_ref": thumbnail.route or "", "thumbnail_sub_type": thumbnail.sub_type},
             )
             count += 1
@@ -304,7 +305,7 @@ class CatalogSyncService(EagleSyncMixin):
                 self._upsert(
                     conn, identity_key=f"local:{portable_uid or fingerprint or row['item_id']}", source_kind="local",
                     source_key=str(row["item_id"]), item_type=str(row["item_type"]),
-                    title=str(row.get("name") or "Untitled"), thumbnail_ref=str(row.get("thumbnail_route") or ""),
+                    title=str(row.get("name") or "Untitled"), description=str(row.get("annotation") or ""), thumbnail_ref=str(row.get("thumbnail_route") or ""),
                     detail_uri=detail, source_path=relative,
                     tags=[(tag, metadata_source) for tag in row.get("tags") or []], captured_at=str(row.get("updated_at") or ""),
                     metadata={"ext": row.get("ext"), "size_bytes": row.get("size_bytes"), "portable_uid": portable_uid or None, "metadata_provenance": metadata_source}, content_fingerprint=fingerprint,
