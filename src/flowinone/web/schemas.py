@@ -316,6 +316,7 @@ class CatalogItemOutput(ApiOutput):
     tags: list[str] = []
     sources: list[str] = []
     match_reason: dict[str, str] | None = None
+    playback_uri: str | None = None
 
 
 class CatalogFacetsOutput(ApiOutput):

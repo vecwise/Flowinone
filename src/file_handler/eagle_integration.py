@@ -16,6 +16,7 @@ from .paths import (
     IMAGE_EXTENSIONS,
     VIDEO_EXTENSIONS,
     _human_readable_size,
+    _build_file_route,
     _is_image_file,
     _is_video_file,
     _normalize_slashes,
@@ -712,7 +713,7 @@ def get_eagle_video_details(item_id):
     file_size = os.path.getsize(video_path)
     modified_time = datetime.fromtimestamp(os.path.getmtime(video_path))
 
-    stream_route = f"/serve_image/{normalized_abs_path}"
+    stream_route = _build_file_route(video_path, "external")
 
     thumbnail_route = DEFAULT_VIDEO_THUMBNAIL_ROUTE
     if os.path.isdir(item_dir):

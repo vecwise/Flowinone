@@ -17,13 +17,14 @@ class Element {
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = children; }
   removeAttribute(name) { delete this[name]; }
+  pause() { this.paused = true; }
   focus() { this.focused = true; }
   click(event = {}) { return this.listeners.click?.(event); }
 }
 
 function harness() {
   const names = [
-    'status', 'content', 'image', 'source', 'folder', 'title', 'description', 'tags',
+    'status', 'content', 'image', 'video', 'source', 'folder', 'title', 'description', 'tags',
     'launch', 'related', 'back', 'close',
   ];
   const parts = Object.fromEntries(names.map((name) => [name, new Element()]));
@@ -42,7 +43,7 @@ function harness() {
   const requests = [];
   const items = {
     first: {id: 'first', title: 'First', item_type: 'bookmark', launch_source: 'bookmarks', launch_source_label: '書籤', launch_uri: 'https://example.test/first', target_blank: true, folder_path: 'Research / Art', tags: ['design']},
-    second: {id: 'second', title: 'Second', item_type: 'image', launch_source: 'local', launch_source_label: '本機', launch_uri: '/image/second', tags: ['design']},
+    second: {id: 'second', title: 'Second', item_type: 'video', launch_source: 'local', launch_source_label: '本機', launch_uri: '/video/second', playback_uri: '/catalog/items/second/video?source=local', tags: ['design']},
   };
   const window = {
     document,
@@ -79,10 +80,15 @@ test('gallery detail stays in place, follows related items, and returns focus', 
   parts.related.children[0].click();
   await flush();
   assert.equal(parts.title.textContent, 'Second');
+  assert.equal(parts.video.src, '/catalog/items/second/video?source=local');
+  assert.equal(parts.video.hidden, false);
+  assert.equal(parts.image.hidden, true);
   assert.equal(parts.back.hidden, false);
   parts.back.click();
   await flush();
   assert.equal(parts.title.textContent, 'First');
+  assert.equal(parts.video.hidden, true);
+  assert.equal(parts.video.src, undefined);
   parts.close.click();
   assert.equal(dialog.open, false);
   assert.equal(link.focused, true);

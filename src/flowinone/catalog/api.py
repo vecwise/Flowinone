@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qs, urlsplit
 
-from flask import current_app, request
+from flask import abort, current_app, redirect, request, url_for
+
+from src.file_handler import AccessDenied, ExternalServiceError, MediaNotFound, get_eagle_video_details, get_video_details
 
 from src.flowinone.resource_library.canonical import hash_text
 from src.flowinone.resource_library.jobs import JobQueue
@@ -52,11 +55,46 @@ def api_item(item_id: str):
         service = CatalogService(_database())
         item = service.get(item_id)
         visible = visible_items(service, {"items": [item]}, _preview_query())
+        if visible and visible[0]["item_type"] == "video" and visible[0].get("launch_source") in {"local", "eagle"}:
+            visible[0]["playback_uri"] = url_for("catalog.catalog_video_playback", item_id=item_id, source=visible[0]["launch_source"])
         return validated_json(
             visible[0] if visible else item, CatalogItemOutput
         )
     except LookupError:
         return api_error("Catalog item not found", 404)
+
+
+@bp.get("/catalog/items/<item_id>/video")
+def catalog_video_playback(item_id: str):
+    """Resolve one Catalog video to its source-owned, range-capable stream."""
+    source = request.args.get("source")
+    if source not in {"local", "eagle"}:
+        abort(404)
+    service = CatalogService(_database())
+    try:
+        item = service.get(item_id)
+    except LookupError:
+        abort(404)
+    if item["item_type"] != "video":
+        abort(404)
+    origin = service.get_origin(item_id, source)
+    if not origin:
+        abort(404)
+    try:
+        if source == "eagle":
+            _, detail = get_eagle_video_details(origin["source_key"])
+        else:
+            path = origin.get("source_path") or ""
+            selected = parse_qs(urlsplit(origin.get("detail_uri") or "").query).get("src", ["external"])[0]
+            if selected not in {"internal", "external"}:
+                abort(404)
+            try:
+                _, detail = get_video_details(path, selected)
+            except MediaNotFound:
+                _, detail = get_video_details(path, "external" if selected == "internal" else "internal")
+    except (AccessDenied, MediaNotFound, ExternalServiceError):
+        abort(404)
+    return redirect(detail.source_url)
 
 
 @bp.get("/api/catalog/facets")

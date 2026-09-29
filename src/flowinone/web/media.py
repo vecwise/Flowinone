@@ -10,7 +10,7 @@ from urllib.parse import unquote
 from flask import Blueprint, abort, current_app, render_template, request, send_file
 
 from src.flowinone import config
-from src.file_handler.paths import IMAGE_EXTENSIONS
+from src.file_handler.paths import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from src.flowinone.paths import data_dir
 
 from src.file_handler import (
@@ -55,13 +55,12 @@ def _allowed_media_roots() -> list[Path]:
     return [root.resolve() for root in roots]
 
 
-@bp.get("/serve_image/<path:image_path>")
-def serve_image_by_full_path(image_path: str):
-    decoded = unquote(image_path).replace("\\", os.sep)
+def _serve_media_by_full_path(media_path: str, extensions: set[str]):
+    decoded = unquote(media_path).replace("\\", os.sep)
     if platform.system() != "Windows" and not decoded.startswith("/"):
         decoded = "/" + decoded
     candidate = Path(decoded).expanduser().resolve()
-    if candidate.suffix.lower().lstrip(".") not in IMAGE_EXTENSIONS:
+    if candidate.suffix.lower().lstrip(".") not in extensions:
         abort(404)
     if not candidate.is_file():
         abort(404)
@@ -72,6 +71,16 @@ def serve_image_by_full_path(image_path: str):
     return response
 
 
+@bp.get("/serve_image/<path:image_path>")
+def serve_image_by_full_path(image_path: str):
+    return _serve_media_by_full_path(image_path, IMAGE_EXTENSIONS)
+
+
+@bp.get("/serve_video/<path:video_path>")
+def serve_video_by_full_path(video_path: str):
+    return _serve_media_by_full_path(video_path, VIDEO_EXTENSIONS)
+
+
 def _render_local_detail(path: str, media_kind: str):
     source = request.args.get("src", "external")
     loader = get_video_details if media_kind == "video" else get_image_details
@@ -79,7 +88,19 @@ def _render_local_detail(path: str, media_kind: str):
         metadata, detail = loader(path, source)
     except AccessDenied:
         abort(403)
-    except (FolderNotFound, MediaNotFound):
+    except MediaNotFound:
+        if media_kind != "video":
+            abort(404)
+        # Older Catalog origins recorded every Local item as external. Keep
+        # those links usable when the file actually lives in the other root.
+        alternate = "internal" if source == "external" else "external"
+        try:
+            metadata, detail = loader(path, alternate)
+        except AccessDenied:
+            abort(403)
+        except (FolderNotFound, MediaNotFound):
+            abort(404)
+    except FolderNotFound:
         abort(404)
     metadata_dict = to_dict(metadata)
     detail_dict = serialize_detail(detail)

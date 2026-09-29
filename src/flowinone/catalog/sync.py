@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 from sqlalchemy import text
 
+from src.flowinone import config
 from src.file_handler.chrome_bookmarks import iter_chrome_bookmark_records
 from src.file_handler.item_db import fetch_items
 from src.file_handler.media_cache import lookup_thumbnail_for_bookmark
@@ -283,6 +284,8 @@ class CatalogSyncService(EagleSyncMixin):
 
     def _sync_local(self, conn) -> int:
         offset = count = 0
+        internal_root = Path(config.DB_route_internal).expanduser().resolve() if config.DB_route_internal else None
+        external_root = Path(config.DB_route_external).expanduser().resolve() if config.DB_route_external else None
         while offset < 100_000:
             payload = fetch_items(limit=1000, offset=offset)
             rows = payload.get("items") or []
@@ -292,7 +295,9 @@ class CatalogSyncService(EagleSyncMixin):
                 if row.get("item_type") not in {"image", "video"}:
                     continue
                 relative = str(row.get("relative_path") or "")
-                detail = f"/{row['item_type']}/{quote(relative, safe='/')}?src=external"
+                item_path = Path(str(row.get("absolute_path") or row.get("library_root") or "")).expanduser().resolve()
+                source = "internal" if internal_root and internal_root != external_root and item_path.is_relative_to(internal_root) else "external"
+                detail = f"/{row['item_type']}/{quote(relative, safe='/')}?src={source}"
                 fingerprint = str(row.get("content_fingerprint") or "")
                 portable_uid = str(row.get("portable_uid") or "")
                 metadata_source = "sidecar" if row.get("sidecar_updated_at") else "folder"
@@ -553,4 +558,3 @@ class CatalogSyncService(EagleSyncMixin):
             state.get("status") == "complete" or not state.get("locked", False)
             for state in result.values()
         )
-

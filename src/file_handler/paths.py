@@ -35,6 +35,8 @@ def _is_video_file(filename):
 def _build_file_route(abs_path, src):
     normalized = _normalize_slashes(abs_path)
     quoted = quote(normalized, safe="/:")
+    if _is_video_file(abs_path):
+        return f"/serve_video/{quoted.lstrip('/')}"
     if src == "external":
         return f"/serve_image/{quoted}"
     return f"/{quoted}"

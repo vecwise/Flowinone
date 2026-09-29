@@ -15,6 +15,7 @@
     const status = dialog.querySelector('[data-gallery-detail-status]');
     const content = dialog.querySelector('[data-gallery-detail-content]');
     const image = dialog.querySelector('[data-gallery-detail-image]');
+    const video = dialog.querySelector('[data-gallery-detail-video]');
     const source = dialog.querySelector('[data-gallery-detail-source]');
     const folder = dialog.querySelector('[data-gallery-detail-folder]');
     const title = dialog.querySelector('[data-gallery-detail-title]');
@@ -89,8 +90,16 @@
     };
 
     const renderItem = (item) => {
-      image.src = item.thumbnail_ref || '/static/default_thumbnail.svg';
+      const thumbnail = item.thumbnail_ref || '/static/default_thumbnail.svg';
+      image.src = thumbnail;
       image.alt = item.title;
+      const playable = item.item_type === 'video' && Boolean(item.playback_uri);
+      image.hidden = playable;
+      video.hidden = !playable;
+      if (playable) {
+        video.poster = thumbnail;
+        video.src = item.playback_uri;
+      }
       source.textContent = [item.launch_source_label, item.item_type].filter(Boolean).join(' · ');
       folder.hidden = item.launch_source !== 'bookmarks' || !item.folder_path;
       if (!folder.hidden) {
@@ -122,6 +131,9 @@
     async function load(id, recordView = false) {
       const current = ++sequence;
       activeId = id;
+      video.pause?.();
+      video.removeAttribute('src');
+      video.hidden = true;
       status.textContent = '正在載入素材…';
       content.hidden = true;
       back.hidden = trail.length === 0;
@@ -171,6 +183,8 @@
     dialog.addEventListener('close', () => {
       sequence += 1;
       activeId = null;
+      video.pause?.();
+      video.removeAttribute('src');
       returnFocus?.focus();
     });
     launch.addEventListener('click', () => {
