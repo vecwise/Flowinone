@@ -65,6 +65,7 @@ class CatalogQueryInput(ApiInput):
     sources: list[CatalogSource] = list(CatalogSource.__args__)
     type: StrictStr | None = Field(default=None, max_length=40)
     item_type: StrictStr | None = Field(default=None, max_length=40)
+    folder: StrictStr | None = Field(default=None, max_length=500)
     tags: list[StrictStr] = []
     tag_mode: Literal["any", "all"] = "any"
     favorite: StrictBool = False
@@ -164,6 +165,7 @@ class LimitQuery(ApiQuery):
 class RelatedLimitQuery(ApiQuery):
     limit: int = Field(default=18, ge=1, le=100)
     source: list[CatalogSource] = []
+    folder: str = Field(default="", max_length=500)
 
 
 class SimilarImageQuery(ApiQuery):
@@ -184,6 +186,7 @@ class CatalogListQuery(ApiQuery):
     scope: Literal["all", "gallery", "resources"] = "all"
     source: list[CatalogSource] = []
     type: str = Field(default="", max_length=40)
+    folder: str = Field(default="", max_length=500)
     tags: list[str] = []
     tag_mode: Literal["any", "all"] = "any"
     favorite: bool = False

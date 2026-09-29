@@ -273,7 +273,7 @@ class CatalogSyncService(EagleSyncMixin):
             tags = [(part, "folder") for part in re.split(r"\s*/\s*|\s+\/\s+", folder) if part]
             thumbnail = lookup_thumbnail_for_bookmark(url, str(record.get("title") or canonical), {"folder_path": folder})
             self._upsert(
-                conn, identity_key=identity, source_kind="bookmarks", source_key=url,
+                conn, identity_key=identity, source_kind="bookmarks", source_key=f"{url}\n{folder}",
                 item_type="bookmark", title=str(record.get("title") or canonical),
                 description=folder, thumbnail_ref=str(thumbnail.route or ""), original_url=canonical, detail_uri=canonical,
                 tags=tags, captured_at=str(record.get("date_added") or ""), metadata={"folder_path": folder, "thumbnail_ref": thumbnail.route or "", "thumbnail_sub_type": thumbnail.sub_type},
@@ -553,5 +553,4 @@ class CatalogSyncService(EagleSyncMixin):
             state.get("status") == "complete" or not state.get("locked", False)
             for state in result.values()
         )
-
 

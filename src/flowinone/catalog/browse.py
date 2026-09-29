@@ -181,6 +181,42 @@ class CatalogService:
         with self.database.engine.connect() as conn:
             return int(conn.execute(text("SELECT COUNT(*) FROM catalog_items WHERE is_deleted=0")).scalar() or 0)
 
+    def folder_children(self, parent: str = "", *, limit: int = 24) -> list[dict[str, Any]]:
+        """Show direct Chrome folder children while counting bookmarked items below them."""
+        parent = parent.strip()[:500]
+        with self.database.engine.connect() as conn:
+            rows = conn.execute(text("""
+                WITH folders AS (
+                    SELECT o.catalog_item_id AS item_id,
+                           CASE WHEN json_valid(o.metadata_json)
+                                THEN COALESCE(json_extract(o.metadata_json, '$.folder_path'), '')
+                                ELSE '' END AS path
+                    FROM catalog_origins o
+                    JOIN catalog_items i ON i.id=o.catalog_item_id AND i.is_deleted=0
+                    LEFT JOIN item_user_state state ON state.catalog_item_id=i.id
+                    WHERE o.source_kind='bookmarks' AND o.stale=0 AND COALESCE(state.hidden,0)=0
+                ), descendants AS (
+                    SELECT item_id,
+                           CASE WHEN :parent='' THEN path
+                                ELSE substr(path, length(:parent)+4) END AS remainder
+                    FROM folders
+                    WHERE :parent='' OR substr(path,1,length(:parent)+3)=:parent||' / '
+                ), children AS (
+                    SELECT item_id,
+                           CASE WHEN instr(remainder,' / ')>0
+                                THEN substr(remainder,1,instr(remainder,' / ')-1)
+                                ELSE remainder END AS name
+                    FROM descendants WHERE remainder!=''
+                )
+                SELECT name,COUNT(DISTINCT item_id) AS item_count
+                FROM children WHERE name!=''
+                GROUP BY name ORDER BY item_count DESC,name COLLATE NOCASE LIMIT :limit
+            """), {"parent": parent, "limit": max(1, min(limit, 100))}).mappings()
+            return [
+                {"name": row["name"], "path": f"{parent} / {row['name']}" if parent else row["name"], "count": row["item_count"]}
+                for row in rows
+            ]
+
     @staticmethod
     def _decode_cursor(query: CatalogQuery) -> dict[str, Any] | None:
         if not query.cursor:
@@ -250,6 +286,18 @@ class CatalogService:
                 conditions.append("EXISTS (SELECT 1 FROM catalog_origins bo WHERE bo.catalog_item_id=i.id AND bo.source_kind='bookmarks' AND bo.stale=0)")
             else:
                 conditions.append("i.item_type=:item_type")
+        if query.folder:
+            params["folder"] = query.folder
+            conditions.append("""
+                EXISTS (
+                    SELECT 1 FROM catalog_origins folder_origin
+                    WHERE folder_origin.catalog_item_id=i.id
+                      AND folder_origin.source_kind='bookmarks' AND folder_origin.stale=0
+                      AND json_valid(folder_origin.metadata_json)
+                      AND (json_extract(folder_origin.metadata_json,'$.folder_path')=:folder
+                           OR substr(json_extract(folder_origin.metadata_json,'$.folder_path'),1,length(:folder)+3)=:folder||' / ')
+                )
+            """)
         if query.favorite:
             conditions.append("COALESCE(us.favorite,0)=1")
         if query.unviewed:
@@ -483,7 +531,7 @@ class CatalogService:
         return result
 
     def get_origins_for_items(
-        self, item_ids: Iterable[str], *, include_stale: bool = False
+        self, item_ids: Iterable[str], *, include_stale: bool = False, folder: str = ""
     ) -> dict[str, dict[str, dict[str, Any]]]:
         """Load the newest origin for every item/source pair in one query."""
         selected = tuple(dict.fromkeys(str(item_id) for item_id in item_ids if item_id))
@@ -491,15 +539,22 @@ class CatalogService:
             return {}
         placeholders = ",".join(f":item_{index}" for index in range(len(selected)))
         stale_clause = "" if include_stale else "AND stale=0"
+        folder_order = ""
+        params = {f"item_{index}": item_id for index, item_id in enumerate(selected)}
+        if folder:
+            folder_order = (
+                "CASE WHEN source_kind='bookmarks' AND json_valid(metadata_json) AND "
+                "(json_extract(metadata_json,'$.folder_path')=:folder OR "
+                "substr(json_extract(metadata_json,'$.folder_path'),1,length(:folder)+3)=:folder||' / ') "
+                "THEN 0 ELSE 1 END, "
+            )
+            params["folder"] = folder
         statement = text(
             f"SELECT * FROM catalog_origins WHERE catalog_item_id IN ({placeholders}) "
-            f"{stale_clause} ORDER BY catalog_item_id, source_kind, last_seen_at DESC"
+            f"{stale_clause} ORDER BY catalog_item_id, source_kind, {folder_order}last_seen_at DESC"
         )
         with self.database.engine.connect() as conn:
-            rows = conn.execute(
-                statement,
-                {f"item_{index}": item_id for index, item_id in enumerate(selected)},
-            ).mappings()
+            rows = conn.execute(statement, params).mappings()
             grouped: dict[str, dict[str, dict[str, Any]]] = {}
             for row in rows:
                 item_id = str(row["catalog_item_id"])

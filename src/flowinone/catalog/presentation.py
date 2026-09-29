@@ -15,7 +15,7 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
     """Decorate canonical rows with a source-specific, usable launch target."""
     visible_items = []
     origins_by_item = service.get_origins_for_items(
-        item["id"] for item in payload["items"]
+        (item["id"] for item in payload["items"]), folder=query.folder
     )
     for item in payload["items"]:
         available = origins_by_item.get(item["id"], {})
@@ -42,6 +42,7 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             else chosen.get("detail_uri")
         )
         item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
+        item["folder_path"] = metadata.get("folder_path") or ""
         item["target_blank"] = source == "bookmarks"
         visible_items.append(item)
     return visible_items

@@ -114,6 +114,7 @@
 
   <form class="gallery-query navigator-query" method="get" role="search" aria-label="Navigator 搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
+    {% if query.folder %}<input type="hidden" name="folder" value="{{ query.folder }}">{% endif %}
     <div class="gallery-search-field">
       <label for="navigator-q">搜尋</label>
       <input id="navigator-q" type="search" name="q" value="{{ query.q }}" placeholder="{% if query.scope == 'gallery' %}標題、tag 或素材描述{% else %}標題、摘要、tag 或擷取內容{% endif %}">
@@ -147,7 +148,7 @@
       <button class="action-button" type="button" data-save-search-open>儲存搜尋</button>
       <a class="action-button" href="{{ reset_url }}">重設</a>
     </div>
-    <details class="navigator-advanced" {% if query.sources != scope_sources or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
+    <details class="navigator-advanced" {% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
       <summary>更多篩選{% if query.sources != scope_sources or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
       <div class="navigator-advanced-grid">
         <fieldset class="gallery-source-filter">
@@ -196,6 +197,31 @@
       <a class="navigator-chip {% if query.unviewed %}is-active{% endif %}" href="{{ quick_unviewed_url }}" {% if query.unviewed %}aria-current="true"{% endif %}>尚未瀏覽</a>
     </div>
   </nav>
+
+  <details class="navigator-explore" {% if query.folder or query.tags %}open{% endif %}>
+    <summary>按資料夾與主題逛{% if query.folder %}<span>目前：{{ query.folder }}</span>{% elif query.tags %}<span>主題：{{ query.tags|join('、') }}</span>{% endif %}</summary>
+    <div class="navigator-explore-content">
+      <section aria-labelledby="navigator-folders-heading">
+        <div class="navigator-explore-heading">
+          <h2 id="navigator-folders-heading">書籤資料夾</h2>
+          <a href="{{ folder_clear_url }}">全部資料夾</a>
+        </div>
+        {% if folder_crumbs %}<nav class="navigator-folder-crumbs" aria-label="資料夾階層">
+          <a href="{{ folder_clear_url }}">全部</a>
+          {% for crumb in folder_crumbs %}<span aria-hidden="true">/</span><a href="{{ crumb.url }}" {% if loop.last %}aria-current="page"{% endif %}>{{ crumb.name }}</a>{% endfor %}
+        </nav>{% endif %}
+        {% if folder_children %}<div class="navigator-folder-grid">
+          {% for folder in folder_children %}<a class="navigator-folder-card" href="{{ folder.url }}"><strong>{{ folder.name }}</strong><small>{{ folder.count }} 個項目</small></a>{% endfor %}
+        </div>{% else %}<p class="navigator-explore-empty">{% if query.folder %}此資料夾沒有子資料夾；下方仍可搜尋目前項目。{% else %}同步 Chrome 書籤後，資料夾會顯示在這裡。{% endif %}</p>{% endif %}
+      </section>
+      <section aria-labelledby="navigator-topics-heading">
+        <div class="navigator-explore-heading"><h2 id="navigator-topics-heading">熱門主題</h2>{% if query.tags %}<a href="{{ topic_clear_url }}">清除主題</a>{% endif %}</div>
+        {% if topics %}<div class="navigator-topic-list">
+          {% for topic in topics %}<a class="navigator-chip {% if topic.name|lower in query.tags %}is-active{% endif %}" href="{{ topic.url }}" {% if topic.name|lower in query.tags %}aria-current="true"{% endif %}>{{ topic.name }} <small>{{ topic.count }}</small></a>{% endfor %}
+        </div>{% else %}<p class="navigator-explore-empty">同步來源後，常見標籤會顯示在這裡。</p>{% endif %}
+      </section>
+    </div>
+  </details>
 
   <section aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
@@ -339,6 +365,7 @@
       <section class="navigator-detail-main">
         <img data-gallery-detail-image src="{{ url_for('static', filename='default_thumbnail.svg') }}" alt="">
         <p class="navigator-detail-source" data-gallery-detail-source></p>
+        <a class="navigator-detail-folder" data-gallery-detail-folder hidden href="#"></a>
         <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
         <p class="navigator-detail-description" data-gallery-detail-description></p>
         <div class="gallery-tags" data-gallery-detail-tags aria-label="Tags"></div>
@@ -375,7 +402,7 @@
     }
   });
   const meaningfulQuery = Boolean(
-    query.q || query.type || query.tags.length || query.favorite || query.unviewed ||
+    query.q || query.type || query.folder || query.tags.length || query.favorite || query.unviewed ||
     query.duration_min != null || query.duration_max != null || query.sort !== 'recently_added'
   );
   if (meaningfulQuery) saveSession({query, scroll_position: Number(saved || 0)});

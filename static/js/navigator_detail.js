@@ -9,12 +9,14 @@
     const query = JSON.parse(page.dataset.navigatorQueryPayload || '{}');
     const params = new URLSearchParams();
     (query.sources || []).forEach((source) => params.append('source', source));
+    if (query.folder) params.set('folder', query.folder);
     const sourceQuery = params.toString();
     const suffix = sourceQuery ? `?${sourceQuery}` : '';
     const status = dialog.querySelector('[data-gallery-detail-status]');
     const content = dialog.querySelector('[data-gallery-detail-content]');
     const image = dialog.querySelector('[data-gallery-detail-image]');
     const source = dialog.querySelector('[data-gallery-detail-source]');
+    const folder = dialog.querySelector('[data-gallery-detail-folder]');
     const title = dialog.querySelector('[data-gallery-detail-title]');
     const description = dialog.querySelector('[data-gallery-detail-description]');
     const tags = dialog.querySelector('[data-gallery-detail-tags]');
@@ -26,6 +28,20 @@
     let sequence = 0;
     let returnFocus = null;
     const trail = [];
+
+    const filterUrl = (key, value) => {
+      const url = new URL(global.location.href);
+      url.searchParams.delete('cursor');
+      if (key === 'tags') {
+        url.searchParams.delete('folder');
+        url.searchParams.set('tags', value);
+      } else {
+        url.searchParams.set('folder', value);
+        url.searchParams.delete('source');
+        url.searchParams.append('source', 'bookmarks');
+      }
+      return `${url.pathname}${url.search}`;
+    };
 
     const requestJson = async (url) => {
       const response = await global.fetch(url);
@@ -76,12 +92,18 @@
       image.src = item.thumbnail_ref || '/static/default_thumbnail.svg';
       image.alt = item.title;
       source.textContent = [item.launch_source_label, item.item_type].filter(Boolean).join(' · ');
+      folder.hidden = item.launch_source !== 'bookmarks' || !item.folder_path;
+      if (!folder.hidden) {
+        folder.textContent = `資料夾：${item.folder_path}`;
+        folder.href = filterUrl('folder', item.folder_path);
+      }
       title.textContent = item.title;
       description.textContent = item.description || '這個項目目前沒有描述。';
       tags.replaceChildren();
       (item.tags || []).slice(0, 12).forEach((tag) => {
-        const chip = root.createElement('span');
+        const chip = root.createElement('a');
         chip.textContent = tag;
+        chip.href = filterUrl('tags', tag);
         tags.append(chip);
       });
       launch.hidden = !item.launch_uri;

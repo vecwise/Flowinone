@@ -23,7 +23,7 @@ class Element {
 
 function harness() {
   const names = [
-    'status', 'content', 'image', 'source', 'title', 'description', 'tags',
+    'status', 'content', 'image', 'source', 'folder', 'title', 'description', 'tags',
     'launch', 'related', 'back', 'close',
   ];
   const parts = Object.fromEntries(names.map((name) => [name, new Element()]));
@@ -41,11 +41,12 @@ function harness() {
   };
   const requests = [];
   const items = {
-    first: {id: 'first', title: 'First', item_type: 'bookmark', launch_source_label: '書籤', launch_uri: 'https://example.test/first', target_blank: true, tags: ['design']},
-    second: {id: 'second', title: 'Second', item_type: 'image', launch_source_label: '本機', launch_uri: '/image/second', tags: ['design']},
+    first: {id: 'first', title: 'First', item_type: 'bookmark', launch_source: 'bookmarks', launch_source_label: '書籤', launch_uri: 'https://example.test/first', target_blank: true, folder_path: 'Research / Art', tags: ['design']},
+    second: {id: 'second', title: 'Second', item_type: 'image', launch_source: 'local', launch_source_label: '本機', launch_uri: '/image/second', tags: ['design']},
   };
   const window = {
     document,
+    location: {href: 'http://localhost/navigator/?scope=gallery&source=bookmarks&q=old'},
     fetch: async (url, options) => {
       requests.push({url, options});
       const id = url.includes('/second') ? 'second' : 'first';
@@ -55,7 +56,7 @@ function harness() {
       return {ok: true, json: async () => payload};
     },
   };
-  vm.runInNewContext(source, {window, URLSearchParams});
+  vm.runInNewContext(source, {window, URL, URLSearchParams});
   return {parts, dialog, link, requests};
 }
 
@@ -70,6 +71,8 @@ test('gallery detail stays in place, follows related items, and returns focus', 
   assert.equal(dialog.open, true);
   assert.equal(parts.title.textContent, 'First');
   assert.equal(parts.launch.href, 'https://example.test/first');
+  assert.equal(new URL(parts.folder.href, 'http://localhost').searchParams.get('folder'), 'Research / Art');
+  assert.equal(new URL(parts.tags.children[0].href, 'http://localhost').searchParams.get('tags'), 'design');
   assert.equal(parts.related.children.length, 1);
   assert.match(requests[0].url, /source=bookmarks/);
 

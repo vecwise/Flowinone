@@ -117,7 +117,7 @@ def api_related(item_id: str):
 
 def _preview_query() -> CatalogQuery:
     requested = tuple(source for source in request.args.getlist("source") if source in CATALOG_SOURCES)
-    return CatalogQuery.create(scope="all", sources=requested or CATALOG_SOURCES)
+    return CatalogQuery.create(scope="all", sources=requested or CATALOG_SOURCES, folder=request.args.get("folder"))
 
 
 @bp.get("/api/catalog/items/<item_id>/similar-images")

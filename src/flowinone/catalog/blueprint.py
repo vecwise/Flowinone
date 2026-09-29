@@ -50,6 +50,7 @@ def _navigator_query() -> CatalogQuery:
     return CatalogQuery.create(
         q=request.args.get("q"), scope=scope, sources=sources,
         item_type=request.args.get("type"),
+        folder=request.args.get("folder"),
         tags=request.args.getlist("tags") or request.args.get("tags"),
         tag_mode=request.args.get("tag_mode"), favorite=request.args.get("favorite"),
         unviewed=request.args.get("unviewed"),
@@ -67,6 +68,8 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
     pairs.extend(("source", source) for source in query.sources)
     if query.item_type:
         pairs.append(("type", query.item_type))
+    if query.folder:
+        pairs.append(("folder", query.folder))
     if query.tags:
         pairs.extend((("tags", ",".join(query.tags)), ("tag_mode", query.tag_mode)))
     if query.favorite:
@@ -158,6 +161,8 @@ def _saved_search_summary(query: CatalogQuery) -> str:
         details.append("尚未瀏覽")
     if query.item_type:
         details.append(ITEM_TYPE_LABELS.get(query.item_type, query.item_type))
+    if query.folder:
+        details.append(f"資料夾：{query.folder}")
     return " · ".join(details) or "篩選瀏覽"
 
 
@@ -205,6 +210,13 @@ def navigator_page():
     if payload["next_cursor"]:
         next_url = _navigator_url(effective_query, cursor=payload["next_cursor"])
     scope_sources = NAVIGATOR_SCOPE_SOURCES[query.scope]
+    folder_children = service.folder_children(query.folder)
+    folder_crumbs = []
+    folder_parts = query.folder.split(" / ") if query.folder else []
+    for depth in range(1, len(folder_parts) + 1):
+        path = " / ".join(folder_parts[:depth])
+        folder_crumbs.append({"name": path.rsplit(" / ", 1)[-1], "url": _quick_filter_url(query, folder=path, sources=("bookmarks",))})
+    topics = payload["facets"]["tags"][:12]
     reset_query = CatalogQuery.create(scope=query.scope, sources=scope_sources)
     random_values = query.public_dict()
     random_values.update({"sort": "random", "seed": 0, "cursor": ""})
@@ -260,6 +272,17 @@ def navigator_page():
         quick_all_sources_url=_quick_filter_url(query, sources=scope_sources),
         quick_favorite_url=_quick_filter_url(query, favorite=not query.favorite),
         quick_unviewed_url=_quick_filter_url(query, unviewed=not query.unviewed),
+        folder_children=[
+            {**folder, "url": _quick_filter_url(query, folder=folder["path"], sources=("bookmarks",), cursor="")}
+            for folder in folder_children
+        ],
+        folder_crumbs=folder_crumbs,
+        folder_clear_url=_quick_filter_url(query, folder="", sources=scope_sources),
+        topics=[
+            {**topic, "url": _quick_filter_url(query, q="", type="", folder="", tags=(topic["name"],), sources=scope_sources)}
+            for topic in topics
+        ],
+        topic_clear_url=_quick_filter_url(query, tags=()),
         source_watch_status=CatalogSourceWatcher(_database()).status(),
         similarity_status=CatalogSimilarityService(_database()).status(),
         eagle_available=eagle_available,

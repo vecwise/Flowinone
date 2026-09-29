@@ -389,9 +389,10 @@ def test_catalog_saved_searches_keep_named_queries_separate_from_sessions(tmp_pa
     assert saved["query"] == {
         "q": "visual",
         "scope": "gallery",
-        "sources": ["eagle"],
-        "type": None,
-        "tags": [],
+            "sources": ["eagle"],
+            "type": None,
+            "folder": None,
+            "tags": [],
         "tag_mode": "any",
         "favorite": False,
         "unviewed": False,
@@ -458,6 +459,52 @@ def test_gallery_detail_has_a_source_launch_and_related_items_before_rebuild(tmp
     related = related_response.get_json()["items"]
     assert {item["id"] for item in related} == {second, third}
     assert all(item["launch_uri"] and item["reason"]["shared_tags"] for item in related)
+
+
+def test_bookmark_folders_browse_descendants_and_preserve_multiple_placements(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from src.flowinone.catalog import sync as catalog_sync
+
+    database = get_resource_database(tmp_path / "folders.db")
+    records = [
+        {"url": "https://example.com/one", "title": "One", "folder_path": "Art / Illustration"},
+        {"url": "https://example.com/one", "title": "One", "folder_path": "Art / Motion"},
+        {"url": "https://example.com/two", "title": "Two", "folder_path": "Art / Motion"},
+        {"url": "https://example.com/three", "title": "Three", "folder_path": "Work / Video"},
+    ]
+    monkeypatch.setattr(catalog_sync, "iter_chrome_bookmark_records", lambda: iter(records))
+    monkeypatch.setattr(
+        catalog_sync, "lookup_thumbnail_for_bookmark",
+        lambda *_args, **_kwargs: SimpleNamespace(route=None, sub_type=None),
+    )
+    assert CatalogSyncService(database).sync(("bookmarks",))["bookmarks"]["status"] == "complete"
+    service = CatalogService(database)
+    assert [(folder["path"], folder["count"]) for folder in service.folder_children()] == [
+        ("Art", 2), ("Work", 1),
+    ]
+    assert [(folder["path"], folder["count"]) for folder in service.folder_children("Art")] == [
+        ("Art / Motion", 2), ("Art / Illustration", 1),
+    ]
+    assert service.list(CatalogQuery.create(scope="gallery", sources=["bookmarks"], folder="Art"))["total_estimate"] == 2
+    assert service.list(CatalogQuery.create(scope="gallery", sources=["bookmarks"], folder="Art / Illustration"))["total_estimate"] == 1
+
+    app = Flask(
+        "catalog-folder-browser",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(database.path), FLOWINONE_RESOURCE_LINK_THUMBNAILS=False)
+    register_routes(app)
+    client = app.test_client()
+    response = client.get("/navigator/?scope=gallery&source=bookmarks&folder=Art&q=One")
+    assert response.status_code == 200
+    soup = BeautifulSoup(response.data, "html.parser")
+    assert soup.select_one(".navigator-explore[open]") is not None
+    assert soup.select_one(".navigator-advanced[open]") is None
+    assert {link.get_text(strip=True) for link in soup.select(".navigator-folder-card strong")} == {"Motion", "Illustration"}
+    catalog = client.get("/api/catalog/items?scope=gallery&source=bookmarks&folder=Art")
+    assert catalog.status_code == 200
+    assert catalog.get_json()["total_estimate"] == 2
 
 
 def test_sidecar_roundtrip_preserves_portable_identity(monkeypatch, tmp_path):

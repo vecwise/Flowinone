@@ -62,7 +62,8 @@ def test_gallery_quick_filters_preserve_context_and_show_results_first(client):
     assert query["q"] == ["design"]
     assert query["source"] == ["local"]
     assert query["type"] == ["video"]
-    assert soup.select_one(".navigator-advanced[open]") is not None
+    assert soup.select_one(".navigator-advanced[open]") is None
+    assert "已套用" in soup.select_one(".navigator-advanced summary").get_text()
     assert response.data.index(b'id="navigator-results-heading"') < response.data.index(
         b'id="navigator-saved-searches-heading"'
     )

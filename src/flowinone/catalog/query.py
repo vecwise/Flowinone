@@ -40,6 +40,7 @@ class CatalogQuery:
     scope: str = "all"
     sources: tuple[str, ...] = CATALOG_SOURCES
     item_type: str = ""
+    folder: str = ""
     tags: tuple[str, ...] = ()
     tag_mode: str = "any"
     favorite: bool = False
@@ -100,6 +101,7 @@ class CatalogQuery:
             scope=scope if scope in {"all", "gallery", "resources"} else "all",
             sources=sources,
             item_type=str(values.get("item_type") or values.get("type") or "").strip().lower()[:40],
+            folder=str(values.get("folder") or "").strip()[:500],
             tags=tags,
             tag_mode="all" if str(values.get("tag_mode") or "any").lower() == "all" else "any",
             favorite=bool(values.get("favorite") in (True, 1, "1", "true", "yes")),
@@ -141,6 +143,7 @@ class CatalogQuery:
             "scope": self.scope,
             "sources": list(self.sources),
             "type": self.item_type or None,
+            "folder": self.folder or None,
             "tags": list(self.tags),
             "tag_mode": self.tag_mode,
             "favorite": self.favorite,
@@ -154,5 +157,4 @@ class CatalogQuery:
             "limit": self.limit,
             "cursor": self.cursor or None,
         }
-
 
