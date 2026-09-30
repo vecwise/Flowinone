@@ -135,6 +135,7 @@
 
   <form class="gallery-query navigator-query" method="get" role="search" aria-label="Navigator 搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
+    <input type="hidden" name="view" value="{{ 'knowledge' if view == 'knowledge' else '' }}">
     {% if query.folder %}<input type="hidden" name="folder" value="{{ query.folder }}">{% endif %}
     <div class="gallery-search-field">
       <label for="navigator-q">搜尋</label>
@@ -266,13 +267,14 @@
     <div class="gallery-results-heading">
       <div><p class="eyebrow">{{ 'Browse' if query.scope == 'gallery' else 'Results' }}</p><h2 id="navigator-results-heading">{{ payload.total_estimate }} 個項目</h2></div>
       {% if payload['items'] %}<div class="navigator-view-switch" role="group" aria-label="結果檢視方式">
-        <button type="button" data-gallery-view-option="grid" aria-pressed="true">網格</button>
+        <button type="button" data-gallery-view-option="grid" aria-pressed="{{ 'false' if view == 'knowledge' else 'true' }}">網格</button>
         <button type="button" data-gallery-view-option="list" aria-pressed="false">列表</button>
         <button type="button" data-gallery-view-option="shelf" aria-pressed="false">橫向瀏覽</button>
+        <button type="button" data-gallery-view-option="knowledge" aria-pressed="{{ 'true' if view == 'knowledge' else 'false' }}">知識</button>
       </div>{% endif %}
     </div>
     {% if payload['items'] %}
-    <div class="gallery-grid" data-gallery-view="grid">
+    <div class="gallery-grid" data-gallery-view="{{ view }}" data-knowledge-loaded="{{ 'true' if view == 'knowledge' else 'false' }}">
       {% for item in payload['items'] %}
       <article id="item-{{ item.id }}" class="gallery-card" data-navigator-item="{{ item.id }}" data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
         <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
@@ -301,6 +303,7 @@
           <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
           {% endif %}
           {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
+          {% if item.knowledge_excerpt and not (item.match_reason and item.match_reason.field == 'content') %}<p class="navigator-knowledge-excerpt">{{ item.knowledge_excerpt }}</p>{% endif %}
           {% if item.launch_source == 'bookmarks' and item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">資料夾：{{ item.collection_label }}</p>{% endif %}
           {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="navigator-card-actions">

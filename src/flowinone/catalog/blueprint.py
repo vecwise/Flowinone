@@ -129,7 +129,10 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
 
 
 def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
-    return f"{url_for('catalog.navigator_page')}?{urlencode(_navigator_query_pairs(query, cursor=cursor))}"
+    pairs = _navigator_query_pairs(query, cursor=cursor)
+    if request.args.get("view") == "knowledge":
+        pairs.append(("view", "knowledge"))
+    return f"{url_for('catalog.navigator_page')}?{urlencode(pairs)}"
 
 
 def _quick_filter_url(query: CatalogQuery, **changes) -> str:
@@ -226,6 +229,7 @@ def _navigator_saved_searches(service: CatalogService) -> list[dict]:
 def navigator_page():
     service = CatalogService(_database())
     query = _navigator_query()
+    view = "knowledge" if request.args.get("view") == "knowledge" else "grid"
     if query.sort == "random" and not query.seed:
         values = query.public_dict()
         values["seed"] = secrets.randbelow(2_147_483_646) + 1
@@ -249,6 +253,10 @@ def navigator_page():
     except ValueError as exc:
         abort(400, description=str(exc))
     payload["items"] = visible_items(service, payload, effective_query)
+    if view == "knowledge":
+        excerpts = service.text_excerpts_for_items([item["id"] for item in payload["items"]])
+        for item in payload["items"]:
+            item["knowledge_excerpt"] = excerpts.get(item["id"], "")
     bookmark_source_health = _bookmark_source_health(
         Path(CHROME_BOOKMARK_PATH),
         payload["facets"]["sync"].get("bookmarks", {}),
@@ -277,6 +285,7 @@ def navigator_page():
     return render_template(
         "navigator.html",
         title="Navigator · Flowinone",
+        view=view,
         resume_scroll=request.args.get("resume_scroll", ""),
         payload=payload,
         query=query,

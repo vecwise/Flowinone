@@ -536,6 +536,26 @@ class CatalogService:
             result["tags"] = list(conn.execute(text("SELECT DISTINCT t.name FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id WHERE it.catalog_item_id=:id ORDER BY t.name"), {"id": item_id}).scalars())
             return result
 
+    def text_excerpts_for_items(self, item_ids: list[str], *, length: int = 440) -> dict[str, str]:
+        """Read short extracted-text previews for the current Catalog page."""
+        if not item_ids:
+            return {}
+        params = {f"item_{index}": item_id for index, item_id in enumerate(item_ids)}
+        placeholders = ",".join(f":item_{index}" for index in range(len(item_ids)))
+        params["length"] = length
+        with self.database.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT catalog_item_id, substr(extracted_text, 1, :length) excerpt "
+                    f"FROM catalog_fts WHERE catalog_item_id IN ({placeholders})"
+                ),
+                params,
+            ).mappings()
+            return {
+                row["catalog_item_id"]: " ".join((row["excerpt"] or "").split())
+                for row in rows
+            }
+
     def get_origin(self, item_id: str, source_kind: str, *, include_stale: bool = False) -> dict[str, Any] | None:
         """Return the source-owned launch metadata for one canonical item.
 

@@ -330,6 +330,14 @@
 }
 .gallery-grid[data-gallery-view="shelf"] .gallery-card { scroll-snap-align: start; }
 .gallery-grid[data-gallery-view="shelf"] .gallery-card-media { aspect-ratio: 16 / 9; }
+.gallery-grid[data-gallery-view="knowledge"] { grid-template-columns: minmax(0, 1fr); max-width: 1040px; }
+.gallery-grid[data-gallery-view="knowledge"] .gallery-card { display: grid; grid-template-columns: 150px minmax(0, 1fr); }
+.gallery-grid[data-gallery-view="knowledge"] .gallery-card-media { aspect-ratio: auto; min-height: 100%; }
+.gallery-grid[data-gallery-view="knowledge"] .gallery-card-body { padding: 18px; gap: 10px; }
+.gallery-grid[data-gallery-view="knowledge"] .gallery-card h3 { font-size: 1.14rem; }
+.gallery-grid[data-gallery-view="knowledge"] .gallery-card-description { -webkit-line-clamp: 4; font-size: .86rem; }
+.navigator-knowledge-excerpt { display: none; margin: 0; color: var(--fo-text); font-size: .83rem; line-height: 1.6; }
+.gallery-grid[data-gallery-view="knowledge"] .navigator-knowledge-excerpt { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
 
 .gallery-card {
     min-width: 0;
@@ -910,6 +918,7 @@
     .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
     .gallery-card-body { padding: 10px; }
     .gallery-grid[data-gallery-view="list"] .gallery-card { grid-template-columns: 130px minmax(0, 1fr); }
+    .gallery-grid[data-gallery-view="knowledge"] .gallery-card { grid-template-columns: 110px minmax(0, 1fr); }
     .gallery-grid[data-gallery-view="shelf"] { grid-auto-columns: min(82vw, 340px); }
     .navigator-detail-layout { grid-template-columns: 1fr; }
     .navigator-detail-main { padding: 14px; }
@@ -933,6 +942,8 @@
     .navigator-query-actions .action-button { flex: 1 1 0; }
     .gallery-grid { grid-template-columns: 1fr; }
     .gallery-grid[data-gallery-view="list"] .gallery-card { grid-template-columns: 105px minmax(0, 1fr); }
+    .gallery-grid[data-gallery-view="knowledge"] .gallery-card { display: block; }
+    .gallery-grid[data-gallery-view="knowledge"] .gallery-card-media { display: none; }
     .gallery-grid[data-gallery-view="list"] .gallery-card-body { gap: 5px; }
     .gallery-grid[data-gallery-view="list"] .gallery-tags,
     .gallery-grid[data-gallery-view="list"] .navigator-match-reason { display: none; }

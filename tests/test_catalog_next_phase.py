@@ -438,6 +438,30 @@ def test_recent_browse_session_resumes_page_and_focused_item(tmp_path):
     assert resumed.select_one(f"#item-{next_item['id']}") is not None
 
 
+def test_knowledge_view_reuses_catalog_results_and_shows_extracted_preview(tmp_path):
+    database, first, _second, _third = _catalog(tmp_path)
+    app = Flask(
+        "catalog-knowledge-view",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(database.path))
+    register_routes(app)
+    client = app.test_client()
+    grid = BeautifulSoup(client.get("/navigator/?scope=all&source=resources").data, "html.parser")
+    knowledge = BeautifulSoup(client.get("/navigator/?scope=all&source=resources&view=knowledge").data, "html.parser")
+    assert [card["data-navigator-item"] for card in grid.select(".gallery-card")] == [
+        card["data-navigator-item"] for card in knowledge.select(".gallery-card")
+    ] == [first]
+    assert knowledge.select_one(".gallery-grid")["data-gallery-view"] == "knowledge"
+    assert knowledge.select_one(".gallery-grid")["data-knowledge-loaded"] == "true"
+    assert knowledge.select_one('form.navigator-query input[name="view"]')["value"] == "knowledge"
+    card = knowledge.select_one(".gallery-card")
+    assert card.select_one(".navigator-knowledge-excerpt").get_text(strip=True) == "catalog search projection"
+    assert card.select_one(".gallery-card-open")["href"] == "https://example.com/one"
+    assert "view=knowledge" in knowledge.select_one('.navigator-chip[href*="source=resources"]')["href"]
+
+
 def test_catalog_saved_searches_keep_named_queries_separate_from_sessions(tmp_path):
     database, _first, second, _third = _catalog(tmp_path)
     service = CatalogService(database)

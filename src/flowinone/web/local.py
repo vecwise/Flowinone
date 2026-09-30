@@ -305,8 +305,15 @@ def _build_index_context(flags: dict[str, bool]) -> dict:
 
     actions = [
         {
-            "label": "瀏覽 Web Resources",
-            "description": "查看已擷取的網頁 metadata、摘要與全文。",
+            "label": "在 Catalog 閱讀知識",
+            "description": "用同一份跨來源索引查看摘要、全文片段與原始來源。",
+            "url": url_for("catalog.navigator_page", scope="all", view="knowledge"),
+            "enabled": True,
+            "tone": "neutral",
+        },
+        {
+            "label": "管理 Web Resources",
+            "description": "新增網址、檢查擷取狀態，或查看來源詳情。",
             "url": url_for("resource_library.resource_index"),
             "enabled": True,
             "tone": "neutral",
