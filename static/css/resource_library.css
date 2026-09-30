@@ -276,6 +276,12 @@
     font-weight: 700;
 }
 
+.resource-batch-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.resource-batch-controls span { color: var(--fo-muted-text); font-size: .85rem; font-weight: 700; }
+.resource-enrich-select { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: .82rem; font-weight: 700; }
+.resource-enrich-select small,
+.resource-enrich-complete { color: var(--fo-muted-text); font-size: .75rem; font-weight: 600; }
+
 .resource-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

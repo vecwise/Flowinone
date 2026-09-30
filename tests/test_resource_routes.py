@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from flask import Flask
 
 from routes import register_routes
+from src.flowinone.resource_library.database import get_resource_database
+from src.flowinone.resource_library.jobs import JobQueue
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +67,31 @@ def test_resource_pages_and_json_crud(resource_app):
     assert "AI" not in removed.get_json()["tag_names"]
     assert client.post(f"/api/resources/{resource['id']}/status", json={}).status_code == 404
     assert client.post(f"/api/resources/{resource['id']}/promote", json={}).status_code == 404
+
+
+def test_selected_resources_queue_bounded_on_demand_enrichment(resource_app):
+    client = resource_app.test_client()
+    ids = [
+        client.post("/api/resources", json={"url": f"https://example.com/pilot-{index}", "enqueue": False}).get_json()["resource"]["id"]
+        for index in range(2)
+    ]
+    page = BeautifulSoup(client.get("/resources/").data, "html.parser")
+    form = page.select_one('form[action^="/resources/enrich-selection"]')
+    assert form is not None
+    assert {field["value"] for field in form.select('input[name="resource_id"]')} == set(ids)
+    token = form.select_one('input[name="csrf_token"]')["value"]
+    empty = client.post(form["action"], data={"csrf_token": token}, follow_redirects=True)
+    assert "請選擇 1–50 筆資源" in empty.get_data(as_text=True)
+
+    response = client.post(
+        form["action"], data={"csrf_token": token, "resource_id": ids}, follow_redirects=True
+    )
+    assert "已排入 2 筆資源的擷取工作" in response.get_data(as_text=True)
+    queue = JobQueue(get_resource_database(Path(resource_app.config["FLOWINONE_RESOURCE_DB_PATH"])))
+    for resource_id in ids:
+        assert {job["job_type"] for job in queue.list_for_resource(resource_id)} == {
+            "fetch_metadata", "download_thumbnail", "extract_content"
+        }
 
 
 def test_renderer_root_and_removed_workflow_routes(resource_app):

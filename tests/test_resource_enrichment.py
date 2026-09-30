@@ -152,7 +152,7 @@ def test_youtube_extractor_keeps_description_and_transcript(monkeypatch):
 
 def test_enrichment_persists_content_and_updates_fts(monkeypatch, tmp_path):
     database = ResourceDatabase(tmp_path / "resource.db")
-    settings = make_settings(tmp_path)
+    settings = replace(make_settings(tmp_path), llm_base_url="http://localhost:1234", llm_model="test-model")
     service = ResourceService(database, link_thumbnail_cache=False)
     resource_id = service.create_url(
         "https://example.com/article", title="Before", enqueue=False
@@ -177,6 +177,7 @@ def test_enrichment_persists_content_and_updates_fts(monkeypatch, tmp_path):
     enrichment = EnrichmentService(database, settings)
     result = enrichment.extract_content(resource_id)
     assert Path(result["text_path"]).is_file()
+    assert not any(job["job_type"] == "generate_summary" for job in JobQueue(database).list_for_resource(resource_id))
     detail = service.repository.get(resource_id)
     assert detail["enrichment_status"] == "complete"
     assert service.repository.list(query="hippocampus").total == 1

@@ -83,9 +83,13 @@
   </form>
 
   <section aria-labelledby="resource-results-heading">
+    {% if resources %}
+    <form method="post" action="{{ url_for('resource_library.resource_enrich_selection', q=filters.query, source_type=(filters.source_types|first or ''), page=page.page) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% endif %}
     <div class="resource-section-heading">
       <div><p class="eyebrow">Resources</p><h2 id="resource-results-heading">{{ page.total }} 筆結果</h2></div>
-      <span>第 {{ page.page }} / {{ page_count }} 頁</span>
+      <div class="resource-batch-controls"><span>第 {{ page.page }} / {{ page_count }} 頁</span>{% if resources %}<button class="action-button" type="submit">擷取選取項目</button>{% endif %}</div>
     </div>
 
     {% if resources %}
@@ -99,6 +103,7 @@
         <div class="resource-card-body">
           <div class="resource-card-meta"><span>{{ resource.domain or '未知來源' }}</span><span>{{ resource.captured_at[:10] if resource.captured_at else '' }}</span></div>
           <h3><a href="{{ resource.detail_url }}">{{ resource.title }}</a></h3>
+          {% if resource.enrichment_status != 'complete' %}<label class="resource-enrich-select"><input type="checkbox" name="resource_id" value="{{ resource.id }}"> 選取擷取全文 <small>目前：{{ resource.enrichment_status }}</small></label>{% else %}<span class="resource-enrich-complete">已擷取全文</span>{% endif %}
           <p class="resource-summary">{{ resource.summary_one_line or resource.description or '尚未擷取摘要。' }}</p>
           {% if resource.tag_names %}<div class="resource-tags">{% for tag in resource.tag_names[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="resource-card-actions">
@@ -109,6 +114,7 @@
       </article>
       {% endfor %}
     </div>
+    </form>
     {% else %}
     <div class="resource-empty"><h3>沒有符合的資源</h3><p>加入網址、同步 Chrome，或清除目前搜尋條件。</p></div>
     {% endif %}

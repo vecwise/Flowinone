@@ -297,14 +297,6 @@ class EnrichmentService:
             stored.enrichment_error = None
             stored.updated_at = utc_now_text()
             self.repository._sync_fts(session, stored, extracted.text)
-            if self.ai.available:
-                self.jobs.queue_in_session(
-                    session,
-                    "generate_summary",
-                    resource_id=resource_id,
-                    payload={"url": stored.canonical_url},
-                    input_hash=text_digest,
-                )
         refresh_resource_catalog(self.database, resource_id)
         return {
             "text_path": str(text_path),

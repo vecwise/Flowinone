@@ -206,5 +206,18 @@ class ResourceService:
             )
         return queued
 
+    def enqueue_selected_enrichment(self, resource_ids: Iterable[str]) -> int:
+        """Queue a bounded, explicitly selected set of unprocessed resources."""
+        selected = list(dict.fromkeys(str(resource_id).strip() for resource_id in resource_ids if str(resource_id).strip()))
+        if not selected or len(selected) > 50:
+            raise ValueError("請選擇 1–50 筆資源")
+        resources = [self.repository.get(resource_id) for resource_id in selected]
+        pending = [resource for resource in resources if resource["enrichment_status"] != "complete"]
+        if not pending:
+            raise ValueError("所選資源已完成擷取")
+        for resource in pending:
+            self.enqueue_enrichment(resource["id"])
+        return len(pending)
+
 
 __all__ = ["ImportSummary", "ResourceService"]

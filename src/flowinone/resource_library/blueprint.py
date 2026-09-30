@@ -68,6 +68,22 @@ def resource_create():
     )
 
 
+@bp.post("/resources/enrich-selection")
+def resource_enrich_selection():
+    return_params = {
+        key: request.args[key]
+        for key in ("q", "source_type", "page")
+        if request.args.get(key)
+    }
+    try:
+        count = _service().enqueue_selected_enrichment(request.form.getlist("resource_id"))
+    except ResourceNotFound:
+        return redirect(url_for("resource_library.resource_index", error="找不到所選資源", **return_params))
+    except ValueError as exc:
+        return redirect(url_for("resource_library.resource_index", error=str(exc), **return_params))
+    return redirect(url_for("resource_library.resource_index", notice=f"已排入 {count} 筆資源的擷取工作", **return_params))
+
+
 @bp.post("/resources/import/chrome")
 def resource_import_chrome():
     service = _service()
