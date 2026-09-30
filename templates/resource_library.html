@@ -64,22 +64,24 @@
     </div>
   </details>
 
-  <form class="resource-filter" method="get" role="search">
+  <form class="resource-filter" method="get" action="{{ url_for('catalog.navigator_page') }}" role="search">
+    <input type="hidden" name="scope" value="all">
+    <input type="hidden" name="source" value="resources">
     <div class="resource-filter-search">
-      <label for="resource-query">搜尋標題、摘要與全文</label>
-      <input id="resource-query" type="search" name="q" value="{{ filters.query }}" placeholder="例如：knowledge base architecture">
+      <label for="resource-query">在 Catalog 搜尋標題、摘要與全文</label>
+      <input id="resource-query" type="search" name="q" placeholder="例如：knowledge base architecture">
     </div>
     <div>
       <label for="source-type">類型</label>
-      <select id="source-type" name="source_type">
+      <select id="source-type" name="type">
         <option value="">全部</option>
         {% for value in ['article','web_page','video','pdf','github','image','social_post','unknown'] %}
-        <option value="{{ value }}" {% if value in filters.source_types %}selected{% endif %}>{{ resource_type_labels.get(value, value) }}</option>
+        <option value="{{ value }}">{{ resource_type_labels.get(value, value) }}</option>
         {% endfor %}
       </select>
     </div>
     <button class="action-button primary" type="submit">搜尋</button>
-    <a class="action-button" href="{{ url_for('resource_library.resource_index') }}">清除</a>
+    <a class="action-button" href="{{ url_for('catalog.navigator_page', scope='all', source='resources') }}">清除</a>
   </form>
 
   <section aria-labelledby="resource-results-heading">

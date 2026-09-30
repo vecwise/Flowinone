@@ -41,6 +41,12 @@ def test_resource_pages_and_json_crud(resource_app):
     )
     assert global_search is not None
     assert global_search.select_one('input[name="scope"]')["value"] == "all"
+    resource_search = BeautifulSoup(resource_page.data, "html.parser").select_one(
+        "form.resource-filter"
+    )
+    assert resource_search["action"] == "/navigator/"
+    assert resource_search.select_one('input[name="source"]')["value"] == "resources"
+    assert resource_search.select_one('select[name="type"]') is not None
 
     created = client.post(
         "/api/resources",
@@ -50,6 +56,10 @@ def test_resource_pages_and_json_crud(resource_app):
     resource = created.get_json()["resource"]
     assert client.get(resource["detail_url"]).status_code == 200
     assert b"Route Resource" in client.get("/resources/").data
+    old_search = client.get("/resources/?q=Route&source_type=web_page")
+    assert old_search.status_code == 302
+    assert old_search.headers["Location"] == "/navigator/?scope=all&source=resources&q=Route&type=web_page"
+    assert b"Route Resource" in client.get(old_search.headers["Location"]).data
 
     patched = client.patch(
         f"/api/resources/{resource['id']}", json={"title": "Renamed Resource"}

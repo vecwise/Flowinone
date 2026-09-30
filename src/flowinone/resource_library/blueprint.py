@@ -32,6 +32,16 @@ RESOURCE_TYPE_LABELS = {
 
 @bp.get("/resources/")
 def resource_index():
+    # Keep old Resource search bookmarks working through the shared Catalog index.
+    if request.args.get("q", "").strip():
+        search_params = {
+            "scope": "all",
+            "source": "resources",
+            "q": request.args["q"].strip(),
+        }
+        if request.args.get("source_type", "").strip():
+            search_params["type"] = request.args["source_type"].strip()
+        return redirect(url_for("catalog.navigator_page", **search_params))
     service = _service()
     params = _list_params()
     page = service.repository.list(**params)
