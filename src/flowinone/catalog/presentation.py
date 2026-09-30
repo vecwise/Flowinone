@@ -34,7 +34,16 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
     for item in payload["items"]:
         available = origins_by_item.get(item["id"], {})
         origins = []
-        for source in query.sources:
+        preferred_sources = list(query.sources)
+        if (
+            query.q
+            and (item.get("match_reason") or {}).get("field") == "content"
+            and "resources" in preferred_sources
+            and len(preferred_sources) > 1
+        ):
+            preferred_sources.remove("resources")
+            preferred_sources.insert(0, "resources")
+        for source in preferred_sources:
             origin = available.get(source)
             if origin:
                 origins.append(origin)
@@ -55,6 +64,8 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             if source == "bookmarks"
             else chosen.get("detail_uri")
         )
+        item["original_uri"] = chosen.get("original_url") if source in {"bookmarks", "resources"} else None
+        item["resource_detail_uri"] = (available.get("resources") or {}).get("detail_uri")
         item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
         item["thumbnail_is_fallback"] = source == "bookmarks" and not item["thumbnail_ref"]
         if source == "bookmarks" and item["thumbnail_ref"]:

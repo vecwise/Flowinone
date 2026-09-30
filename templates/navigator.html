@@ -305,7 +305,8 @@
           {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="navigator-card-actions">
             <button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}" aria-label="{{ '移出我的最愛：' if item.favorite else '加入我的最愛：' }}{{ item.title }}">{{ '移出最愛' if item.favorite else '加入最愛' }}</button>
-            {% if item.launch_source == 'bookmarks' and item.launch_uri %}<a class="action-button gallery-card-open" href="{{ item.launch_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
+            {% if 'resources' in query.sources and item.resource_detail_uri and item.launch_uri != item.resource_detail_uri %}<a class="action-button" href="{{ item.resource_detail_uri }}">查看擷取內容</a>{% endif %}
+            {% if item.original_uri %}<a class="action-button gallery-card-open" href="{{ item.original_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
             {% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似</button>{% endif %}
             {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
           </div>

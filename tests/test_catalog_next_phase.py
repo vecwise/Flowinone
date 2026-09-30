@@ -375,6 +375,36 @@ def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path)
     assert service.recent_sessions(1)[0]["id"] == session["id"]
 
 
+def test_fulltext_result_opens_its_resource_context_and_keeps_original_link(tmp_path):
+    database, first, _second, _third = _catalog(tmp_path)
+    app = Flask(
+        "catalog-fulltext-launch",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(
+        TESTING=True,
+        FLOWINONE_RESOURCE_DB_PATH=str(database.path),
+        FLOWINONE_RESOURCE_LINK_THUMBNAILS=False,
+    )
+    register_routes(app)
+    client = app.test_client()
+    result = BeautifulSoup(client.get("/navigator/?scope=all&q=projection").data, "html.parser")
+    card = result.select_one(f'[data-navigator-item="{first}"]')
+    assert card["data-card-source"] == "resources"
+    assert card.select_one(".gallery-card-media")["href"] == "/resources/resource-1/"
+    assert card.select_one(".gallery-card-open")["href"] == "https://example.com/one"
+    assert "命中：擷取內容" in card.get_text()
+
+    bookmark_only = BeautifulSoup(
+        client.get("/navigator/?scope=all&source=bookmarks&q=projection").data,
+        "html.parser",
+    ).select_one(f'[data-navigator-item="{first}"]')
+    assert bookmark_only["data-card-source"] == "bookmarks"
+    assert bookmark_only.select_one(".gallery-card-media")["href"] == "https://example.com/one"
+    assert bookmark_only.find("a", string="查看擷取內容") is None
+
+
 def test_catalog_saved_searches_keep_named_queries_separate_from_sessions(tmp_path):
     database, _first, second, _third = _catalog(tmp_path)
     service = CatalogService(database)
