@@ -1,0 +1,32 @@
+{% extends "base_template.html" %}
+
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">{% endblock %}
+
+{% block page_content %}
+<main id="main-content" class="container gallery-page">
+  <header class="gallery-hero">
+    <div>
+      <p class="eyebrow">Catalog sources</p>
+      <h1>來源總覽</h1>
+      <p>筆數與同步狀態來自 Catalog。跨來源搜尋和知識閱讀使用同一份索引。</p>
+    </div>
+    <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='all', view='knowledge') }}">在 Catalog 閱讀知識</a>
+  </header>
+
+  <section class="navigator-sessions" aria-labelledby="source-overview-heading">
+    <div class="gallery-results-heading"><h2 id="source-overview-heading">已索引來源</h2></div>
+    <div class="navigator-session-grid">
+      {% for source in sources %}
+      <article class="navigator-session-card" data-source="{{ source.key }}">
+        <h3>{{ source.label }}</h3>
+        <p>{{ source.count }} 筆 · {% if source.status == 'complete' %}已同步{% elif source.status == 'failed' %}同步失敗{% elif source.status in ['syncing', 'retrying'] %}同步中{% else %}尚未同步{% endif %}</p>
+        <div class="navigator-card-actions">
+          <a class="action-button primary" href="{{ source.catalog_url }}">在 Catalog 查看</a>
+          {% if source.detail_url %}<a class="action-button" href="{{ source.detail_url }}">來源頁面</a>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% endblock %}

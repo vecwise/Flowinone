@@ -480,6 +480,24 @@ def test_knowledge_view_reuses_catalog_results_and_shows_extracted_preview(tmp_p
     assert "view=knowledge" in knowledge.select_one('.navigator-chip[href*="source=resources"]')["href"]
 
 
+def test_source_overview_uses_catalog_facets_and_keeps_source_pages(tmp_path):
+    database, _first, _second, _third = _catalog(tmp_path)
+    app = Flask(
+        "catalog-source-overview",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(database.path))
+    register_routes(app)
+    page = BeautifulSoup(app.test_client().get("/library/").data, "html.parser")
+    assert page.select_one('a[href="/navigator/?scope=all&view=knowledge"]') is not None
+    resource = page.select_one('[data-source="resources"]')
+    assert "1 筆" in resource.get_text()
+    assert resource.select_one('a[href="/navigator/?scope=all&source=resources"]') is not None
+    assert resource.select_one('a[href="/resources/"]') is not None
+    assert page.find(string="Visual knowledge system") is None
+
+
 def test_catalog_saved_searches_keep_named_queries_separate_from_sessions(tmp_path):
     database, _first, second, _third = _catalog(tmp_path)
     service = CatalogService(database)
