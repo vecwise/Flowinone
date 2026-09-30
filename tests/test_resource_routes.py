@@ -10,6 +10,7 @@ from flask import Flask
 from routes import register_routes
 from src.flowinone.resource_library.database import get_resource_database
 from src.flowinone.resource_library.jobs import JobQueue
+from src.flowinone.catalog.browse import CatalogService
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -102,6 +103,61 @@ def test_selected_resources_queue_bounded_on_demand_enrichment(resource_app):
         assert {job["job_type"] for job in queue.list_for_resource(resource_id)} == {
             "fetch_metadata", "download_thumbnail", "extract_content"
         }
+
+
+def test_named_view_is_shareable_and_visible_in_resource_detail(resource_app):
+    client = resource_app.test_client()
+    created = client.post(
+        "/api/resources",
+        json={"url": "https://example.com/current-view", "title": "Current view article", "enqueue": False},
+    ).get_json()["resource"]
+    database = get_resource_database(Path(resource_app.config["FLOWINONE_RESOURCE_DB_PATH"]))
+    saved = CatalogService(database).save_search(
+        "我的研究視角", {"q": "Current view", "scope": "all", "sources": ["resources"]}
+    )
+    entry = client.get(f"/navigator/views/{saved['id']}/")
+    assert entry.status_code == 302
+    assert f"context={saved['id']}" in entry.headers["Location"]
+    page = BeautifulSoup(client.get(entry.headers["Location"]).data, "html.parser")
+    context = page.select_one(".current-context")
+    assert "我的研究視角" in context.get_text()
+    assert f"/navigator/views/{saved['id']}/" in context.select_one('[data-context-share-url]')["value"]
+    navigator_clear = context.find("a", string="清除視角")["href"]
+    assert BeautifulSoup(client.get(navigator_clear).data, "html.parser").select_one(".current-context") is None
+    resource_link = page.select_one(".gallery-card-media")["href"]
+    assert resource_link.startswith(created["detail_url"] + "?return_to=")
+
+    detail = BeautifulSoup(client.get(resource_link).data, "html.parser")
+    detail_context = detail.select_one(".current-context")
+    assert "我的研究視角" in detail_context.get_text()
+    back_url = detail_context.find("a", string="返回此視角")["href"]
+    assert f"context={saved['id']}" in back_url
+    assert "我的研究視角" in BeautifulSoup(client.get(back_url).data, "html.parser").select_one(".current-context").get_text()
+    clear_url = detail_context.find("a", string="清除視角")["href"]
+    assert BeautifulSoup(client.get(clear_url).data, "html.parser").select_one(".current-context") is None
+
+    changed_response = client.get(f"/navigator/?scope=all&source=resources&q=other&context={saved['id']}")
+    assert changed_response.status_code == 302
+    assert "context=" not in changed_response.headers["Location"]
+    changed = BeautifulSoup(
+        client.get(changed_response.headers["Location"]).data,
+        "html.parser",
+    )
+    assert "未命名視角" in changed.select_one(".current-context").get_text()
+    assert changed.select_one('form.navigator-query input[name="context"]') is None
+    anonymous = BeautifulSoup(
+        client.get("/navigator/?scope=all&source=resources&q=Current").data,
+        "html.parser",
+    )
+    assert "未命名視角" in anonymous.select_one(".current-context").get_text()
+    assert "未命名視角" in BeautifulSoup(
+        client.get(anonymous.select_one(".gallery-card-media")["href"]).data,
+        "html.parser",
+    ).select_one(".current-context").get_text()
+    assert BeautifulSoup(
+        client.get(created["detail_url"] + "?return_to=https://evil.example/").data,
+        "html.parser",
+    ).select_one(".current-context") is None
 
 
 def test_renderer_root_and_removed_workflow_routes(resource_app):

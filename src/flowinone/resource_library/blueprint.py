@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit
 
 from flask import Flask, abort, current_app, redirect, render_template, request, send_file, url_for
 
 from src.flowinone.config import CHROME_BOOKMARK_PATH
+from src.flowinone.catalog.browse import CatalogService
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .canonical import ensure_within
@@ -28,6 +30,46 @@ RESOURCE_TYPE_LABELS = {
     "social_post": "社群貼文",
     "unknown": "其他",
 }
+
+
+def _resource_current_context(resource_id: str) -> dict | None:
+    """Keep only a local Navigator return URL on Resource detail pages."""
+    raw = request.args.get("return_to", "")
+    if not raw or len(raw) > 4000:
+        return None
+    try:
+        target = urlsplit(raw)
+    except ValueError:
+        return None
+    if target.scheme or target.netloc or target.path != "/navigator/":
+        return None
+    return_url = target.path + (f"?{target.query}" if target.query else "")
+    params = parse_qs(target.query)
+    context_id = params.get("context", [""])[0]
+    saved = None
+    if context_id:
+        try:
+            saved = CatalogService(_database()).get_saved_search(context_id)
+        except LookupError:
+            pass
+    if saved:
+        share_url = url_for(
+            "catalog.navigator_saved_view", saved_search_id=saved["id"],
+            view="knowledge" if params.get("view") == ["knowledge"] else None,
+            _external=True,
+        )
+    else:
+        share_pairs = [(key, value) for key, value in parse_qsl(target.query) if key not in {"cursor", "resume_scroll", "context"}]
+        share_url = url_for("catalog.navigator_page", _external=True) + "?" + urlencode(share_pairs)
+    keyword = params.get("q", [""])[0]
+    return {
+        "label": saved["label"] if saved else "未命名視角",
+        "named": bool(saved),
+        "summary": f"搜尋「{keyword}」" if keyword else "Catalog 篩選瀏覽",
+        "share_url": share_url,
+        "clear_url": url_for("resource_library.resource_detail", resource_id=resource_id),
+        "return_url": return_url,
+    }
 
 
 @bp.get("/resources/")
@@ -152,6 +194,7 @@ def resource_detail(resource_id: str):
     return render_template(
         "resource_detail.html",
         title=f"{resource['title']} · Flowinone",
+        current_context=_resource_current_context(resource_id),
         resource=resource,
         content_versions=content_versions,
         jobs=service.jobs.list_for_resource(resource_id),

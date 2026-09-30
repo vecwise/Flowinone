@@ -1,0 +1,20 @@
+.current-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--fo-border);
+  border-inline-start: 4px solid var(--fo-primary);
+  border-radius: 9px;
+  background: var(--fo-surface);
+  color: var(--fo-text);
+}
+.current-context-copy { display: grid; gap: 2px; min-width: 150px; }
+.current-context-copy strong { font-size: 1rem; }
+.current-context-copy small { color: var(--fo-muted-text); }
+.current-context-controls { display: flex; flex: 1 1 420px; flex-wrap: wrap; align-items: center; gap: 7px; }
+.current-context-share { flex: 1 1 180px; min-width: 0; }
+.current-context-share input { box-sizing: border-box; width: 100%; min-height: 35px; border: 1px solid var(--fo-border); border-radius: 6px; padding: 6px 9px; background: var(--fo-bg); color: var(--fo-muted-text); font: inherit; font-size: .76rem; }
+.current-context-status { flex-basis: 100%; color: var(--fo-muted-text); font-size: .75rem; }
+.current-context-status:empty { display: none; }

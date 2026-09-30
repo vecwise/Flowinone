@@ -1,6 +1,6 @@
 {% extends "base_template.html" %}
 
-{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
+{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/current_context.css') }}">{% endblock %}
 
 {% block page_content %}
 <main id="main-content" class="container resource-page">
@@ -10,6 +10,7 @@
   <nav class="resource-breadcrumb" aria-label="麵包屑">
     <a href="{{ url_for('resource_library.resource_index') }}">Resources</a><span aria-hidden="true">/</span><span>{{ resource.title }}</span>
   </nav>
+  {% include '_current_context.html' %}
 
   <header class="resource-detail-hero">
     <div class="resource-detail-cover"><img src="{{ resource.thumbnail_url }}" alt="{{ resource.title }} 的預覽圖" width="640" height="360"></div>
@@ -108,4 +109,5 @@
     </aside>
   </div>
 </main>
+<script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
 {% endblock %}

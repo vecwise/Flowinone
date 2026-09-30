@@ -22,7 +22,7 @@ class Element {
   click(event = {}) { return this.listeners.click?.(event); }
 }
 
-function harness() {
+function harness(firstItem = {}) {
   const names = [
     'status', 'content', 'image', 'video', 'source', 'folder', 'title', 'description', 'tags',
     'launch', 'related', 'back', 'close',
@@ -45,6 +45,7 @@ function harness() {
     first: {id: 'first', title: 'First', item_type: 'bookmark', launch_source: 'bookmarks', launch_source_label: '書籤', launch_uri: 'https://example.test/first', target_blank: true, folder_path: 'Research / Art', tags: ['design']},
     second: {id: 'second', title: 'Second', item_type: 'video', launch_source: 'local', launch_source_label: '本機', launch_uri: '/video/second', playback_uri: '/catalog/items/second/video?source=local', tags: ['design']},
   };
+  Object.assign(items.first, firstItem);
   const window = {
     document,
     location: {href: 'http://localhost/navigator/?scope=gallery&source=bookmarks&q=old'},
@@ -98,4 +99,13 @@ test('gallery detail stays in place, follows related items, and returns focus', 
   parts.close.click();
   assert.equal(dialog.open, false);
   assert.equal(link.focused, true);
+});
+
+test('resource launch from detail keeps the Navigator return context', async () => {
+  const {parts, link} = harness({launch_uri: '/resources/resource-1/', launch_source: 'resources', target_blank: false});
+  link.click({button: 0, preventDefault() {}});
+  await flush();
+  const destination = new URL(parts.launch.href, 'http://localhost');
+  assert.equal(destination.pathname, '/resources/resource-1/');
+  assert.equal(destination.searchParams.get('return_to'), '/navigator/?scope=gallery&source=bookmarks&q=old');
 });

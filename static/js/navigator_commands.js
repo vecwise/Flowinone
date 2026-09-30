@@ -94,7 +94,8 @@
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || '無法儲存搜尋');
         status.textContent = `已儲存搜尋：${result.label}`;
-        global.location.reload();
+        const view = new URL(global.location.href).searchParams.get('view');
+        global.location.href = `/navigator/views/${result.id}/` + (view === 'knowledge' ? '?view=knowledge' : '');
       } catch (error) {
         feedback.textContent = error.message;
         feedback.hidden = false;

@@ -2,6 +2,7 @@
 
 {% block custom_style %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/current_context.css') }}">
 {% endblock %}
 
 {% block page_content %}
@@ -98,6 +99,7 @@
       </details>
     </div>
   </header>
+  {% include '_current_context.html' %}
 
   <nav class="navigator-scope" aria-label="Navigator 範圍">
     <a class="navigator-scope-option {% if query.scope == 'gallery' %}is-active{% endif %}" href="{{ scope_urls.gallery }}" {% if query.scope == 'gallery' %}aria-current="page"{% endif %}>
@@ -136,6 +138,7 @@
   <form class="gallery-query navigator-query" method="get" role="search" aria-label="Navigator 搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
     <input type="hidden" name="view" value="{{ 'knowledge' if view == 'knowledge' else '' }}">
+    {% if current_context and current_context.named %}<input type="hidden" name="context" value="{{ request.args.get('context') }}">{% endif %}
     {% if query.folder %}<input type="hidden" name="folder" value="{{ query.folder }}">{% endif %}
     <div class="gallery-search-field">
       <label for="navigator-q">搜尋</label>
@@ -514,6 +517,7 @@
 })();
 </script>
 <script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
+<script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_detail.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>

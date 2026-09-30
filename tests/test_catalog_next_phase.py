@@ -392,7 +392,9 @@ def test_fulltext_result_opens_its_resource_context_and_keeps_original_link(tmp_
     result = BeautifulSoup(client.get("/navigator/?scope=all&q=projection").data, "html.parser")
     card = result.select_one(f'[data-navigator-item="{first}"]')
     assert card["data-card-source"] == "resources"
-    assert card.select_one(".gallery-card-media")["href"] == "/resources/resource-1/"
+    destination = urlsplit(card.select_one(".gallery-card-media")["href"])
+    assert destination.path == "/resources/resource-1/"
+    assert parse_qs(destination.query)["return_to"][0].startswith("/navigator/?scope=all&q=projection")
     assert card.select_one(".gallery-card-open")["href"] == "https://example.com/one"
     assert "命中：擷取內容" in card.get_text()
 

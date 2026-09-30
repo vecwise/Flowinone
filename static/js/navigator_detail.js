@@ -125,7 +125,16 @@
         tags.append(chip);
       });
       launch.hidden = !item.launch_uri;
-      if (item.launch_uri) launch.href = item.launch_uri;
+      if (item.launch_uri) {
+        if (item.launch_uri.startsWith('/resources/')) {
+          const destination = new URL(item.launch_uri, global.location.href);
+          const current = new URL(global.location.href);
+          destination.searchParams.set('return_to', current.pathname + current.search);
+          launch.href = destination.pathname + destination.search;
+        } else {
+          launch.href = item.launch_uri;
+        }
+      }
       if (item.target_blank) {
         launch.target = '_blank';
         launch.rel = 'noopener noreferrer';

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
-from flask import Flask, abort, current_app, redirect, render_template, request, url_for
+from flask import Flask, abort, current_app, g, redirect, render_template, request, url_for
 
 from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.config import CHROME_BOOKMARK_PATH
@@ -132,6 +132,9 @@ def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
     pairs = _navigator_query_pairs(query, cursor=cursor)
     if request.args.get("view") == "knowledge":
         pairs.append(("view", "knowledge"))
+    context = getattr(g, "navigator_context", None)
+    if context and CatalogQuery.create(**context["query"]).signature() == query.signature():
+        pairs.append(("context", context["id"]))
     return f"{url_for('catalog.navigator_page')}?{urlencode(pairs)}"
 
 
@@ -221,11 +224,26 @@ def _navigator_saved_searches(service: CatalogService) -> list[dict]:
     saved_searches = []
     for saved in service.list_saved_searches():
         query = CatalogQuery.create(**(saved.get("query") or {}))
-        saved["url"] = _navigator_url(query)
+        saved["url"] = url_for(
+            "catalog.navigator_saved_view", saved_search_id=saved["id"],
+            view="knowledge" if request.args.get("view") == "knowledge" else None,
+        )
         saved["scope_label"] = "素材" if query.scope == "gallery" else "全部內容"
         saved["summary"] = _saved_search_summary(query)
         saved_searches.append(saved)
     return saved_searches
+
+
+@bp.get("/navigator/views/<saved_search_id>/")
+def navigator_saved_view(saved_search_id: str):
+    """Open a named view through its stable, shareable local URL."""
+    try:
+        saved = CatalogService(_database()).get_saved_search(saved_search_id)
+    except LookupError:
+        abort(404)
+    query = CatalogQuery.create(**saved["query"])
+    target = _navigator_url(query)
+    return redirect(f"{target}&context={saved_search_id}")
 
 
 @bp.get("/navigator/", strict_slashes=False)
@@ -233,6 +251,17 @@ def navigator_page():
     service = CatalogService(_database())
     query = _navigator_query()
     view = "knowledge" if request.args.get("view") == "knowledge" else "grid"
+    context_id = request.args.get("context", "").strip()
+    if context_id:
+        try:
+            candidate = service.get_saved_search(context_id)
+            if CatalogQuery.create(**candidate["query"]).signature() == query.signature():
+                g.navigator_context = candidate
+        except LookupError:
+            pass
+        if not getattr(g, "navigator_context", None):
+            pairs = [(key, value) for key, value in request.args.items(multi=True) if key != "context"]
+            return redirect(f"{url_for('catalog.navigator_page')}?{urlencode(pairs)}")
     if query.sort == "random" and not query.seed:
         values = query.public_dict()
         values["seed"] = secrets.randbelow(2_147_483_646) + 1
@@ -256,6 +285,14 @@ def navigator_page():
     except ValueError as exc:
         abort(400, description=str(exc))
     payload["items"] = visible_items(service, payload, effective_query)
+    return_url = _navigator_url(query, cursor=query.cursor)
+    for item in payload["items"]:
+        detail_uri = item.get("resource_detail_uri")
+        if detail_uri and detail_uri.startswith("/resources/"):
+            contextual_uri = f"{detail_uri}?{urlencode({'return_to': return_url})}"
+            item["resource_detail_uri"] = contextual_uri
+            if item.get("launch_uri") == detail_uri:
+                item["launch_uri"] = contextual_uri
     if view == "knowledge":
         excerpts = service.text_excerpts_for_items([item["id"] for item in payload["items"]])
         for item in payload["items"]:
@@ -285,9 +322,33 @@ def navigator_page():
     reset_query = CatalogQuery.create(scope=query.scope, sources=scope_sources)
     random_values = query.public_dict()
     random_values.update({"sort": "random", "seed": 0, "cursor": ""})
+    active_context = getattr(g, "navigator_context", None)
+    share_url = (
+        url_for(
+            "catalog.navigator_saved_view", saved_search_id=active_context["id"],
+            view="knowledge" if view == "knowledge" else None, _external=True,
+        )
+        if active_context else request.url_root.rstrip("/") + _navigator_url(
+            CatalogQuery.create(**{**query.public_dict(), "cursor": ""})
+        )
+    )
+    show_context = bool(
+        active_context or query.q or query.item_type or query.folder or query.tags
+        or query.favorite or query.unviewed or query.duration_min is not None
+        or query.duration_max is not None or query.added_from or query.added_to
+        or query.sources != scope_sources or query.sort != "recently_added"
+    )
     return render_template(
         "navigator.html",
         title="Navigator · Flowinone",
+        current_context={
+            "label": active_context["label"] if active_context else "未命名視角",
+            "named": bool(active_context),
+            "summary": _saved_search_summary(query),
+            "share_url": share_url,
+            "clear_url": url_for("catalog.navigator_page", scope=query.scope),
+            "return_url": None,
+        } if show_context else None,
         view=view,
         resume_scroll=request.args.get("resume_scroll", ""),
         payload=payload,
