@@ -738,6 +738,7 @@
 .navigator-session-card p { margin: 0; }
 .navigator-session-card p,
 .navigator-session-meta { color: var(--fo-muted-text); font-size: .76rem; }
+.gallery-card:target { outline: 3px solid var(--fo-primary); outline-offset: 3px; scroll-margin-block: 6rem; }
 
 .navigator-card-actions .small-note { color: var(--fo-muted-text); font-size: .75rem; }
 .catalog-similarity-status {

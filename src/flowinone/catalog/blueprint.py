@@ -171,7 +171,16 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
         )
         if not meaningful:
             continue
-        session["url"] = _navigator_url(session_query)
+        session["url"] = (
+            _navigator_url(session_query, cursor=session.get("cursor") or session_query.cursor)
+            + f"&resume_scroll={max(0, int(session.get('scroll_position') or 0))}"
+        )
+        if session.get("focused_item_id"):
+            session["url"] += f"#item-{session['focused_item_id']}"
+            try:
+                session["focused_title"] = service.get(session["focused_item_id"])["title"]
+            except LookupError:
+                session["focused_title"] = None
         session["scope_label"] = "素材" if scope == "gallery" else "全部內容"
         try:
             session["updated_display"] = datetime.fromisoformat(
@@ -268,6 +277,7 @@ def navigator_page():
     return render_template(
         "navigator.html",
         title="Navigator · Flowinone",
+        resume_scroll=request.args.get("resume_scroll", ""),
         payload=payload,
         query=query,
         scope_sources=scope_sources,

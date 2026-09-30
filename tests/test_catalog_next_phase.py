@@ -405,6 +405,39 @@ def test_fulltext_result_opens_its_resource_context_and_keeps_original_link(tmp_
     assert bookmark_only.find("a", string="查看擷取內容") is None
 
 
+def test_recent_browse_session_resumes_page_and_focused_item(tmp_path):
+    database, _first, _second, _third = _catalog(tmp_path)
+    service = CatalogService(database)
+    query = CatalogQuery.create(q="knowledge", scope="all", sources=["local", "resources"], sort="title", limit=1)
+    cursor = service.list(query)["next_cursor"]
+    assert cursor
+    next_item = service.list(CatalogQuery.create(**{**query.public_dict(), "cursor": cursor}))["items"][0]
+    service.save_session({
+        "query": {**query.public_dict(), "cursor": cursor},
+        "cursor": cursor,
+        "focused_item_id": next_item["id"],
+        "scroll_position": 900,
+    })
+    app = Flask(
+        "catalog-resume",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(database.path))
+    register_routes(app)
+    client = app.test_client()
+    page = BeautifulSoup(client.get("/navigator/?scope=all").data, "html.parser")
+    session_card = page.select_one(".navigator-session-card")
+    assert f"上次看到：{next_item['title']}" in session_card.get_text()
+    url = urlsplit(session_card["href"])
+    assert parse_qs(url.query)["cursor"] == [cursor]
+    assert parse_qs(url.query)["resume_scroll"] == ["900"]
+    assert url.fragment == f"item-{next_item['id']}"
+    resumed = BeautifulSoup(client.get(session_card["href"]).data, "html.parser")
+    assert resumed.select_one("[data-resume-scroll]")["data-resume-scroll"] == "900"
+    assert resumed.select_one(f"#item-{next_item['id']}") is not None
+
+
 def test_catalog_saved_searches_keep_named_queries_separate_from_sessions(tmp_path):
     database, _first, second, _third = _catalog(tmp_path)
     service = CatalogService(database)

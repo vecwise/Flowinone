@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block page_content %}
-<main id="main-content" class="container gallery-page navigator-page" data-navigator-query="{{ query.signature() }}" data-navigator-query-payload='{{ query.public_dict()|tojson }}'>
+<main id="main-content" class="container gallery-page navigator-page" data-navigator-query="{{ query.signature() }}" data-navigator-query-payload='{{ query.public_dict()|tojson }}' data-resume-scroll="{{ resume_scroll|int if resume_scroll else '' }}">
   <header class="gallery-hero navigator-hero">
     <div>
       <p class="eyebrow">Cross-source navigator</p>
@@ -274,7 +274,7 @@
     {% if payload['items'] %}
     <div class="gallery-grid" data-gallery-view="grid">
       {% for item in payload['items'] %}
-      <article class="gallery-card" data-navigator-item="{{ item.id }}" data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
+      <article id="item-{{ item.id }}" class="gallery-card" data-navigator-item="{{ item.id }}" data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
         <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
           {% if item.thumbnail_is_fallback %}
           <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
@@ -329,6 +329,7 @@
       <a class="navigator-session-card" href="{{ session.url }}">
         <span class="navigator-session-meta">{{ session.scope_label }} · {{ session.updated_display }}</span>
         <h3>{{ session.query.q or '篩選瀏覽' }}</h3>
+        {% if session.focused_title %}<p>上次看到：{{ session.focused_title }}</p>{% endif %}
         <p>{{ session.query.sources|map('upper')|join(' · ') }} · {{ session.query.sort }}</p>
       </a>
       {% endfor %}
@@ -430,30 +431,48 @@
   if (!page) return;
   const stateKey = `flowinone-navigator-scroll:${page.dataset.navigatorQuery}`;
   const sessionKey = `flowinone-navigator-session:${page.dataset.navigatorQuery}`;
+  const focusKey = `flowinone-navigator-focus:${page.dataset.navigatorQuery}`;
   const saved = sessionStorage.getItem(stateKey);
-  if (saved) requestAnimationFrame(() => window.scrollTo({top: Number(saved), behavior: 'instant'}));
   const query = {{ query.public_dict()|tojson }};
+  const target = location.hash.startsWith('#item-') ? document.getElementById(location.hash.slice(1)) : null;
+  let focusedItemId = target?.dataset.navigatorItem || sessionStorage.getItem(focusKey);
+  if (focusedItemId && !document.getElementById(`item-${focusedItemId}`)) {
+    focusedItemId = null;
+    sessionStorage.removeItem(focusKey);
+  }
+  const restoredScroll = page.dataset.resumeScroll !== '' ? page.dataset.resumeScroll : saved;
+  if (target) requestAnimationFrame(() => target.scrollIntoView({block: 'center'}));
+  else if (restoredScroll) requestAnimationFrame(() => window.scrollTo({top: Number(restoredScroll), behavior: 'instant'}));
   let browseSession = sessionStorage.getItem(sessionKey);
-  const saveSession = (payload) => fetch(
-    browseSession ? `/api/catalog/sessions/${browseSession}` : '/api/catalog/sessions',
-    {method: browseSession ? 'PATCH' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)},
-  ).then(async (response) => {
-    if (response.ok) {
-      const value = await response.json();
-      browseSession = value.id;
-      sessionStorage.setItem(sessionKey, value.id);
-    }
-  });
+  let pendingSave = Promise.resolve();
+  const saveSession = (payload) => {
+    const values = {...payload, cursor: query.cursor, focused_item_id: focusedItemId};
+    pendingSave = pendingSave.then(() => fetch(
+      browseSession ? `/api/catalog/sessions/${browseSession}` : '/api/catalog/sessions',
+      {method: browseSession ? 'PATCH' : 'POST', headers: {'Content-Type': 'application/json'}, keepalive: true, body: JSON.stringify(values)},
+    )).then(async (response) => {
+      if (response.ok) {
+        const value = await response.json();
+        browseSession = value.id;
+        sessionStorage.setItem(sessionKey, value.id);
+      }
+    }).catch(() => {});
+    return pendingSave;
+  };
+  const defaultSources = query.scope === 'gallery' ? ['local', 'eagle', 'bookmarks'] : ['local', 'eagle', 'bookmarks', 'resources'];
   const meaningfulQuery = Boolean(
     query.q || query.type || query.folder || query.tags.length || query.favorite || query.unviewed ||
-    query.duration_min != null || query.duration_max != null || query.sort !== 'recently_added'
+    query.duration_min != null || query.duration_max != null || query.sort !== 'recently_added' ||
+    query.sources.join(',') !== defaultSources.join(',')
   );
-  if (meaningfulQuery) saveSession({query, scroll_position: Number(saved || 0)});
+  if (meaningfulQuery) saveSession({query, scroll_position: Number(restoredScroll || 0)});
 
   document.querySelectorAll('[data-navigator-item] a').forEach((link) => link.addEventListener('click', () => {
     sessionStorage.setItem(stateKey, String(window.scrollY));
     const item = link.closest('[data-navigator-item]');
     if (!item) return;
+    focusedItemId = item.dataset.navigatorItem;
+    sessionStorage.setItem(focusKey, focusedItemId);
     saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
     navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: link.hasAttribute('data-gallery-detail-open') ? 'view' : 'open'})], {type: 'application/json'}));
   }));
