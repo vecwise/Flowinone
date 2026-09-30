@@ -171,6 +171,9 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
             or session_query.duration_max is not None
             or session_query.sources != NAVIGATOR_SCOPE_SOURCES[scope]
             or session_query.sort != "recently_added"
+            or session.get("focused_item_id")
+            or session_query.cursor
+            or session.get("scroll_position")
         )
         if not meaningful:
             continue

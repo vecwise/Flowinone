@@ -438,6 +438,24 @@ def test_recent_browse_session_resumes_page_and_focused_item(tmp_path):
     assert resumed.select_one(f"#item-{next_item['id']}") is not None
 
 
+def test_recent_browse_keeps_a_focused_item_from_unfiltered_gallery(tmp_path):
+    database, _first, _second, local_item = _catalog(tmp_path)
+    CatalogService(database).save_session({
+        "query": {"scope": "gallery", "sources": ["local", "eagle", "bookmarks"]},
+        "focused_item_id": local_item,
+        "scroll_position": 180,
+    })
+    app = Flask(
+        "catalog-default-resume",
+        template_folder=str(Path(__file__).parents[1] / "templates"),
+        static_folder=str(Path(__file__).parents[1] / "static"),
+    )
+    app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(database.path))
+    register_routes(app)
+    page = BeautifulSoup(app.test_client().get("/navigator/?scope=gallery").data, "html.parser")
+    assert page.select_one(".navigator-session-card")["href"].endswith(f"#item-{local_item}")
+
+
 def test_knowledge_view_reuses_catalog_results_and_shows_extracted_preview(tmp_path):
     database, first, _second, _third = _catalog(tmp_path)
     app = Flask(
