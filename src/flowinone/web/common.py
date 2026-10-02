@@ -15,7 +15,6 @@ from src.file_handler import (
     has_chrome_bookmarks,
     has_db_main,
 )
-from src.file_handler.thumbnails.store import get_thumbnail_store
 
 
 def path_is_within_roots(target_path: str, roots: list[str]) -> bool:
@@ -194,80 +193,6 @@ def content_card_from_db_item(
         "disabled_reason": None
         if is_allowed
         else "檔案已移動、刪除，或不在目前資料庫根目錄",
-    }
-
-
-def content_card_from_resource(
-    item: dict, why: str | None = None, lane: str | None = None
-) -> dict:
-    media_id = item.get("thumbnail_media_id")
-    if item.get("thumbnail_path"):
-        thumbnail_route = url_for(
-            "resource_library.resource_asset", resource_id=item["id"], kind="thumbnail"
-        )
-    elif media_id and get_thumbnail_store().get_thumbnail_path(media_id):
-        thumbnail_route = url_for(
-            "chrome.serve_bookmark_thumbnail", media_id=media_id
-        )
-    else:
-        thumbnail_route = url_for("static", filename="default_thumbnail.svg")
-    source_type = item.get("source_type") or "resource"
-    meta_bits = ["Resource", source_type]
-    if item.get("domain"):
-        meta_bits.append(item["domain"])
-    detail_url = url_for(
-        "resource_library.resource_detail", resource_id=item["id"]
-    )
-    return {
-        "id": item.get("id"),
-        "title": item.get("title") or "Untitled",
-        "name": item.get("title") or "Untitled",
-        "url": detail_url,
-        "path": detail_url,
-        "thumbnail_route": thumbnail_route,
-        "media_type": "resource",
-        "type_label": source_type.replace("_", " ").title(),
-        "source_label": "Resource Library",
-        "meta_line": " · ".join(meta_bits),
-        "tags": (item.get("tag_names") or [])[:4],
-        "why": why
-        or item.get("why_this_matters")
-        or item.get("summary_one_line")
-        or "查看資源資料",
-        "lane": lane or "resource",
-        "status": "ready",
-        "target_blank": False,
-        "primary_action": "開啟",
-        "is_available": True,
-        "disabled_reason": None,
-    }
-
-
-def clone_card(card: dict, why: str | None = None, lane: str | None = None) -> dict:
-    cloned = dict(card)
-    cloned["tags"] = list(card.get("tags") or [])
-    if why is not None:
-        cloned["why"] = why
-    if lane is not None:
-        cloned["lane"] = lane
-    return cloned
-
-
-def build_shelf(
-    title: str,
-    kicker: str,
-    items: list[dict],
-    layout: str = "rail",
-    action_label: str | None = None,
-    action_url: str | None = None,
-) -> dict:
-    return {
-        "title": title,
-        "kicker": kicker,
-        "items": items,
-        "layout": layout,
-        "action_label": action_label,
-        "action_url": action_url,
     }
 
 
