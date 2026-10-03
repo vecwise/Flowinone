@@ -167,26 +167,4 @@ class ResourceWorker:
         self.stop_event.set()
 
 
-_WORKER_LOCK = threading.Lock()
-_WORKER: Optional[ResourceWorker] = None
-
-
-def start_background_resource_worker() -> Optional[ResourceWorker]:
-    """Start one daemon worker in this process."""
-    global _WORKER
-    if os.environ.get("FLOWINONE_RESOURCE_WORKER", "1").lower() in {"0", "false", "no"}:
-        return None
-    with _WORKER_LOCK:
-        if _WORKER is not None and not _WORKER.stop_event.is_set():
-            return _WORKER
-        _WORKER = ResourceWorker()
-        thread = threading.Thread(
-            target=_WORKER.run_forever,
-            name="flowinone-resource-worker",
-            daemon=True,
-        )
-        thread.start()
-        return _WORKER
-
-
-__all__ = ["ResourceWorker", "start_background_resource_worker"]
+__all__ = ["ResourceWorker"]

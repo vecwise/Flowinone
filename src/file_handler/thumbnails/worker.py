@@ -407,24 +407,6 @@ class ThumbnailWorker:
         self.stop_event.set()
 
 
-_WORKER: Optional[ThumbnailWorker] = None
-_WORKER_THREAD: Optional[threading.Thread] = None
-_WORKER_LOCK = threading.Lock()
-
-
-def start_background_worker() -> Optional[ThumbnailWorker]:
-    global _WORKER, _WORKER_THREAD
-    with _WORKER_LOCK:
-        if _WORKER_THREAD and _WORKER_THREAD.is_alive():
-            return _WORKER
-        worker = ThumbnailWorker()
-        thread = threading.Thread(target=worker.run_forever, name="flowinone-thumbnail-worker", daemon=True)
-        thread.start()
-        _WORKER = worker
-        _WORKER_THREAD = thread
-        return worker
-
-
 __all__ = [
     "DomainRateLimiter",
     "FetchError",
@@ -432,5 +414,4 @@ __all__ = [
     "MAX_IMAGE_BYTES",
     "SafeHTTPClient",
     "ThumbnailWorker",
-    "start_background_worker",
 ]

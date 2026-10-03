@@ -7,12 +7,13 @@ from typing import Dict, List, Optional
 from urllib.parse import quote, quote_plus
 
 from src.flowinone.config import CHROME_BOOKMARK_PATH
-from .media_cache import CACHE_DATA_DIR, extract_youtube_id, lookup_thumbnail_for_bookmark
+from .media_cache import lookup_thumbnail_for_bookmark
 from .models import BookmarkError, BookmarkNotFound, MediaEntry, PageMetadata
 from .paths import DEFAULT_THUMBNAIL_ROUTE
+from .thumbnails.urls import extract_youtube_id
 
 
-FOCUS_MODES_FILE = Path(CACHE_DATA_DIR) / "focus_modes.json"
+FOCUS_MODES_FILE = Path("data") / "focus_modes.json"
 _DEFAULT_FOCUS_CONFIG = {
     "default_mode": "all",
     "modes": [
