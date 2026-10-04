@@ -2,6 +2,10 @@
 
 ## 2026-10-04
 
+### Fixed
+
+- Detect Chrome's live `AccountBookmarks` JSON when `Default/Bookmarks` is absent, restoring imports, browsing, and background sync. Allow a shared fixed source through `CHROME_BOOKMARK_PATH` in `config.json` or `FLOWINONE_CHROME_BOOKMARK_PATH` in the environment.
+
 ### Changed
 
 - Unified browsing as 我的收藏, including all four sources by default, with topics, search, type, and sort as the main controls.

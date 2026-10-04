@@ -4,6 +4,7 @@ import json
 import os
 import platform
 from json import JSONDecodeError
+from pathlib import Path
 from typing import Dict, Optional
 
 from .paths import PROJECT_ROOT
@@ -12,18 +13,41 @@ CONFIG_JSON_PATH = PROJECT_ROOT / "config.json"
 DEFAULT_CONFIG: Dict[str, str] = {
     "DB_route_external": "",
     "DB_route_internal": "",
+    "CHROME_BOOKMARK_PATH": "",
 }
 
 
 def _detect_chrome_bookmark_path() -> str:
+    """Find the live JSON store, including Chrome's account bookmark file."""
     system = platform.system()
     if system == "Windows":
         local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
-        return os.path.join(local_app_data, "Google", "Chrome", "User Data", "Default", "Bookmarks")
-    if system == "Linux":
-        return os.path.expanduser("~/.config/google-chrome/Default/Bookmarks")
-    # macOS default
-    return os.path.expanduser("~/Library/Application Support/Google/Chrome/Default/Bookmarks")
+        profile = os.path.join(local_app_data, "Google", "Chrome", "User Data", "Default")
+    elif system == "Linux":
+        profile = os.path.expanduser("~/.config/google-chrome/Default")
+    else:
+        profile = os.path.expanduser("~/Library/Application Support/Google/Chrome/Default")
+    bookmarks = os.path.join(profile, "Bookmarks")
+    account_bookmarks = os.path.join(profile, "AccountBookmarks")
+    if not os.path.isfile(bookmarks) and os.path.isfile(account_bookmarks):
+        return account_bookmarks
+    # Keep the original path when missing so errors identify the expected file.
+    # Backups and encrypted stores are not current, readable bookmark sources.
+    return bookmarks
+
+
+def _resolve_chrome_bookmark_path(config: Dict[str, str]) -> str:
+    configured = (
+        os.environ.get("FLOWINONE_CHROME_BOOKMARK_PATH", "").strip()
+        or str(config.get("CHROME_BOOKMARK_PATH") or "").strip()
+    )
+    if not configured:
+        return _detect_chrome_bookmark_path()
+    path = Path(configured).expanduser()
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    # An explicit path must never silently fall back to a different source.
+    return str(path.resolve())
 
 
 def _load_config() -> Dict[str, str]:
@@ -62,7 +86,7 @@ def _update_config_json(external: str, internal: str) -> None:
     CONFIG_JSON_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-CHROME_BOOKMARK_PATH = _detect_chrome_bookmark_path()
+CHROME_BOOKMARK_PATH = _resolve_chrome_bookmark_path(_CONFIG_DATA)
 
 
 def _is_valid_directory(path: str) -> bool:

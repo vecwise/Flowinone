@@ -124,7 +124,7 @@ conda run --no-capture-output -n py3.11 python -m src.flowinone.workers
 
 Web 不會自動啟動 worker。只開 A 可以讀取已有資料，但排隊工作會等 B 啟動才執行。兩個程序需要使用相同資料路徑設定；預設都用 repo 的 `data/`，可透過 `FLOWINONE_DATA_DIR` 覆寫。
 
-Chrome 來源預設讀平台的 Default profile `Bookmarks` 檔。Resources 的 Chrome 匯入表單也預設讀這個檔案；若要把其他書籤檔匯入 **Resources**，可用 `resources-sync --path`。這不會改變 Chrome 來源的讀取路徑。Eagle 來源需要 Eagle app 正在執行。此服務只設計給本機 loopback 使用，沒有多使用者認證，請勿透過 LAN／proxy／tunnel 對外開放。
+Chrome 來源預設讀平台的 Default profile `Bookmarks` 檔；若它不存在，會讀同資料夾的 `AccountBookmarks` JSON，不會使用備份或加密檔。Resources 匯入、Chrome 瀏覽、Catalog 同步與背景偵測共用這個路徑。要固定使用其他 profile 或書籤檔，可在 `config.json` 加入 `"CHROME_BOOKMARK_PATH": "/完整路徑/AccountBookmarks"`，或設定優先於它的 `FLOWINONE_CHROME_BOOKMARK_PATH` 環境變數；修改後重新啟動 Web 與 Worker。若 `Bookmarks` 和 `AccountBookmarks` 都存在，預設保留 `Bookmarks`；可用上述設定指定帳戶書籤。若只要把其他書籤檔匯入 **Resources**，可用 `resources-sync --path`，不會改變 Chrome 來源路徑。Eagle 來源需要 Eagle app 正在執行。此服務只設計給本機 loopback 使用，沒有多使用者認證，請勿透過 LAN／proxy／tunnel 對外開放。
 
 ### 第一次開起來沒有素材？
 

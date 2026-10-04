@@ -2,7 +2,7 @@
     <div class="bookmark-source-health" data-bookmark-source-health data-state="{{ bookmark_source_health.state }}" role="status">
       {% if bookmark_source_health.state == 'unavailable' %}
         <strong>Chrome 書籤來源不可用</strong>
-        <span>找不到 Default Profile 的書籤檔；目前顯示既有索引 {{ bookmark_source_health.count }} 筆。上次同步：{{ bookmark_source_health.synced_at }}。</span>
+        <span>找不到 Chrome 書籤檔；目前顯示既有索引 {{ bookmark_source_health.count }} 筆。上次同步：{{ bookmark_source_health.synced_at }}。</span>
       {% elif bookmark_source_health.state == 'failed' %}
         <strong>Chrome 書籤同步失敗</strong>
         <span>目前顯示既有索引 {{ bookmark_source_health.count }} 筆。請在「來源與同步」重試；最後狀態時間：{{ bookmark_source_health.synced_at }}。</span>
@@ -22,4 +22,3 @@
     {% if not eagle_available and 'eagle' in query.sources %}
     <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
     {% endif %}
-
