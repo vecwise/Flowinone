@@ -1,17 +1,18 @@
 {% if current_context %}
-<section class="current-context" aria-label="目前視角">
+<section class="current-context" aria-label="目前瀏覽條件">
   <div class="current-context-copy">
-    <span class="eyebrow">目前視角</span>
     <strong>{{ current_context.label }}</strong>
     <small>{{ current_context.summary }}</small>
   </div>
-  <div class="current-context-controls">
-    {% if current_context.return_url %}<a class="action-button primary" href="{{ current_context.return_url }}">返回此視角</a>
-    {% else %}<button class="action-button" type="button" data-save-search-open>{{ '另存視角' if current_context.named else '命名視角' }}</button>{% endif %}
-    <label class="current-context-share"><span class="sr-only">可分享的視角連結</span><input data-context-share-url value="{{ current_context.share_url }}" readonly></label>
-    <button class="action-button" type="button" data-copy-context>複製連結</button>
-    <a class="action-button" href="{{ current_context.clear_url }}">清除視角</a>
-  </div>
+  {% if current_context.return_url %}<a class="action-button" href="{{ current_context.return_url }}">返回收藏</a>{% endif %}
+  <details class="current-context-options">
+    <summary>更多操作</summary>
+    <div class="current-context-controls">
+      <label class="current-context-share"><span class="sr-only">目前條件的連結</span><input data-context-share-url value="{{ current_context.share_url }}" readonly></label>
+      <button class="action-button" type="button" data-copy-context>複製連結</button>
+      <a class="action-button" href="{{ current_context.clear_url }}">清除條件</a>
+    </div>
+  </details>
   <span class="current-context-status" data-context-copy-status role="status"></span>
 </section>
 {% endif %}

@@ -18,3 +18,6 @@
 .current-context-share input { box-sizing: border-box; width: 100%; min-height: 35px; border: 1px solid var(--fo-border); border-radius: 6px; padding: 6px 9px; background: var(--fo-bg); color: var(--fo-muted-text); font: inherit; font-size: .76rem; }
 .current-context-status { flex-basis: 100%; color: var(--fo-muted-text); font-size: .75rem; }
 .current-context-status:empty { display: none; }
+.current-context-options { margin-inline-start: auto; min-width: 0; }
+.current-context-options > summary { min-height: 44px; padding: 12px 8px; color: var(--fo-muted-text); font-size: .8rem; cursor: pointer; }
+.current-context-options .current-context-controls { padding-top: 8px; }

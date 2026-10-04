@@ -24,7 +24,7 @@ test('current view copies its share link', async () => {
   const {button, input, status} = harness({writeText: async (value) => { copied = value; }});
   await button.click();
   assert.equal(copied, input.value);
-  assert.equal(status.textContent, '已複製視角連結');
+  assert.equal(status.textContent, '已複製條件連結');
 });
 
 test('current view selects its link when Clipboard API is unavailable', async () => {

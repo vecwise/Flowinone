@@ -73,7 +73,7 @@ def _render_media_view(template_name: str, folder_path: str, source: str | None 
 
 @bp.get("/")
 def index():
-    return redirect(url_for("catalog.navigator_page", scope="gallery"))
+    return redirect(url_for("catalog.navigator_page", scope="all"))
 
 
 @bp.get("/library/")
@@ -93,7 +93,7 @@ def content_library():
             ("local", "本機", "db", "local.view_item_db"),
             ("eagle", "Eagle", "eagle", "eagle.eagle_stream"),
             ("bookmarks", "Chrome 書籤", "chrome", "chrome.view_chrome_root"),
-            ("resources", "Resources", None, "resource_library.resource_index"),
+            ("resources", "新增網址", None, "resource_library.resource_index"),
         )
     ]
     return render_template("source_overview.html", title="來源總覽 · Flowinone", sources=sources)

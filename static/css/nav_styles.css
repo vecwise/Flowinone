@@ -266,14 +266,18 @@
 
     .nav-actions {
         min-width: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .search-container {
         min-width: 0;
+        flex: 1 1 100%;
+        order: 3;
     }
 
     .search-container input[type="search"] {
-        width: min(55vw, 220px);
+        width: 100%;
         min-width: 0;
     }
 

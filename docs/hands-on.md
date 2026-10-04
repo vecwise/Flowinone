@@ -39,7 +39,7 @@ conda run -n py3.11 flask --app run routes
 curl -sS -D - -o /dev/null http://127.0.0.1:5894/
 ```
 
-**預期：** status 是 `302`，header 有 `Location: /navigator/?scope=gallery`。`curl` 沒加 `-L`，所以你看見的是轉址本身；一般瀏覽器會自動繼續載入 Navigator。
+**預期：** status 是 `302`，header 有 `Location: /navigator/?scope=all`。`curl` 沒加 `-L`，所以你看見的是轉址本身；一般瀏覽器會自動繼續載入我的收藏。
 
 **為什麼／哪段程式：** 根目錄 [run.py](../run.py) 是啟動入口；[app.py](../src/flowinone/app.py) 的 `create_app()` 呼叫 [registration.py](../src/flowinone/web/registration.py) 的 `register_routes()`，註冊各 Blueprint。[web/local.py](../src/flowinone/web/local.py) 的 `index()` 回傳：
 
@@ -252,7 +252,7 @@ rg -n 'match_reason|match_field|catalog_fts|def list\(' src/flowinone/catalog/br
 
 ## 8. 新圖在磁碟上，為什麼 Navigator 還沒有？
 
-**前提：** Web 已啟動，root 指向你的測試素材資料夾；先在 Navigator →「來源管理」暫停自動偵測，記下原設定。此題會更新本機索引與 Catalog。
+**前提：** Web 已啟動，root 指向你的測試素材資料夾；先在「設定與維護」→「來源與同步」暫停自動偵測，記下原設定。此題會更新本機索引與 Catalog。
 
 **操作與觀察：**
 

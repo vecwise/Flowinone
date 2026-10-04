@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-04
+
+### Changed
+
+- Unified browsing as 我的收藏, including all four sources by default, with topics, search, type, and sort as the main controls.
+- Moved source sync and duplicate review into 設定與維護; kept advanced filters and saved conditions behind secondary controls.
+- Kept grid and list layouts, mapping legacy shelf and knowledge links/preferences to them without losing filters.
+- Made `/resources/` an add/import page with collapsible processing tools; prioritized content on cards and Resource detail pages, with extraction and versions under 資源管理.
+
 ## 2026-09-28
 
 ### Changed

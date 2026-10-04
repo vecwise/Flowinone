@@ -458,7 +458,7 @@ def test_recent_browse_keeps_a_focused_item_from_unfiltered_gallery(tmp_path):
     assert page.select_one(".navigator-session-card")["href"].endswith(f"#item-{local_item}")
 
 
-def test_knowledge_view_reuses_catalog_results_and_shows_extracted_preview(tmp_path):
+def test_legacy_knowledge_view_uses_list_and_content_clues_are_always_available(tmp_path):
     database, first, _second, _third = _catalog(tmp_path)
     app = Flask(
         "catalog-knowledge-view",
@@ -473,13 +473,14 @@ def test_knowledge_view_reuses_catalog_results_and_shows_extracted_preview(tmp_p
     assert [card["data-navigator-item"] for card in grid.select(".gallery-card")] == [
         card["data-navigator-item"] for card in knowledge.select(".gallery-card")
     ] == [first]
-    assert knowledge.select_one(".gallery-grid")["data-gallery-view"] == "knowledge"
-    assert knowledge.select_one(".gallery-grid")["data-knowledge-loaded"] == "true"
-    assert knowledge.select_one('form.navigator-query input[name="view"]')["value"] == "knowledge"
+    assert knowledge.select_one(".gallery-grid")["data-gallery-view"] == "list"
+    assert knowledge.select_one('form.navigator-query input[name="view"]')["value"] == "list"
     card = knowledge.select_one(".gallery-card")
-    assert card.select_one(".navigator-knowledge-excerpt").get_text(strip=True) == "catalog search projection"
+    assert card.select_one(".navigator-content-excerpt").get_text(strip=True) == "catalog search projection"
     assert card.select_one(".gallery-card-open")["href"] == "https://example.com/one"
-    assert "view=knowledge" in knowledge.select_one('.navigator-chip[href*="source=resources"]')["href"]
+    assert grid.select_one(".navigator-content-excerpt").get_text(strip=True) == "catalog search projection"
+    assert {button["data-gallery-view-option"] for button in knowledge.select("[data-gallery-view-option]")} == {"grid", "list"}
+    assert "view=list" in knowledge.select_one(".navigator-topic-list a")["href"]
 
 
 def test_source_overview_uses_catalog_facets_and_keeps_source_pages(tmp_path):
@@ -492,7 +493,7 @@ def test_source_overview_uses_catalog_facets_and_keeps_source_pages(tmp_path):
     app.config.update(TESTING=True, FLOWINONE_RESOURCE_DB_PATH=str(database.path))
     register_routes(app)
     page = BeautifulSoup(app.test_client().get("/library/").data, "html.parser")
-    assert page.select_one('a[href="/navigator/?scope=all&view=knowledge"]') is not None
+    assert page.select_one('a[href="/navigator/?scope=all"]') is not None
     resource = page.select_one('[data-source="resources"]')
     assert "1 筆" in resource.get_text()
     assert resource.select_one('a[href="/navigator/?scope=all&source=resources"]') is not None
@@ -712,7 +713,7 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
     client = app.test_client()
     gallery = client.get("/navigator/?scope=gallery")
     assert gallery.status_code == 200
-    assert b"Cross-source navigator" in gallery.data
+    assert "我的收藏" in gallery.get_data(as_text=True)
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         '[data-bookmark-source-health][data-state="unavailable"]'
     )
@@ -807,7 +808,8 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
     legacy_bookmark_filter = BeautifulSoup(
         client.get("/navigator/?scope=gallery&type=bookmark").data, "html.parser"
     )
-    assert legacy_bookmark_filter.select_one('.navigator-chip-group[aria-label="來源"] .is-active').get_text(strip=True) == "Chrome 書籤"
+    assert legacy_bookmark_filter.select_one('input[name="source"][value="bookmarks"]').has_attr("checked")
+    assert not legacy_bookmark_filter.select_one('input[name="source"][value="local"]').has_attr("checked")
     assert legacy_bookmark_filter.select_one('#navigator-type').get_text(" ", strip=True).startswith("全部類型")
     explained_search = client.get("/navigator/?scope=all&source=bookmarks&q=web")
     assert "命中：標題" in explained_search.get_data(as_text=True)

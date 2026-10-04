@@ -31,6 +31,7 @@
     const description = dialog.querySelector('[data-gallery-detail-description]');
     const tags = dialog.querySelector('[data-gallery-detail-tags]');
     const launch = dialog.querySelector('[data-gallery-detail-launch]');
+    const read = dialog.querySelector('[data-gallery-detail-read]');
     const related = dialog.querySelector('[data-gallery-detail-related]');
     const back = dialog.querySelector('[data-gallery-detail-back]');
     const close = dialog.querySelector('[data-gallery-detail-close]');
@@ -142,6 +143,15 @@
         launch.removeAttribute('target');
         launch.removeAttribute('rel');
       }
+      if (read) {
+        read.hidden = !item.resource_detail_uri || item.resource_detail_uri === item.launch_uri;
+        if (!read.hidden) {
+          const destination = new URL(item.resource_detail_uri, global.location.href);
+          const current = new URL(global.location.href);
+          destination.searchParams.set('return_to', current.pathname + current.search);
+          read.href = destination.pathname + destination.search;
+        }
+      }
       back.hidden = trail.length === 0;
       content.hidden = false;
     };
@@ -205,14 +215,16 @@
       video.removeAttribute('src');
       returnFocus?.focus();
     });
-    launch.addEventListener('click', () => {
+    const postOpen = () => {
       if (!activeId) return;
       void global.fetch(`/api/catalog/items/${encodeURIComponent(activeId)}/events`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({event_type: 'open'}),
       }).catch(() => {});
-    });
+    };
+    launch.addEventListener('click', postOpen);
+    read?.addEventListener('click', postOpen);
     return {load};
   }
 

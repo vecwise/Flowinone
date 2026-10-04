@@ -42,12 +42,11 @@ def test_resource_pages_and_json_crud(resource_app):
     )
     assert global_search is not None
     assert global_search.select_one('input[name="scope"]')["value"] == "all"
-    resource_search = BeautifulSoup(resource_page.data, "html.parser").select_one(
-        "form.resource-filter"
-    )
-    assert resource_search["action"] == "/navigator/"
-    assert resource_search.select_one('input[name="source"]')["value"] == "resources"
-    assert resource_search.select_one('select[name="type"]') is not None
+    page = BeautifulSoup(resource_page.data, "html.parser")
+    assert page.select_one('form[action="/resources/"] input[name="url"]') is not None
+    assert page.select_one("#resource-management[open]") is None
+    assert page.select_one(".resource-grid") is None
+
 
     created = client.post(
         "/api/resources",
@@ -122,7 +121,7 @@ def test_named_view_is_shareable_and_visible_in_resource_detail(resource_app):
     context = page.select_one(".current-context")
     assert "我的研究視角" in context.get_text()
     assert f"/navigator/views/{saved['id']}/" in context.select_one('[data-context-share-url]')["value"]
-    navigator_clear = context.find("a", string="清除視角")["href"]
+    navigator_clear = context.find("a", string="清除條件")["href"]
     assert BeautifulSoup(client.get(navigator_clear).data, "html.parser").select_one(".current-context") is None
     resource_link = page.select_one(".gallery-card-media")["href"]
     assert resource_link.startswith(created["detail_url"] + "?return_to=")
@@ -130,10 +129,10 @@ def test_named_view_is_shareable_and_visible_in_resource_detail(resource_app):
     detail = BeautifulSoup(client.get(resource_link).data, "html.parser")
     detail_context = detail.select_one(".current-context")
     assert "我的研究視角" in detail_context.get_text()
-    back_url = detail_context.find("a", string="返回此視角")["href"]
+    back_url = detail_context.find("a", string="返回收藏")["href"]
     assert f"context={saved['id']}" in back_url
     assert "我的研究視角" in BeautifulSoup(client.get(back_url).data, "html.parser").select_one(".current-context").get_text()
-    clear_url = detail_context.find("a", string="清除視角")["href"]
+    clear_url = detail_context.find("a", string="清除條件")["href"]
     assert BeautifulSoup(client.get(clear_url).data, "html.parser").select_one(".current-context") is None
 
     changed_response = client.get(f"/navigator/?scope=all&source=resources&q=other&context={saved['id']}")
@@ -143,14 +142,14 @@ def test_named_view_is_shareable_and_visible_in_resource_detail(resource_app):
         client.get(changed_response.headers["Location"]).data,
         "html.parser",
     )
-    assert "未命名視角" in changed.select_one(".current-context").get_text()
+    assert "目前條件" in changed.select_one(".current-context").get_text()
     assert changed.select_one('form.navigator-query input[name="context"]') is None
     anonymous = BeautifulSoup(
         client.get("/navigator/?scope=all&source=resources&q=Current").data,
         "html.parser",
     )
-    assert "未命名視角" in anonymous.select_one(".current-context").get_text()
-    assert "未命名視角" in BeautifulSoup(
+    assert "目前條件" in anonymous.select_one(".current-context").get_text()
+    assert "目前條件" in BeautifulSoup(
         client.get(anonymous.select_one(".gallery-card-media")["href"]).data,
         "html.parser",
     ).select_one(".current-context").get_text()
@@ -162,7 +161,7 @@ def test_named_view_is_shareable_and_visible_in_resource_detail(resource_app):
 
 def test_renderer_root_and_removed_workflow_routes(resource_app):
     client = resource_app.test_client()
-    assert client.get("/").headers["Location"].endswith("/navigator/?scope=gallery")
+    assert client.get("/").headers["Location"].endswith("/navigator/?scope=all")
     for path in (
         "/build/",
         "/think/",

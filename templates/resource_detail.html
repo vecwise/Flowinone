@@ -8,42 +8,81 @@
   {% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
 
   <nav class="resource-breadcrumb" aria-label="麵包屑">
-    <a href="{{ url_for('resource_library.resource_index') }}">Resources</a><span aria-hidden="true">/</span><span>{{ resource.title }}</span>
+    <a href="{{ url_for('catalog.navigator_page', scope='all') }}">我的收藏</a><span aria-hidden="true">/</span><span>{{ resource.title }}</span>
   </nav>
   {% include '_current_context.html' %}
 
   <header class="resource-detail-hero">
     <div class="resource-detail-cover"><img src="{{ resource.thumbnail_url }}" alt="{{ resource.title }} 的預覽圖" width="640" height="360"></div>
     <div class="resource-detail-copy">
-      <p class="eyebrow">{{ resource.source_type }} · {{ resource.domain or 'unknown' }}</p>
+      <p class="eyebrow">{{ resource_type_labels.get(resource.source_type, resource.source_type) }} · {{ resource.domain or '網站' }}</p>
       <h1>{{ resource.title }}</h1>
-      <p>{{ resource.summary_one_line or resource.description or '尚未產生摘要。' }}</p>
+      <p>{{ resource.summary_one_line or resource.description or '' }}</p>
+      {% if resource.tag_names %}<div class="resource-tags resource-reading-tags">{% for tag in resource.tag_names[:4] %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
       <div class="resource-card-actions">
         <a class="action-button primary" href="{{ resource.original_url }}" target="_blank" rel="noopener noreferrer">開啟原文</a>
-        <form method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="force" value="1">
-          <button class="action-button" type="submit">重新擷取</button>
-        </form>
       </div>
     </div>
   </header>
 
-  <div class="resource-detail-layout">
+  <div class="resource-reading-layout">
     <div class="resource-detail-main">
       <section class="resource-surface">
-        <div class="resource-section-heading"><h2>摘要</h2><span>{{ resource.enrichment_status }}</span></div>
-        <h3>短摘要</h3>
-        <p>{{ resource.summary_short or '處理完成後會在這裡顯示摘要。' }}</p>
+        <h2>摘要</h2>
+        <p>{{ resource.summary_short or resource.description or '目前沒有摘要，可開啟原文閱讀。' }}</p>
         {% if resource.why_this_matters %}<h3>內容重點</h3><p>{{ resource.why_this_matters }}</p>{% endif %}
-        {% if resource.summary_structured_json %}<details><summary>結構化摘要</summary><pre class="resource-code">{{ resource.summary_structured_json }}</pre></details>{% endif %}
       </section>
 
       <section class="resource-surface">
-        <h2>抽取內容</h2>
-        {% if resource.extracted_text %}<pre class="resource-reader">{{ resource.extracted_text }}</pre>{% else %}<p>目前沒有可顯示的全文或 transcript。</p>{% endif %}
+        <h2>全文</h2>
+        {% if resource.extracted_text %}<pre class="resource-reader">{{ resource.extracted_text }}</pre>{% else %}<p>目前沒有全文，可開啟原文閱讀。</p>{% endif %}
       </section>
 
+      {% if similar_resources %}
+      <section class="resource-surface">
+        <h2>相似資源</h2>
+        <div class="resource-related-grid">
+          {% for similar in similar_resources %}
+          <a href="{{ similar.detail_url }}"><strong>{{ similar.title }}</strong><span>{{ similar.source_type }} · {{ similar.domain }}</span></a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </div>
+
+  </div>
+  <details id="resource-management" class="resource-management" {% if error %}open{% endif %}>
+    <summary>資源管理 <span>標籤、擷取與版本</span></summary>
+    <div class="resource-management-content">
+      <p class="resource-helper">內容處理狀態：{{ resource.enrichment_status }}</p>
+      <div class="resource-detail-tools-grid">
+        <section class="resource-surface">
+          <h2>編輯標籤</h2>
+          <div class="resource-tags">{% for tag in resource.tags %}<span>{{ tag.name }} · {{ tag.source }}</span>{% else %}<span>尚無標籤</span>{% endfor %}</div>
+          <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_tags', resource_id=resource.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="resource-tags">我的標籤（逗號分隔）</label>
+            <input id="resource-tags" name="tags" value="{{ resource.tags|selectattr('source', 'equalto', 'user')|map(attribute='name')|join(', ') }}">
+            <button class="action-button" type="submit">更新標籤</button>
+          </form>
+        </section>
+
+        <section class="resource-surface">
+          <h2>擷取設定</h2>
+          <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="resource-check"><input type="checkbox" name="include_ai" value="1" {% if not ai_available %}disabled{% endif %}> 同時更新 AI 摘要</label>
+            <input type="hidden" name="force" value="1">
+            <button class="action-button" type="submit">執行擷取</button>
+          </form>
+          {% if not ai_available %}<p class="resource-helper">AI 服務未設定時，預覽圖與全文擷取仍可正常使用。</p>{% endif %}
+        </section>
+
+        <section class="resource-surface">
+          <h2>處理紀錄</h2>
+          <ul class="resource-job-list">{% for job in jobs %}<li><span>{{ job.job_type }}</span><strong>{{ job.status }}</strong>{% if job.error_message %}<small>{{ job.error_message }}</small>{% endif %}</li>{% else %}<li>尚無背景工作</li>{% endfor %}</ul>
+        </section>
+      </div>
       <section class="resource-surface resource-version-summary">
         <div class="resource-section-heading"><h2>內容版本</h2><a class="action-button" href="{{ url_for('resource_library.resource_versions', resource_id=resource.id) }}">查看差異</a></div>
         {% if content_versions %}
@@ -64,50 +103,12 @@
           <li><strong>{{ origin.source }}</strong><span>{{ origin.folder_path or '未分類' }}</span><small>{{ origin.captured_at }}</small></li>
           {% endfor %}
         </ul>
-        {% else %}<p>沒有來源 placement。</p>{% endif %}
+        {% else %}<p>沒有來源紀錄。</p>{% endif %}
       </section>
 
-      {% if similar_resources %}
-      <section class="resource-surface">
-        <h2>相似資源</h2>
-        <div class="resource-related-grid">
-          {% for similar in similar_resources %}
-          <a href="{{ similar.detail_url }}"><strong>{{ similar.title }}</strong><span>{{ similar.source_type }} · {{ similar.domain }}</span></a>
-          {% endfor %}
-        </div>
-      </section>
-      {% endif %}
+      {% if resource.summary_structured_json %}<details><summary>結構化摘要</summary><pre class="resource-code">{{ resource.summary_structured_json }}</pre></details>{% endif %}
     </div>
-
-    <aside class="resource-detail-side" aria-label="資源 metadata">
-      <section class="resource-surface">
-        <h2>Tags</h2>
-        <div class="resource-tags">{% for tag in resource.tags %}<span>{{ tag.name }} · {{ tag.source }}</span>{% else %}<span>尚無 tags</span>{% endfor %}</div>
-        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_tags', resource_id=resource.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label for="resource-tags">使用者 Tags（逗號分隔）</label>
-          <input id="resource-tags" name="tags" value="{{ resource.tags|selectattr('source', 'equalto', 'user')|map(attribute='name')|join(', ') }}">
-          <button class="action-button" type="submit">更新 Tags</button>
-        </form>
-      </section>
-
-      <section class="resource-surface">
-        <h2>擷取設定</h2>
-        <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label class="resource-check"><input type="checkbox" name="include_ai" value="1" {% if not ai_available %}disabled{% endif %}> 同時更新 AI 摘要</label>
-          <input type="hidden" name="force" value="1">
-          <button class="action-button" type="submit">執行擷取</button>
-        </form>
-        {% if not ai_available %}<p class="resource-helper">AI provider 未設定時，metadata、縮圖與全文擷取仍可正常使用。</p>{% endif %}
-      </section>
-
-      <section class="resource-surface">
-        <h2>處理紀錄</h2>
-        <ul class="resource-job-list">{% for job in jobs %}<li><span>{{ job.job_type }}</span><strong>{{ job.status }}</strong>{% if job.error_message %}<small>{{ job.error_message }}</small>{% endif %}</li>{% else %}<li>尚無背景工作</li>{% endfor %}</ul>
-      </section>
-    </aside>
-  </div>
+  </details>
 </main>
 <script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
 {% endblock %}

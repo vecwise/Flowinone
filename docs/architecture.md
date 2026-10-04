@@ -1,6 +1,6 @@
 # Flowinone 現行架構
 
-> 依 `5b530b0`（2026-09-28）的程式碼核對。這裡描述目前可執行的系統；安裝、操作與維護指令見 [使用手冊](renderer-architecture.md)，實際追碼練習見 [動手接手](hands-on.md)。
+> 本頁描述目前的資料流、程序與儲存責任。安裝、操作與維護指令見 [使用手冊](renderer-architecture.md)，實際追碼練習見 [動手接手](hands-on.md)。
 
 ## 先記住的模型
 
@@ -38,8 +38,8 @@ flowchart LR
   Content --> Sync
 
   Sync --> Catalog[("主 DB: Catalog + FTS")]
-  Catalog --> Navigator["Navigator: 素材 / 全部內容"]
-  ResourceDB --> ResourcePages["/resources/ 列表與詳情"]
+  Catalog --> Navigator["我的收藏: 主題 / 搜尋 / 網格 / 列表"]
+  ResourceDB --> ResourcePages["/resources/ 新增、處理與閱讀詳情"]
 
   Files --> SourcePages["來源專屬頁 / viewer"]
   Eagle --> SourcePages
@@ -50,7 +50,7 @@ flowchart LR
 - **Resource 有自己的資料與頁面**：`/resources/` 讀 Resource；`/navigator/?scope=all` 讀 Catalog 投影。Resource 建立、標籤或擷取內容更新並提交後，透過 `resource_library/projection.py` 刷新對應投影。擷取工作的 worker 未運行時，工作仍在 queue 等待。
 - **同一 URL 可有多個來源**：Bookmark 與 Resource 經 URL canonicalization 後可共用一筆 `catalog_items`，`catalog_origins` 仍保留兩個來源紀錄。
 - **直接來源頁和 Navigator 讀法不同**：`/folders/`、`/chrome/`、`/EAGLE_*` 保留來源的資料夾或樹狀結構；Navigator 讀統一 Catalog。來源同步與來源頁讀取不是同一件事。
-- `gallery` scope 只包含 Local、Eagle、Bookmarks；`all` scope 再加 Resources。瀏覽入口是 `/navigator/`，舊 `/gallery/`、`/search/` 與 Gallery API 已移除。
+- 瀏覽入口 `/navigator/` 預設使用 `all` scope，包含四個來源。舊 `gallery` scope 只包含 Local、Eagle、Bookmarks；舊 `/gallery/`、`/search/` 與 Gallery API 已移除。
 
 ## 2. 程式架構：請求與背景工作
 

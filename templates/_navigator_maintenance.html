@@ -1,0 +1,104 @@
+<details id="collection-maintenance" class="navigator-maintenance" {% if maintenance_open %}open{% endif %}>
+  <summary>來源與同步</summary>
+  <div class="navigator-maintenance-panel">
+    {% if bookmark_source_health %}
+    <div class="bookmark-source-health" data-bookmark-source-health data-state="{{ bookmark_source_health.state }}" role="status">
+      {% if bookmark_source_health.state == 'unavailable' %}
+        <strong>Chrome 書籤來源不可用</strong>
+        <span>找不到 Default Profile 的書籤檔；目前顯示既有索引 {{ bookmark_source_health.count }} 筆。上次同步：{{ bookmark_source_health.synced_at }}。</span>
+      {% elif bookmark_source_health.state == 'failed' %}
+        <strong>Chrome 書籤同步失敗</strong>
+        <span>目前顯示既有索引 {{ bookmark_source_health.count }} 筆。請在「來源與同步」重試；最後狀態時間：{{ bookmark_source_health.synced_at }}。</span>
+      {% elif bookmark_source_health.state == 'never_synced' %}
+        <strong>Chrome 書籤尚未同步</strong>
+        <span>請在「來源與同步」同步書籤，才能看到目前的 Chrome 內容。</span>
+      {% elif bookmark_source_health.state == 'changed' %}
+        <strong>Chrome 書籤有變更待同步</strong>
+        <span>目前顯示上次索引 {{ bookmark_source_health.count }} 筆；上次同步：{{ bookmark_source_health.synced_at }}。</span>
+      {% else %}
+        <strong>Chrome 書籤</strong>
+        <span>索引 {{ bookmark_source_health.count }} 筆 · 上次同步：{{ bookmark_source_health.synced_at }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if not eagle_available and 'eagle' in query.sources %}
+    <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
+    {% endif %}
+
+    <button class="action-button" id="catalog-incremental-sync" type="button">同步變更</button>
+    <button class="action-button" id="catalog-reindex" type="button">完整重掃</button>
+    <div id="catalog-sync-status" class="catalog-sync-status" aria-live="polite">
+      <ul>
+        {% for source in catalog_sources %}
+        {% set state = payload.facets.sync.get(source.key, {}) %}
+        {% set status = state.get('status', 'idle') %}
+        <li data-catalog-sync-source="{{ source.key }}" data-status="{{ status }}">
+          <span>{{ source.label }}</span>
+          <strong data-catalog-sync-state>
+            {% if status == 'complete' %}成功
+            {% elif status == 'retrying' %}重試中
+            {% elif status == 'failed' %}最終失敗
+            {% elif status == 'syncing' %}同步中
+            {% else %}尚未同步{% endif %}
+          </strong>
+          <button
+            class="action-button catalog-sync-retry"
+            type="button"
+            data-catalog-sync-retry="{{ source.key }}"
+            aria-label="重試 {{ source.label }}同步"
+            {% if status != 'failed' %}hidden{% endif %}
+          >重試</button>
+          <small data-catalog-sync-detail>
+            {% if status == 'complete' %}{{ state.get('item_count', 0) }} 筆{% if state.get('changed') is not none %} · 更新 {{ state.changed }} · 略過 {{ state.get('skipped', 0) }}{% endif %}{% if state.get('retry_count', 0) %} · 重試 {{ state.retry_count }} 次{% endif %}
+            {% elif status == 'retrying' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}準備第 {{ state.get('next_attempt', 2) }}/{{ state.get('max_attempts', 4) }} 次嘗試
+            {% elif status == 'failed' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}{{ state.get('error', '同步失敗') }}
+            {% elif status == 'syncing' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}第 {{ state.get('attempt', 1) }}/{{ state.get('max_attempts', 4) }} 次嘗試
+            {% else %}—{% endif %}
+          </small>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="catalog-watch-status" data-catalog-watch-status data-enabled="{{ 'true' if source_watch_status.enabled else 'false' }}" aria-live="polite">
+      <div class="catalog-watch-heading">
+        <div><strong>自動偵測</strong><small data-catalog-watch-summary>{% if source_watch_status.enabled %}每 {{ source_watch_status.poll_interval_seconds }} 秒檢查一次，變更會在 {{ source_watch_status.debounce_seconds }} 秒後排程{% else %}目前關閉；不會讀取來源{% endif %}</small></div>
+        <button class="action-button catalog-watch-toggle" id="catalog-source-watch-toggle" type="button" aria-pressed="{{ 'true' if source_watch_status.enabled else 'false' }}">{{ '暫停偵測' if source_watch_status.enabled else '啟用自動偵測' }}</button>
+      </div>
+      <ul>
+        {% for source in catalog_sources %}
+        {% set watch_state = source_watch_status.sources.get(source.key, {}) %}
+        {% set state = watch_state.get('state', 'idle') %}
+        <li data-catalog-watch-source="{{ source.key }}" data-watch-state="{{ state }}">
+          <span>{{ source.label }}</span>
+          <strong data-catalog-watch-state>
+            {% if state == 'watching' %}正在監看
+            {% elif state == 'changed' %}等待變更穩定
+            {% elif state == 'queued' %}已排程
+            {% elif state == 'running' %}同步中
+            {% elif state == 'retry' %}待重試
+            {% elif state == 'complete' %}已同步
+            {% elif state == 'unavailable' %}無法觀測
+            {% elif state == 'error' %}發生錯誤
+            {% else %}尚未觀測{% endif %}
+          </strong>
+          <small data-catalog-watch-detail>{{ watch_state.get('error') or watch_state.get('observed_at') or '—' }}</small>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="catalog-similarity-status" data-catalog-similarity-status aria-live="polite">
+      <div class="catalog-watch-heading">
+        <div>
+          <strong>相同／相似圖片</strong>
+          <small data-catalog-similarity-summary>
+            已分析 {{ similarity_status.analyzed_items }} 張本機圖片{% if similarity_status.duplicate_groups %} · {{ similarity_status.duplicate_groups }} 組完全相同檔案{% endif %}
+          </small>
+        </div>
+        <button class="action-button" id="catalog-similarity-rebuild" type="button">分析本機圖片</button>
+      </div>
+      <small data-catalog-similarity-detail>使用本機 SHA-256 找完全相同檔案，再用 dHash 找視覺相近圖片；只讀取本機圖片。</small>
+      <a class="action-button" href="{{ url_for('catalog.duplicate_review_page') }}">檢閱完全相同群組</a>
+    </div>
+  </div>
+</details>

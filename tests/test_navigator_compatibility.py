@@ -48,7 +48,7 @@ def test_removed_gallery_read_surfaces_are_not_registered(client, path):
 def test_navigator_and_catalog_are_the_only_browser_read_surfaces(client):
     navigator = client.get("/navigator/?scope=gallery&source=local")
     assert navigator.status_code == 200
-    assert b"Cross-source navigator" in navigator.data
+    assert "我的收藏" in navigator.get_data(as_text=True)
 
     catalog = client.get("/api/catalog/items?scope=gallery&source=local")
     assert catalog.status_code == 200
@@ -60,23 +60,22 @@ def test_navigator_and_catalog_are_the_only_browser_read_surfaces(client):
     assert not any(rule.startswith("/gallery/lab") for rule in rules)
 
 
-def test_gallery_quick_filters_preserve_context_and_show_compact_theme_entry(client):
-    response = client.get("/navigator/?scope=gallery&source=local&q=design&type=image")
+def test_collection_form_keeps_legacy_filters_in_collapsed_controls(client):
+    response = client.get("/navigator/?scope=gallery&source=local&q=design&type=image&tags=reference&limit=12&added_from=2026-09-01")
     assert response.status_code == 200
     soup = BeautifulSoup(response.data, "html.parser")
-    video = next(
-        link for link in soup.select('.navigator-chip-group[aria-label="類型"] a')
-        if link.get_text(strip=True) == "影片"
-    )
-    query = parse_qs(urlsplit(video["href"]).query)
-    assert query["q"] == ["design"]
-    assert query["source"] == ["local"]
-    assert query["type"] == ["video"]
+    form = soup.select_one("form.navigator-query")
+    assert form.select_one('input[name="q"]')["value"] == "design"
+    assert form.select_one('input[name="source"][checked]')["value"] == "local"
+    assert form.select_one('input[name="tags"]')["value"] == "reference"
+    assert form.select_one('input[name="limit"]')["value"] == "12"
+    assert form.select_one('input[name="added_from"]')["value"] == "2026-09-01"
     assert soup.select_one(".navigator-advanced[open]") is None
     assert "已套用" in soup.select_one(".navigator-advanced summary").get_text()
-    assert response.data.index(b'id="navigator-theme-heading"') < response.data.index(
-        b'id="navigator-results-heading"'
-    )
+    expanded = client.get(soup.select_one(".navigator-scope-note a")["href"])
+    assert expanded.status_code == 200
+    assert BeautifulSoup(expanded.data, "html.parser").select_one('input[name="scope"]')["value"] == "all"
+    assert response.data.index(b'id="navigator-theme-heading"') < response.data.index(b'id="navigator-q"')
 
 
 @pytest.fixture
@@ -124,18 +123,18 @@ def test_home_topics_follow_catalog_and_open_themed_navigator(client, topic_cata
     _database, ids = topic_catalog
     home = client.get("/")
     assert home.status_code == 302
-    assert home.headers["Location"] == "/navigator/?scope=gallery"
+    assert home.headers["Location"] == "/navigator/?scope=all"
     soup = BeautifulSoup(client.get("/", follow_redirects=True).data, "html.parser")
     cards = soup.select(".navigator-topic-card")
-    assert [card["data-topic"] for card in cards] == ["Design", "photo"]
+    assert [card["data-topic"] for card in cards] == ["Design", "photo", "code"]
     assert cards[0].select_one("header small").get_text() == "6 個項目"
     assert len(cards[0].select("[data-topic-item]")) == 3
-    assert ids["resource"] not in {link["data-topic-item"] for link in soup.select("[data-topic-item]")}
+    assert ids["resource"] in {link["data-topic-item"] for link in soup.select("[data-topic-item]")}
     preview = cards[0].select_one("[data-topic-item]")
     target = urlsplit(preview["href"])
     params = parse_qs(target.query)
     assert params["tags"] == ["design"]
-    assert params["scope"] == ["gallery"]
+    assert params["scope"] == ["all"]
     assert params["sort"] == ["recently_added"]
     assert target.fragment == f"item-{preview['data-topic-item']}"
     themed = BeautifulSoup(client.get(preview["href"]).data, "html.parser")
@@ -151,7 +150,7 @@ def test_topic_links_and_previews_keep_all_navigator_filters(client, topic_catal
         "scope": "all", "source": "bookmarks", "q": "Design", "type": "web_page",
         "folder": "Art", "favorite": "1", "unviewed": "1", "duration_min": "10",
         "duration_max": "60", "added_from": "2026-09-01", "added_to": "2026-10-01",
-        "sort": "title", "limit": "1", "view": "knowledge",
+        "sort": "title", "limit": "1", "view": "list",
     }
     response = client.get("/navigator/", query_string=filters)
     assert response.status_code == 200

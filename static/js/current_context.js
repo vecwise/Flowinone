@@ -7,7 +7,7 @@
       try {
         if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
         await navigator.clipboard.writeText(input.value);
-        status.textContent = '已複製視角連結';
+        status.textContent = '已複製條件連結';
       } catch (_) {
         input.focus();
         input.select();

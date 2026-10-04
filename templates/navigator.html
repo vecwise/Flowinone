@@ -9,140 +9,63 @@
 <main id="main-content" class="container gallery-page navigator-page" data-navigator-query="{{ query.signature() }}" data-navigator-query-payload='{{ query.public_dict()|tojson }}' data-resume-scroll="{{ resume_scroll|int if resume_scroll else '' }}">
   <header class="gallery-hero navigator-hero">
     <div>
-      <p class="eyebrow">Cross-source navigator</p>
-      <h1>{% if query.scope == 'gallery' %}探索素材{% else %}搜尋所有內容{% endif %}</h1>
-      <p>{% if query.scope == 'gallery' %}本機、Eagle、Chrome 書籤{% else %}素材、Resources 與已擷取全文{% endif %}，在同一處接著逛。</p>
-    </div>
-    <div class="navigator-hero-actions">
-      <button class="action-button navigator-command-trigger" type="button" data-command-palette-open aria-haspopup="dialog">
-        快速開啟 <kbd aria-hidden="true">⌘ K</kbd>
-      </button>
-      <a class="action-button" href="{{ random_url }}">隨機探索</a>
-      <details class="navigator-maintenance">
-        <summary>來源管理</summary>
-        <div class="navigator-maintenance-panel">
-          <button class="action-button" id="catalog-incremental-sync" type="button">同步變更</button>
-          <button class="action-button" id="catalog-reindex" type="button">完整重掃</button>
-          <div id="catalog-sync-status" class="catalog-sync-status" aria-live="polite">
-            <ul>
-              {% for source in catalog_sources %}
-              {% set state = payload.facets.sync.get(source.key, {}) %}
-              {% set status = state.get('status', 'idle') %}
-              <li data-catalog-sync-source="{{ source.key }}" data-status="{{ status }}">
-                <span>{{ source.label }}</span>
-                <strong data-catalog-sync-state>
-                  {% if status == 'complete' %}成功
-                  {% elif status == 'retrying' %}重試中
-                  {% elif status == 'failed' %}最終失敗
-                  {% elif status == 'syncing' %}同步中
-                  {% else %}尚未同步{% endif %}
-                </strong>
-                <button
-                  class="action-button catalog-sync-retry"
-                  type="button"
-                  data-catalog-sync-retry="{{ source.key }}"
-                  aria-label="重試 {{ source.label }}同步"
-                  {% if status != 'failed' %}hidden{% endif %}
-                >重試</button>
-                <small data-catalog-sync-detail>
-                  {% if status == 'complete' %}{{ state.get('item_count', 0) }} 筆{% if state.get('changed') is not none %} · 更新 {{ state.changed }} · 略過 {{ state.get('skipped', 0) }}{% endif %}{% if state.get('retry_count', 0) %} · 重試 {{ state.retry_count }} 次{% endif %}
-                  {% elif status == 'retrying' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}準備第 {{ state.get('next_attempt', 2) }}/{{ state.get('max_attempts', 4) }} 次嘗試
-                  {% elif status == 'failed' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}{{ state.get('error', '同步失敗') }}
-                  {% elif status == 'syncing' %}{% if state.get('total') is not none %}{{ state.get('processed', 0) }}/{{ state.total }} 筆 · {% endif %}第 {{ state.get('attempt', 1) }}/{{ state.get('max_attempts', 4) }} 次嘗試
-                  {% else %}—{% endif %}
-                </small>
-              </li>
-              {% endfor %}
-            </ul>
-          </div>
-          <div class="catalog-watch-status" data-catalog-watch-status data-enabled="{{ 'true' if source_watch_status.enabled else 'false' }}" aria-live="polite">
-            <div class="catalog-watch-heading">
-              <div><strong>自動偵測</strong><small data-catalog-watch-summary>{% if source_watch_status.enabled %}每 {{ source_watch_status.poll_interval_seconds }} 秒檢查一次，變更會在 {{ source_watch_status.debounce_seconds }} 秒後排程{% else %}目前關閉；不會讀取來源{% endif %}</small></div>
-              <button class="action-button catalog-watch-toggle" id="catalog-source-watch-toggle" type="button" aria-pressed="{{ 'true' if source_watch_status.enabled else 'false' }}">{{ '暫停偵測' if source_watch_status.enabled else '啟用自動偵測' }}</button>
-            </div>
-            <ul>
-              {% for source in catalog_sources %}
-              {% set watch_state = source_watch_status.sources.get(source.key, {}) %}
-              {% set state = watch_state.get('state', 'idle') %}
-              <li data-catalog-watch-source="{{ source.key }}" data-watch-state="{{ state }}">
-                <span>{{ source.label }}</span>
-                <strong data-catalog-watch-state>
-                  {% if state == 'watching' %}正在監看
-                  {% elif state == 'changed' %}等待變更穩定
-                  {% elif state == 'queued' %}已排程
-                  {% elif state == 'running' %}同步中
-                  {% elif state == 'retry' %}待重試
-                  {% elif state == 'complete' %}已同步
-                  {% elif state == 'unavailable' %}無法觀測
-                  {% elif state == 'error' %}發生錯誤
-                  {% else %}尚未觀測{% endif %}
-                </strong>
-                <small data-catalog-watch-detail>{{ watch_state.get('error') or watch_state.get('observed_at') or '—' }}</small>
-              </li>
-              {% endfor %}
-            </ul>
-          </div>
-          <div class="catalog-similarity-status" data-catalog-similarity-status aria-live="polite">
-            <div class="catalog-watch-heading">
-              <div>
-                <strong>相同／相似圖片</strong>
-                <small data-catalog-similarity-summary>
-                  已分析 {{ similarity_status.analyzed_items }} 張本機圖片{% if similarity_status.duplicate_groups %} · {{ similarity_status.duplicate_groups }} 組完全相同檔案{% endif %}
-                </small>
-              </div>
-              <button class="action-button" id="catalog-similarity-rebuild" type="button">分析本機圖片</button>
-            </div>
-            <small data-catalog-similarity-detail>使用本機 SHA-256 找完全相同檔案，再用 dHash 找視覺相近圖片；只讀取本機圖片。</small>
-            <a class="action-button" href="{{ url_for('catalog.duplicate_review_page') }}">檢閱完全相同群組</a>
-          </div>
-        </div>
-      </details>
+      <h1>我的收藏</h1>
+      <p>選個主題，接著逛自己的文章、影片與圖片。</p>
     </div>
   </header>
   {% include '_current_context.html' %}
 
-  <nav class="navigator-scope" aria-label="Navigator 範圍">
-    <a class="navigator-scope-option {% if query.scope == 'gallery' %}is-active{% endif %}" href="{{ scope_urls.gallery }}" {% if query.scope == 'gallery' %}aria-current="page"{% endif %}>
-      <strong>素材</strong><span>本機、Eagle、Chrome 書籤</span>
-    </a>
-    <a class="navigator-scope-option {% if query.scope == 'all' %}is-active{% endif %}" href="{{ scope_urls.all }}" {% if query.scope == 'all' %}aria-current="page"{% endif %}>
-      <strong>全部內容</strong><span>素材加上 Resources 與全文</span>
-    </a>
-  </nav>
-
-  {% if bookmark_source_health %}
-  <div class="bookmark-source-health" data-bookmark-source-health data-state="{{ bookmark_source_health.state }}" role="status">
-    {% if bookmark_source_health.state == 'unavailable' %}
-      <strong>Chrome 書籤來源不可用</strong>
-      <span>找不到 Default Profile 的書籤檔；目前顯示既有索引 {{ bookmark_source_health.count }} 筆。上次同步：{{ bookmark_source_health.synced_at }}。</span>
-    {% elif bookmark_source_health.state == 'failed' %}
-      <strong>Chrome 書籤同步失敗</strong>
-      <span>目前顯示既有索引 {{ bookmark_source_health.count }} 筆。請在「來源管理」重試；最後狀態時間：{{ bookmark_source_health.synced_at }}。</span>
-    {% elif bookmark_source_health.state == 'never_synced' %}
-      <strong>Chrome 書籤尚未同步</strong>
-      <span>請在「來源管理」同步書籤，才能看到目前的 Chrome 內容。</span>
-    {% elif bookmark_source_health.state == 'changed' %}
-      <strong>Chrome 書籤有變更待同步</strong>
-      <span>目前顯示上次索引 {{ bookmark_source_health.count }} 筆；上次同步：{{ bookmark_source_health.synced_at }}。</span>
-    {% else %}
-      <strong>Chrome 書籤</strong>
-      <span>索引 {{ bookmark_source_health.count }} 筆 · 上次同步：{{ bookmark_source_health.synced_at }}</span>
+  <section class="navigator-theme-entry" aria-labelledby="navigator-theme-heading">
+    <div class="navigator-theme-row navigator-topic-list" aria-label="可探索主題">
+      <h2 id="navigator-theme-heading">今天想看什麼</h2>
+      {% if query.tags %}<span class="navigator-theme-current">目前：{{ query.tags|join('、') }}</span>{% endif %}
+      {% for topic in topics %}<a class="navigator-chip {% if topic.selected %}is-active{% endif %}" href="{{ topic.url }}" {% if topic.selected %}aria-current="true"{% endif %}>{{ topic.name }} <small>{{ topic.count }}</small></a>{% endfor %}
+      {% if query.tags %}<a class="navigator-theme-clear" href="{{ topic_clear_url }}">清除主題</a>{% endif %}
+      {% if not topics %}<span class="navigator-explore-empty">目前條件下沒有可探索的標籤主題；可調整篩選或同步來源。</span>{% endif %}
+    </div>
+    {% if saved_searches %}
+    <div class="navigator-theme-row" aria-label="常用條件">
+      <span class="navigator-theme-label">常用</span>
+      {% for saved in saved_searches %}
+      <span class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
+        <a href="{{ saved.url }}" title="{{ saved.summary }}">{{ saved.label }}</a>
+        <details class="navigator-saved-search-tools"><summary aria-label="管理常用條件：{{ saved.label }}">更多</summary><button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除常用條件：{{ saved.label }}">移除</button></details>
+      </span>
+      {% endfor %}
+    </div>
     {% endif %}
-  </div>
-  {% endif %}
+    {% if topics and not query.tags and not query.cursor %}
+    <p class="navigator-topic-hint">從現有標籤接著探索。</p>
+    <div class="navigator-topic-recommendations" aria-label="主題推薦">
+      {% for topic in topics if topic['items'] %}
+      <article class="navigator-topic-card" data-topic="{{ topic.name }}">
+        <header><h3><a href="{{ topic.url }}">{{ topic.name }}</a></h3><small>{{ topic.count }} 個項目</small></header>
+        <ul>
+          {% for item in topic['items'] %}
+          <li><a class="navigator-topic-item" href="{{ item.browse_url }}" data-topic-item="{{ item.id }}">
+            <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="48" height="48" loading="lazy" decoding="async">
+            <span><strong>{{ item.title }}</strong><small>{{ item.launch_source_label }} · 主題：{{ topic.name }}</small></span>
+          </a></li>
+          {% endfor %}
+        </ul>
+        <a class="navigator-topic-more" href="{{ topic.url }}">繼續探索此主題 →</a>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
 
-  {% if not eagle_available and 'eagle' in query.sources %}
-  <div class="gallery-notice" role="status"><strong>EAGLE 未連線：</strong>已暫時略過不可開啟的項目；其他來源仍可搜尋。</div>
-  {% endif %}
-
-  <form class="gallery-query navigator-query" method="get" role="search" aria-label="Navigator 搜尋與篩選">
+  <form class="gallery-query navigator-query" method="get" role="search" aria-label="收藏搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
-    <input type="hidden" name="view" value="{{ 'knowledge' if view == 'knowledge' else '' }}">
+    <input type="hidden" name="view" value="{{ 'list' if view == 'list' else '' }}">
     {% if current_context and current_context.named %}<input type="hidden" name="context" value="{{ request.args.get('context') }}">{% endif %}
     {% if query.folder %}<input type="hidden" name="folder" value="{{ query.folder }}">{% endif %}
+    <input type="hidden" name="limit" value="{{ query.limit }}">
+    {% if query.added_from %}<input type="hidden" name="added_from" value="{{ query.added_from }}">{% endif %}
+    {% if query.added_to %}<input type="hidden" name="added_to" value="{{ query.added_to }}">{% endif %}
     <div class="gallery-search-field">
       <label for="navigator-q">搜尋</label>
-      <input id="navigator-q" type="search" name="q" value="{{ query.q }}" placeholder="{% if query.scope == 'gallery' %}標題、tag 或素材描述{% else %}標題、摘要、tag 或擷取內容{% endif %}">
+      <input id="navigator-q" type="search" name="q" value="{{ query.q }}" placeholder="搜尋目前主題或收藏">
     </div>
 
     <div class="gallery-select-field">
@@ -164,20 +87,20 @@
         <option value="relevance" {% if query.sort == 'relevance' %}selected{% endif %}>搜尋相關度</option>
         <option value="title" {% if query.sort == 'title' %}selected{% endif %}>標題</option>
         <option value="random" {% if query.sort == 'random' %}selected{% endif %}>隨機探索</option>
-        <option value="most_viewed" {% if query.sort == 'most_viewed' %}selected{% endif %}>最常瀏覽</option>
-        <option value="recently_viewed" {% if query.sort == 'recently_viewed' %}selected{% endif %}>最近瀏覽</option>
-        <option value="favorites" {% if query.sort == 'favorites' %}selected{% endif %}>我的最愛</option>
+        {% if query.sort == 'most_viewed' %}<option value="most_viewed" selected>最常瀏覽</option>{% endif %}
+        {% if query.sort == 'recently_viewed' %}<option value="recently_viewed" selected>最近瀏覽</option>{% endif %}
+        {% if query.sort == 'favorites' %}<option value="favorites" selected>我的最愛</option>{% endif %}
       </select>
     </div>
     {% if query.seed %}<input type="hidden" name="seed" value="{{ query.seed }}">{% endif %}
     <div class="navigator-query-actions">
       <button class="action-button primary" type="submit">套用</button>
-      <button class="action-button" type="button" data-save-search-open>儲存搜尋</button>
       <a class="action-button" href="{{ reset_url }}">重設</a>
     </div>
-    <details class="navigator-advanced" {% if query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}open{% endif %}>
+    <details class="navigator-advanced">
       <summary>更多篩選{% if query.sources != scope_sources or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
       <div class="navigator-advanced-grid">
+        {% if query.scope == 'gallery' %}<p class="navigator-scope-note">目前連結只包含本機、Eagle 與書籤。<a href="{{ all_sources_url }}">包含所有收藏</a></p>{% endif %}
         <fieldset class="gallery-source-filter">
           <legend>來源</legend>
           <div class="gallery-source-options {% if source_options|length == 4 %}has-four-sources{% endif %}">
@@ -190,11 +113,11 @@
           </div>
         </fieldset>
         <div class="gallery-search-field">
-          <label for="navigator-tags">Tags（逗號分隔）</label>
+          <label for="navigator-tags">標籤（逗號分隔）</label>
           <input id="navigator-tags" name="tags" value="{{ query.tags|join(',') }}" placeholder="例如：reference, motion">
         </div>
         <div class="gallery-select-field">
-          <label for="navigator-tag-mode">Tag 規則</label>
+          <label for="navigator-tag-mode">標籤規則</label>
           <select id="navigator-tag-mode" name="tag_mode"><option value="any" {% if query.tag_mode == 'any' %}selected{% endif %}>符合任一</option><option value="all" {% if query.tag_mode == 'all' %}selected{% endif %}>符合全部</option></select>
         </div>
         <label class="source-option"><input type="checkbox" name="favorite" value="1" {% if query.favorite %}checked{% endif %}><span><strong>只看最愛</strong></span></label>
@@ -202,101 +125,42 @@
         <div class="gallery-select-field"><label for="navigator-duration-min">最短秒數</label><input id="navigator-duration-min" type="number" min="0" name="duration_min" value="{{ query.duration_min if query.duration_min is not none else '' }}"></div>
         <div class="gallery-select-field"><label for="navigator-duration-max">最長秒數</label><input id="navigator-duration-max" type="number" min="0" name="duration_max" value="{{ query.duration_max if query.duration_max is not none else '' }}"></div>
       </div>
+      <div class="navigator-secondary-actions">
+        <button class="action-button" type="button" data-save-search-open>儲存為常用條件</button>
+        <button class="action-button navigator-command-trigger" type="button" data-command-palette-open aria-haspopup="dialog">快速開啟 <kbd aria-hidden="true">⌘ K</kbd></button>
+      </div>
+      <details class="navigator-explore" {% if query.folder %}open{% endif %}>
+        <summary>按 Chrome 資料夾逛{% if query.folder %}<span>目前：{{ query.folder }}</span>{% endif %}</summary>
+        <div class="navigator-explore-content">
+          <section aria-labelledby="navigator-folders-heading">
+            <div class="navigator-explore-heading">
+              <h2 id="navigator-folders-heading">Chrome 書籤資料夾</h2>
+              <a href="{{ folder_clear_url }}">全部資料夾</a>
+            </div>
+            {% if folder_crumbs %}<nav class="navigator-folder-crumbs" aria-label="資料夾階層">
+              <a href="{{ folder_clear_url }}">全部</a>
+              {% for crumb in folder_crumbs %}<span aria-hidden="true">/</span><a href="{{ crumb.url }}" {% if loop.last %}aria-current="page"{% endif %}>{{ crumb.name }}</a>{% endfor %}
+            </nav>{% endif %}
+            {% if folder_children %}<div class="navigator-folder-grid">
+              {% for folder in folder_children %}<a class="navigator-folder-card" href="{{ folder.url }}"><strong>{{ folder.name }}</strong><small>{{ folder.count }} 個項目</small></a>{% endfor %}
+            </div>{% else %}<p class="navigator-explore-empty">{% if query.folder %}此資料夾沒有子資料夾；仍可瀏覽目前項目。{% else %}同步 Chrome 書籤後，資料夾會顯示在這裡。{% endif %}</p>{% endif %}
+          </section>
+        </div>
+      </details>
     </details>
   </form>
 
-  <nav class="navigator-quick-filters" aria-label="快速篩選">
-    <div class="navigator-chip-group" aria-label="類型">
-      <span>類型</span>
-      {% for item_type, label in [('', '全部'), ('image', '圖片'), ('video', '影片')] %}
-      <a class="navigator-chip {% if query.item_type == item_type %}is-active{% endif %}" href="{{ quick_type_urls[item_type] }}" {% if query.item_type == item_type %}aria-current="true"{% endif %}>{{ label }}</a>
-      {% endfor %}
-    </div>
-    <div class="navigator-chip-group" aria-label="來源">
-      <span>來源</span>
-      <a class="navigator-chip {% if query.sources == scope_sources %}is-active{% endif %}" href="{{ quick_all_sources_url }}" {% if query.sources == scope_sources %}aria-current="true"{% endif %}>全部</a>
-      {% for source in source_options %}
-      <a class="navigator-chip {% if query.sources == (source.key,) %}is-active{% endif %}" href="{{ quick_source_urls[source.key] }}" {% if query.sources == (source.key,) %}aria-current="true"{% endif %}>{{ source.label }}</a>
-      {% endfor %}
-    </div>
-    <div class="navigator-chip-group" aria-label="瀏覽狀態">
-      <a class="navigator-chip {% if query.favorite %}is-active{% endif %}" href="{{ quick_favorite_url }}" {% if query.favorite %}aria-current="true"{% endif %}>我的最愛</a>
-      <a class="navigator-chip {% if query.unviewed %}is-active{% endif %}" href="{{ quick_unviewed_url }}" {% if query.unviewed %}aria-current="true"{% endif %}>尚未瀏覽</a>
-    </div>
-  </nav>
-
-  <section class="navigator-theme-entry" aria-labelledby="navigator-theme-heading">
-    <div class="navigator-theme-row navigator-topic-list" aria-label="可探索主題">
-      <h2 id="navigator-theme-heading">今天想看什麼</h2>
-      {% if query.tags %}<span class="navigator-theme-current">目前：{{ query.tags|join('、') }}</span>{% endif %}
-      {% for topic in topics %}<a class="navigator-chip {% if topic.selected %}is-active{% endif %}" href="{{ topic.url }}" {% if topic.selected %}aria-current="true"{% endif %}>{{ topic.name }} <small>{{ topic.count }}</small></a>{% endfor %}
-      {% if query.tags %}<a class="navigator-theme-clear" href="{{ topic_clear_url }}">清除主題</a>{% endif %}
-      {% if not topics %}<span class="navigator-explore-empty">目前條件下沒有可探索的標籤主題；可調整篩選或同步來源。</span>{% endif %}
-      <button class="action-button" type="button" data-save-search-open>儲存目前條件</button>
-    </div>
-    {% if saved_searches %}
-    <div class="navigator-theme-row" aria-label="已儲存主題">
-      <span class="navigator-theme-label">已儲存</span>
-      {% for saved in saved_searches %}
-      <span class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
-        <a href="{{ saved.url }}" title="{{ saved.summary }}">{{ saved.label }}</a>
-        <button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除儲存搜尋：{{ saved.label }}">×</button>
-      </span>
-      {% endfor %}
-    </div>
-    {% endif %}
-    {% if topics and not query.tags and not query.cursor %}
-    <p class="navigator-topic-hint">依現有標籤推薦，保留目前搜尋與篩選；點選項目後可接著逛同主題。</p>
-    <div class="navigator-topic-recommendations" aria-label="主題推薦">
-      {% for topic in topics if topic['items'] %}
-      <article class="navigator-topic-card" data-topic="{{ topic.name }}">
-        <header><h3><a href="{{ topic.url }}">{{ topic.name }}</a></h3><small>{{ topic.count }} 個項目</small></header>
-        <ul>
-          {% for item in topic['items'] %}
-          <li><a class="navigator-topic-item" href="{{ item.browse_url }}" data-topic-item="{{ item.id }}">
-            <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="48" height="48" loading="lazy" decoding="async">
-            <span><strong>{{ item.title }}</strong><small>{{ item.launch_source_label }} · 主題：{{ topic.name }}</small></span>
-          </a></li>
-          {% endfor %}
-        </ul>
-        <a class="navigator-topic-more" href="{{ topic.url }}">繼續探索此主題 →</a>
-      </article>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </section>
-
-  <details class="navigator-explore" {% if query.folder %}open{% endif %}>
-    <summary>按 Chrome 資料夾逛{% if query.folder %}<span>目前：{{ query.folder }}</span>{% endif %}</summary>
-    <div class="navigator-explore-content">
-      <section aria-labelledby="navigator-folders-heading">
-        <div class="navigator-explore-heading">
-          <h2 id="navigator-folders-heading">Chrome 書籤資料夾</h2>
-          <a href="{{ folder_clear_url }}">全部資料夾</a>
-        </div>
-        {% if folder_crumbs %}<nav class="navigator-folder-crumbs" aria-label="資料夾階層">
-          <a href="{{ folder_clear_url }}">全部</a>
-          {% for crumb in folder_crumbs %}<span aria-hidden="true">/</span><a href="{{ crumb.url }}" {% if loop.last %}aria-current="page"{% endif %}>{{ crumb.name }}</a>{% endfor %}
-        </nav>{% endif %}
-        {% if folder_children %}<div class="navigator-folder-grid">
-          {% for folder in folder_children %}<a class="navigator-folder-card" href="{{ folder.url }}"><strong>{{ folder.name }}</strong><small>{{ folder.count }} 個項目</small></a>{% endfor %}
-        </div>{% else %}<p class="navigator-explore-empty">{% if query.folder %}此資料夾沒有子資料夾；下方仍可搜尋目前項目。{% else %}同步 Chrome 書籤後，資料夾會顯示在這裡。{% endif %}</p>{% endif %}
-      </section>
-    </div>
-  </details>
 
   <section aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
-      <div><p class="eyebrow">{{ 'Browse' if query.scope == 'gallery' else 'Results' }}</p><h2 id="navigator-results-heading">{{ payload.total_estimate }} 個項目</h2></div>
+      <div><p class="eyebrow">我的收藏</p><h2 id="navigator-results-heading">{{ payload.total_estimate }} 個項目</h2></div>
       {% if payload['items'] %}<div class="navigator-view-switch" role="group" aria-label="結果檢視方式">
-        <button type="button" data-gallery-view-option="grid" aria-pressed="{{ 'false' if view == 'knowledge' else 'true' }}">網格</button>
-        <button type="button" data-gallery-view-option="list" aria-pressed="false">列表</button>
-        <button type="button" data-gallery-view-option="shelf" aria-pressed="false">橫向瀏覽</button>
-        <button type="button" data-gallery-view-option="knowledge" aria-pressed="{{ 'true' if view == 'knowledge' else 'false' }}">知識</button>
+        <button type="button" data-gallery-view-option="grid" aria-pressed="{{ 'true' if view == 'grid' else 'false' }}">網格</button>
+        <button type="button" data-gallery-view-option="list" aria-pressed="{{ 'true' if view == 'list' else 'false' }}">列表</button>
       </div>{% endif %}
     </div>
     {% if payload['items'] %}
-    <div class="gallery-grid" data-gallery-view="{{ view }}" data-knowledge-loaded="{{ 'true' if view == 'knowledge' else 'false' }}">
+    <div class="gallery-grid" data-gallery-view="{{ view }}">
       {% for item in payload['items'] %}
       <article id="item-{{ item.id }}" class="gallery-card" data-navigator-item="{{ item.id }}" data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
         <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" data-gallery-detail-open {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
@@ -325,22 +189,29 @@
           <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
           {% endif %}
           {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
-          {% if item.knowledge_excerpt and not (item.match_reason and item.match_reason.field == 'content') %}<p class="navigator-knowledge-excerpt">{{ item.knowledge_excerpt }}</p>{% endif %}
+          {% if item.content_excerpt and not (item.match_reason and item.match_reason.field == 'content') %}<p class="navigator-content-excerpt">{{ item.content_excerpt }}</p>{% endif %}
           {% if item.launch_source == 'bookmarks' and item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">資料夾：{{ item.collection_label }}</p>{% endif %}
           {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
           <div class="navigator-card-actions">
             <button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}" aria-label="{{ '移出我的最愛：' if item.favorite else '加入我的最愛：' }}{{ item.title }}">{{ '移出最愛' if item.favorite else '加入最愛' }}</button>
-            {% if 'resources' in query.sources and item.resource_detail_uri and item.launch_uri != item.resource_detail_uri %}<a class="action-button" href="{{ item.resource_detail_uri }}">查看擷取內容</a>{% endif %}
-            {% if item.original_uri %}<a class="action-button gallery-card-open" href="{{ item.original_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
-            {% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似</button>{% endif %}
-            {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
+            {% if item.original_uri or item.resource_detail_uri or item.item_type == 'image' or item.open_count %}
+            <details class="gallery-card-more">
+              <summary>更多</summary>
+              <div class="gallery-card-more-actions">
+                {% if 'resources' in query.sources and item.resource_detail_uri and item.launch_uri != item.resource_detail_uri %}<a class="action-button" href="{{ item.resource_detail_uri }}">閱讀內容</a>{% endif %}
+                {% if item.original_uri %}<a class="action-button gallery-card-open" href="{{ item.original_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
+                {% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似圖片</button>{% endif %}
+                {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
+              </div>
+            </details>
+            {% endif %}
           </div>
         </div>
       </article>
       {% endfor %}
     </div>
     {% else %}
-    <div class="gallery-empty"><h3>找不到符合的項目</h3><p>可移除部分條件、改用另一個範圍，或重新同步來源。</p><a class="action-button primary" href="{{ reset_url }}">查看此範圍的所有項目</a></div>
+    <div class="gallery-empty"><h3>找不到符合的項目</h3><p>可清除搜尋或調整主題與篩選。</p><a class="action-button primary" href="{{ reset_url }}">清除篩選</a></div>
     {% endif %}
   </section>
 
@@ -348,43 +219,42 @@
 
   {% if recent_sessions %}
   <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">
-    <div class="gallery-results-heading"><div><p class="eyebrow">Continue browsing</p><h2 id="navigator-sessions-heading">最近的瀏覽</h2></div></div>
+    <div class="gallery-results-heading"><div><h2 id="navigator-sessions-heading">接著逛</h2></div></div>
     <div class="navigator-session-grid">
       {% for session in recent_sessions %}
       <a class="navigator-session-card" href="{{ session.url }}">
-        <span class="navigator-session-meta">{{ session.scope_label }} · {{ session.updated_display }}</span>
+        <span class="navigator-session-meta">{{ session.updated_display }}</span>
         <h3>{{ session.query.q or '篩選瀏覽' }}</h3>
         {% if session.focused_title %}<p>上次看到：{{ session.focused_title }}</p>{% endif %}
-        <p>{{ session.query.sources|map('upper')|join(' · ') }} · {{ session.query.sort }}</p>
+        <p>{{ session.summary }}</p>
       </a>
       {% endfor %}
     </div>
   </section>
   {% endif %}
+  {% include '_navigator_maintenance.html' %}
   <p id="navigator-action-status" class="sr-only" aria-live="polite"></p>
 </main>
 
 <dialog class="navigator-command-dialog" data-command-palette aria-labelledby="navigator-command-title">
   <div class="navigator-command-shell">
     <div class="navigator-command-heading">
-      <div><p class="eyebrow">Navigator</p><h2 id="navigator-command-title">快速開啟</h2></div>
+      <div><h2 id="navigator-command-title">快速開啟</h2></div>
       <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉快速開啟">關閉</button></form>
     </div>
     <label class="sr-only" for="navigator-command-input">篩選快速開啟選項</label>
-    <input id="navigator-command-input" class="navigator-command-input" data-command-palette-input type="search" placeholder="搜尋動作或已儲存搜尋" autocomplete="off">
+    <input id="navigator-command-input" class="navigator-command-input" data-command-palette-input type="search" placeholder="搜尋動作或常用條件" autocomplete="off">
     <div class="navigator-command-list" data-command-palette-list aria-label="快速開啟選項">
       <button type="button" class="navigator-command-item" data-command-item data-command-action="focus-search">搜尋目前範圍</button>
-      <a class="navigator-command-item" data-command-item href="{{ scope_urls.gallery }}">切換到素材</a>
-      <a class="navigator-command-item" data-command-item href="{{ scope_urls.all }}">切換到全部內容</a>
+      <a class="navigator-command-item" data-command-item href="{{ url_for('catalog.navigator_page', scope='all') }}">查看全部收藏</a>
       <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.favorites }}">查看我的最愛</a>
       <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.unviewed }}">查看尚未瀏覽</a>
       <a class="navigator-command-item" data-command-item href="{{ random_url }}">隨機探索</a>
-      <a class="navigator-command-item" data-command-item href="{{ url_for('catalog.duplicate_review_page') }}">檢閱完全相同圖片群組</a>
       {% for saved in saved_searches %}
       <a class="navigator-command-item" data-command-item href="{{ saved.url }}">{{ saved.label }} <small>{{ saved.summary }}</small></a>
       {% endfor %}
     </div>
-    <p class="navigator-command-empty" data-command-palette-empty hidden>找不到相符的動作或儲存搜尋。</p>
+    <p class="navigator-command-empty" data-command-palette-empty hidden>找不到相符的動作或常用條件。</p>
     <p class="navigator-command-hint"><kbd>⌘ K</kbd> 開啟 · <kbd>Esc</kbd> 關閉</p>
   </div>
 </dialog>
@@ -404,8 +274,8 @@
 <dialog class="navigator-save-search-dialog" data-save-search-dialog aria-labelledby="navigator-save-search-title">
   <div class="navigator-command-shell">
     <div class="navigator-command-heading">
-      <div><p class="eyebrow">Quick views</p><h2 id="navigator-save-search-title">儲存目前搜尋</h2></div>
-      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉儲存搜尋">關閉</button></form>
+      <div><h2 id="navigator-save-search-title">儲存為常用條件</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉常用條件">關閉</button></form>
     </div>
     <form data-save-search-form>
       <label for="navigator-saved-search-label">名稱</label>
@@ -424,7 +294,7 @@
     <header class="navigator-detail-heading">
       <div class="navigator-detail-navigation">
         <button class="action-button" type="button" data-gallery-detail-back hidden>返回上個項目</button>
-        <span class="eyebrow">素材詳情</span>
+        <span class="eyebrow">收藏預覽</span>
       </div>
       <button class="navigator-dialog-close" type="button" data-gallery-detail-close aria-label="關閉詳情">關閉</button>
     </header>
@@ -440,6 +310,7 @@
         <div class="gallery-tags" data-gallery-detail-tags aria-label="Tags"></div>
         <div class="navigator-detail-actions">
           <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>
+          <a class="action-button" data-gallery-detail-read href="#" hidden>閱讀內容</a>
         </div>
       </section>
       <aside class="navigator-detail-related" aria-labelledby="navigator-detail-related-title">

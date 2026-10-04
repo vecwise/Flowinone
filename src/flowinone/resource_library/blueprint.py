@@ -55,7 +55,7 @@ def _resource_current_context(resource_id: str) -> dict | None:
     if saved:
         share_url = url_for(
             "catalog.navigator_saved_view", saved_search_id=saved["id"],
-            view="knowledge" if params.get("view") == ["knowledge"] else None,
+            view="list" if params.get("view") in (["list"], ["knowledge"]) else None,
             _external=True,
         )
     else:
@@ -63,9 +63,9 @@ def _resource_current_context(resource_id: str) -> dict | None:
         share_url = url_for("catalog.navigator_page", _external=True) + "?" + urlencode(share_pairs)
     keyword = params.get("q", [""])[0]
     return {
-        "label": saved["label"] if saved else "未命名視角",
+        "label": saved["label"] if saved else "目前條件",
         "named": bool(saved),
-        "summary": f"搜尋「{keyword}」" if keyword else "Catalog 篩選瀏覽",
+        "summary": f"搜尋「{keyword}」" if keyword else "接續收藏瀏覽",
         "share_url": share_url,
         "clear_url": url_for("resource_library.resource_detail", resource_id=resource_id),
         "return_url": return_url,
@@ -89,11 +89,12 @@ def resource_index():
     page = service.repository.list(**params)
     return render_template(
         "resource_library.html",
-        title="Resources · Flowinone",
+        title="新增資源 · Flowinone",
         resources=[decorate_resource(item) for item in page.items],
         page=page,
         page_count=max(1, math.ceil(page.total / page.per_page)),
         stats=service.repository.stats(),
+        maintenance_open=request.args.get("manage") == "1" or bool(request.args.get("page")),
         filters=params,
         notice=request.args.get("notice"),
         error=request.args.get("error"),
@@ -127,6 +128,7 @@ def resource_enrich_selection():
         for key in ("q", "source_type", "page")
         if request.args.get(key)
     }
+    return_params["manage"] = "1"
     try:
         count = _service().enqueue_selected_enrichment(request.form.getlist("resource_id"))
     except ResourceNotFound:
@@ -203,6 +205,7 @@ def resource_detail(resource_id: str):
             for item in service.repository.find_similar(resource_id, limit=6)
         ],
         ai_available=EnrichmentService(_database()).ai.available,
+        resource_type_labels=RESOURCE_TYPE_LABELS,
         notice=request.args.get("notice"),
         error=request.args.get("error"),
     )

@@ -72,9 +72,9 @@ def _bookmark_source_health(path: Path, sync_state: dict, indexed_count: int) ->
 
 def _navigator_query() -> CatalogQuery:
     """Build a query whose source defaults always match the chosen scope."""
-    scope = request.args.get("scope", "gallery").strip().lower()
+    scope = request.args.get("scope", "all").strip().lower()
     if scope not in NAVIGATOR_SCOPE_SOURCES:
-        scope = "gallery"
+        scope = "all"
     allowed_sources = NAVIGATOR_SCOPE_SOURCES[scope]
     requested_sources = request.args.getlist("source")
     sources = tuple(source for source in requested_sources if source in allowed_sources) or allowed_sources
@@ -128,10 +128,15 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
     return pairs
 
 
+def _navigator_view() -> str:
+    """Keep old knowledge links readable through the remaining list layout."""
+    return "list" if request.args.get("view") in {"list", "knowledge"} else "grid"
+
+
 def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
     pairs = _navigator_query_pairs(query, cursor=cursor)
-    if request.args.get("view") == "knowledge":
-        pairs.append(("view", "knowledge"))
+    if _navigator_view() == "list":
+        pairs.append(("view", "list"))
     context = getattr(g, "navigator_context", None)
     if context and CatalogQuery.create(**context["query"]).signature() == query.signature():
         pairs.append(("context", context["id"]))
@@ -190,9 +195,9 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
     sessions = []
     for session in service.recent_sessions(12):
         saved_query = dict(session.get("query") or {})
-        scope = saved_query.get("scope") or "gallery"
+        scope = saved_query.get("scope") or "all"
         if scope not in NAVIGATOR_SCOPE_SOURCES:
-            scope = "gallery"
+            scope = "all"
         saved_query["scope"] = scope
         saved_query["sources"] = tuple(
             source for source in saved_query.get("sources") or ()
@@ -225,7 +230,7 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
                 session["focused_title"] = service.get(session["focused_item_id"])["title"]
             except LookupError:
                 session["focused_title"] = None
-        session["scope_label"] = "素材" if scope == "gallery" else "全部內容"
+        session["summary"] = _saved_search_summary(session_query)
         try:
             session["updated_display"] = datetime.fromisoformat(
                 str(session.get("updated_at") or "").replace("Z", "+00:00")
@@ -261,7 +266,7 @@ def _navigator_saved_searches(service: CatalogService) -> list[dict]:
         query = CatalogQuery.create(**(saved.get("query") or {}))
         saved["url"] = url_for(
             "catalog.navigator_saved_view", saved_search_id=saved["id"],
-            view="knowledge" if request.args.get("view") == "knowledge" else None,
+            view="list" if _navigator_view() == "list" else None,
         )
         saved["scope_label"] = "素材" if query.scope == "gallery" else "全部內容"
         saved["summary"] = _saved_search_summary(query)
@@ -285,7 +290,7 @@ def navigator_saved_view(saved_search_id: str):
 def navigator_page():
     service = CatalogService(_database())
     query = _navigator_query()
-    view = "knowledge" if request.args.get("view") == "knowledge" else "grid"
+    view = _navigator_view()
     context_id = request.args.get("context", "").strip()
     if context_id:
         try:
@@ -328,10 +333,11 @@ def navigator_page():
             item["resource_detail_uri"] = contextual_uri
             if item.get("launch_uri") == detail_uri:
                 item["launch_uri"] = contextual_uri
-    if view == "knowledge":
-        excerpts = service.text_excerpts_for_items([item["id"] for item in payload["items"]])
-        for item in payload["items"]:
-            item["knowledge_excerpt"] = excerpts.get(item["id"], "")
+    excerpts = service.text_excerpts_for_items([
+        item["id"] for item in payload["items"] if not item.get("card_description")
+    ])
+    for item in payload["items"]:
+        item["content_excerpt"] = excerpts.get(item["id"], "")
     bookmark_source_health = _bookmark_source_health(
         Path(CHROME_BOOKMARK_PATH),
         payload["facets"]["sync"].get("bookmarks", {}),
@@ -357,7 +363,7 @@ def navigator_page():
     share_url = (
         url_for(
             "catalog.navigator_saved_view", saved_search_id=active_context["id"],
-            view="knowledge" if view == "knowledge" else None, _external=True,
+            view="list" if view == "list" else None, _external=True,
         )
         if active_context else request.url_root.rstrip("/") + _navigator_url(
             CatalogQuery.create(**{**query.public_dict(), "cursor": ""})
@@ -371,9 +377,9 @@ def navigator_page():
     )
     return render_template(
         "navigator.html",
-        title="Navigator · Flowinone",
+        title="我的收藏 · Flowinone",
         current_context={
-            "label": active_context["label"] if active_context else "未命名視角",
+            "label": active_context["label"] if active_context else "目前條件",
             "named": bool(active_context),
             "summary": _saved_search_summary(query),
             "share_url": share_url,
@@ -401,7 +407,8 @@ def navigator_page():
         next_url=next_url,
         reset_url=_navigator_url(reset_query),
         random_url=_navigator_url(CatalogQuery.create(**random_values)),
-        scope_urls={scope: _navigator_url(_with_scope(query, scope)) for scope in NAVIGATOR_SCOPE_SOURCES},
+        all_sources_url=_navigator_url(_with_scope(query, "all")),
+        maintenance_open=request.args.get("manage") == "1",
         recent_sessions=_navigator_recent_sessions(service),
         saved_searches=_navigator_saved_searches(service),
         quick_filter_urls={
@@ -420,17 +427,6 @@ def navigator_page():
                 )
             ),
         },
-        quick_type_urls={
-            item_type: _quick_filter_url(query, type=item_type)
-            for item_type in ("", "image", "video")
-        },
-        quick_source_urls={
-            source: _quick_filter_url(query, sources=(source,))
-            for source in scope_sources
-        },
-        quick_all_sources_url=_quick_filter_url(query, sources=scope_sources),
-        quick_favorite_url=_quick_filter_url(query, favorite=not query.favorite),
-        quick_unviewed_url=_quick_filter_url(query, unviewed=not query.unviewed),
         folder_children=[
             {**folder, "url": _quick_filter_url(query, folder=folder["path"], sources=("bookmarks",), cursor="")}
             for folder in folder_children

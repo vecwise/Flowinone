@@ -18,13 +18,13 @@ Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、Flowinone 匯入
 
 ```text
 Local 檔案 → item_db.db ─┐
-Eagle API ───────────────┼→ Catalog（主 SQLite）→ Navigator 素材／全部內容
+Eagle API ───────────────┼→ Catalog（主 SQLite）→ 我的收藏（Navigator）
 Chrome Bookmarks ────────┤
 匯入 URL → Resources ────┘
                 └→ processing_jobs → Worker 擷取 → data/content/ → Catalog 全文索引
 ```
 
-「素材」只查 Local、Eagle、Chrome；「全部內容」再加入 Resources。`/resources/` 讀 Resource 自己的資料，Navigator 讀 Catalog 投影。同一 URL 可同時有 Chrome 與 Resource 兩個 origin，但在 Catalog 合成一個 item。網頁／PDF 文字、字幕和可選 AI 摘要是 Resource 的內容，並非額外 Catalog 來源。三張可追程式與儲存層的圖見 [現行架構](docs/architecture.md)。
+「我的收藏」預設包含四個來源，統一從主題、搜尋、類型與排序瀏覽；來源與其他條件收在「更多篩選」。舊 `scope=gallery` 連結仍只查 Local、Eagle、Chrome，可在更多篩選改成全部收藏。`/resources/` 提供新增網址、匯入與處理工具；閱讀內容仍由 Resource 詳情呈現，Navigator 讀 Catalog 投影。同一 URL 可同時有 Chrome 與 Resource 兩個 origin，但在 Catalog 合成一個 item。網頁／PDF 文字、字幕和可選 AI 摘要是 Resource 的內容，並非額外 Catalog 來源。三張可追程式與儲存層的圖見 [現行架構](docs/architecture.md)。
 
 找程式碼時，先看 `src/` 的應用邏輯；`scripts/` 是匯入、維護與 macOS 啟停的執行入口。根目錄的 `run.py` 供 Flask 與手動啟動使用，`config.py`、`routes.py` 只保留舊匯入相容性；設定與路由實作已在 `src/flowinone/`。
 
@@ -34,14 +34,14 @@ Chrome Bookmarks ────────┤
 
 | 功能 | 怎麼用 | 成功時會看到什麼／限制 |
 | --- | --- | --- |
-| 素材瀏覽 | 開 `/navigator/?scope=gallery`，勾本機、Eagle、書籤，選類型或 tag | 篩選後的素材卡片；這個範圍不包含 Resources |
-| 全部內容搜尋 | 切「全部內容」或開 `/navigator/?scope=all`，輸入關鍵字 | 四來源的搜尋結果與命中片段；擷取完成的 Resource 全文也能被找到 |
+| 收藏瀏覽 | 開 `/navigator/`，選主題、類型或排序 | 四來源的收藏卡片；可切換網格／列表，卡片優先顯示描述或全文片段 |
+| 收藏搜尋 | 在「我的收藏」輸入關鍵字 | 四來源的搜尋結果與命中片段；擷取完成的 Resource 全文也能被找到 |
 | 收藏、未看、隨機探索 | 卡片按「收藏」；進階篩選選未看，或按「隨機探索」 | 收藏狀態、篩選結果；同一個 seed 維持同一隨機順序 |
-| 儲存搜尋、回到瀏覽位置 | 設定條件後按「儲存目前搜尋」；用「快速開啟」選已存條件 | 保存來源與查詢條件；最近瀏覽與返回位置另由 session 管理 |
-| 更新來源索引 | Navigator →「來源管理」→「同步變更」 | 各來源顯示同步狀態與筆數；Web 會排 job，需要 worker |
-| 自動偵測來源變化 | 「來源管理」→「啟用自動偵測」 | 先建立基準，後續變化穩定後才排同步；預設關閉，需要 worker |
+| 常用條件、回到瀏覽位置 | 「更多篩選」→「儲存為常用條件」；用常用條件或快速開啟重訪 | 保存來源與查詢條件；最近瀏覽與返回位置另由 session 管理 |
+| 更新來源索引 | 「設定與維護」→「來源與同步」→「同步變更」 | 各來源顯示同步狀態與筆數；Web 會排 job，需要 worker |
+| 自動偵測來源變化 | 「來源與同步」→「啟用自動偵測」 | 先建立基準，後續變化穩定後才排同步；預設關閉，需要 worker |
 | 本機相同／相似圖片 | 先同步本機索引與 Catalog，再按「分析本機圖片」；圖片卡片按「找相似」 | SHA-256 判斷完全相同檔案，dHash 比較視覺相似；分析只支援本機圖片 |
-| 重複圖片檢閱 | 開 `/catalog/duplicate-review/`，選參考圖片、開啟、顯示位置或複製路徑 | 只記錄 Flowinone 的參考選擇，不會刪除或搬動來源檔案 |
+| 重複圖片檢閱 | 「設定與維護」→「重複圖片檢閱」，選參考圖片、開啟、顯示位置或複製路徑 | 只記錄 Flowinone 的參考選擇，不會刪除或搬動來源檔案 |
 | 匯入網址 | 開 `/resources/` 加入 URL；也可匯入 Chrome、JSON／HTML 書籤檔 | 建立 Resource、去除重複 URL，並排入擷取工作 |
 | 網頁／PDF／影片內容擷取 | 開著 worker，在 Resource 詳情看工作狀態、metadata 與全文 | 依來源擷取網頁、PDF、YouTube 字幕或 GitHub 內容；實際可用性取決於來源 |
 | AI 摘要與標籤 | 設定 LLM provider 後，在 Resource 詳情勾選 AI 再擷取 | 可選功能；需設定 `LLM_BASE_URL`、`LLM_MODEL`，依 provider 需求加 `LLM_API_KEY`；可用本機或外部服務 |
@@ -50,9 +50,9 @@ Chrome Bookmarks ────────┤
 | 本機索引、圖片／影片 viewer | `/item_db` 按「同步索引」或「補縮圖」；從卡片開啟 viewer | 顯示本機索引與媒體詳情；索引更新後還要同步 Catalog |
 | 可攜 metadata（sidecar） | 用下方維護指令 audit／export／import `.flowinone.json` | metadata 隨本機素材保存；import／export 預設 dry-run |
 
-Navigator 的頁內搜尋保留目前範圍；其他頁面導覽列的搜尋會進「全部內容」。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。
+Navigator 的頁內搜尋保留目前條件；其他頁面導覽列的搜尋會進全部收藏。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。橫向與知識模式已整併；舊 `view=shelf` 對應網格，`view=knowledge` 對應列表，連結和瀏覽偏好保留原本查詢條件。Resource 詳情先顯示摘要與全文，標籤編輯、擷取狀態與版本差異收在「資源管理」。
 
-首頁 `/` 轉到 `/navigator/?scope=gallery`，實際讀取路徑是 `CatalogQuery` → `CatalogService.list()` → `navigator.html`；預設按最近加入排序，「隨機探索」才使用有 seed 的隨機排序。「今天想看什麼」沿用 Catalog tag facets，最多檢查 6 個候選主題，依目前來源、搜尋、類型、資料夾與瀏覽狀態等條件排除空主題，顯示符合條件的筆數。未選主題的第一批結果最多預覽 3 個主題、每個 3 筆；主題與預覽連結保留 Navigator 條件，預覽項目會進入該主題並定位到卡片。選定主題或載入下一批後只保留主題入口，避免重複顯示預覽。
+首頁 `/` 轉到 `/navigator/?scope=all`，實際讀取路徑是 `CatalogQuery` → `CatalogService.list()` → `navigator.html`；預設按最近加入排序，「隨機探索」才使用有 seed 的隨機排序。「今天想看什麼」沿用 Catalog tag facets，最多檢查 6 個候選主題，依目前來源、搜尋、類型、資料夾與瀏覽狀態等條件排除空主題，顯示符合條件的筆數。未選主題的第一批結果最多預覽 3 個主題、每個 3 筆；主題與預覽連結保留 Navigator 條件，預覽項目會進入該主題並定位到卡片。選定主題或載入下一批後只保留主題入口，避免重複顯示預覽。
 
 這是標籤式探索，沒有語意分類、個人化模型或新資料表。候選順序沿用全 Catalog 的標籤筆數，優先略過覆蓋九成以上項目的通用標籤；若全部都是通用標籤則保留它們。只檢查前 6 個候選，因此符合目前條件的冷門標籤可能未出現；未標記或尚未同步的內容仍由原本的結果列表瀏覽，同一項目也可能出現在多個主題。
 
@@ -118,7 +118,7 @@ conda run --no-capture-output -n py3.11 python run.py
 conda run --no-capture-output -n py3.11 python -m src.flowinone.workers
 ```
 
-開 `http://127.0.0.1:5894`，首頁會轉到 Navigator 的「素材」。終端機各按 `Ctrl+C` 可停止對應程序。
+開 `http://127.0.0.1:5894`，首頁會轉到「我的收藏」。終端機各按 `Ctrl+C` 可停止對應程序。
 
 Web 不會自動啟動 worker。只開 A 可以讀取已有資料，但排隊工作會等 B 啟動才執行。兩個程序需要使用相同資料路徑設定；預設都用 repo 的 `data/`，可透過 `FLOWINONE_DATA_DIR` 覆寫。
 
@@ -127,8 +127,8 @@ Chrome 來源預設讀平台的 Default profile `Bookmarks` 檔。Resources 的 
 ### 第一次開起來沒有素材？
 
 1. 到 `/item_db` 按「同步索引」，把本機檔案寫進 `item_db.db`。
-2. 回 Navigator →「來源管理」→「同步變更」，開著 worker 等來源同步完成。
-3. 重新整理 Navigator，先只勾本機來源驗證。
+2. 回「設定與維護」→「來源與同步」→「同步變更」，開著 worker 等來源同步完成。
+3. 重新整理我的收藏，在更多篩選先只勾本機來源驗證。
 
 這是兩個步驟：**檔案 → 本機索引 → Catalog → 畫面**。一般 Catalog 同步讀取既有本機索引，不會替你重新掃描磁碟。自動偵測到 Local 變化所排入的 job 才會先要求更新本機索引。
 
@@ -192,7 +192,7 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 | 現象 | 先看什麼證據 | 往哪裡追／下一步 |
 | --- | --- | --- |
 | Navigator 沒本機素材 | `/item_db` 是否有該檔案？來源同步有沒有完成？ | 無索引：`item_db.py`；有索引沒卡片：`CatalogSyncService._sync_local()`、scope／filter |
-| 新 Resource 在「素材」搜不到 | URL 是否為 `scope=gallery`？ | 切 `scope=all`；素材範圍原本就不含 Resources |
+| 新 Resource 在舊連結搜不到 | URL 是否為 `scope=gallery`？ | 回我的收藏或使用更多篩選的「包含所有收藏」；舊素材範圍不含 Resources |
 | 匯入成功但沒全文／縮圖 | Resource 詳情 jobs 是 pending、running、retry 還是 failed？ | pending 查 worker；failed 查 error、`enrichment.py`／`extractors.py`；縮圖另有 `ThumbnailWorker` |
 | 同步按下去收到 202 | response 的 job id，再看 `/api/catalog/sync/jobs/<job_id>` | 202 只代表接受排程；配合 `/api/catalog/sync/status` 查看來源進度 |
 | Eagle 卡片消失／同步失敗 | Eagle app 與 local API 是否可用？ | `eagle_integration.py` → `eagle_api/client.py`；Navigator 會略過目前不可用的 Eagle 來源 |

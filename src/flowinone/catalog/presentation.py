@@ -14,7 +14,7 @@ SOURCE_LABELS = {
     "local": "本機",
     "eagle": "EAGLE",
     "bookmarks": "Chrome 書籤",
-    "resources": "Resources",
+    "resources": "新增網址",
 }
 BOOKMARK_THUMBNAIL_ROUTE = re.compile(r"^/api/bookmark-thumbnails/([0-9a-f]{40})/image$")
 

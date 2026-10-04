@@ -25,7 +25,7 @@ class Element {
 function harness(firstItem = {}) {
   const names = [
     'status', 'content', 'image', 'video', 'source', 'folder', 'title', 'description', 'tags',
-    'launch', 'related', 'back', 'close',
+    'launch', 'read', 'related', 'back', 'close',
   ];
   const parts = Object.fromEntries(names.map((name) => [name, new Element()]));
   const dialog = new Element();
@@ -108,4 +108,17 @@ test('resource launch from detail keeps the Navigator return context', async () 
   const destination = new URL(parts.launch.href, 'http://localhost');
   assert.equal(destination.pathname, '/resources/resource-1/');
   assert.equal(destination.searchParams.get('return_to'), '/navigator/?scope=gallery&source=bookmarks&q=old');
+});
+
+test('a merged bookmark opens its readable Resource with the return context', async () => {
+  const {parts, link, requests} = harness({resource_detail_uri: '/resources/resource-1/'});
+  link.click({button: 0, preventDefault() {}});
+  await flush();
+  assert.equal(parts.read.hidden, false);
+  assert.equal(parts.launch.href, 'https://example.test/first');
+  const destination = new URL(parts.read.href, 'http://localhost');
+  assert.equal(destination.pathname, '/resources/resource-1/');
+  assert.equal(destination.searchParams.get('return_to'), '/navigator/?scope=gallery&source=bookmarks&q=old');
+  parts.read.click();
+  assert.equal(JSON.parse(requests.at(-1).options.body).event_type, 'open');
 });

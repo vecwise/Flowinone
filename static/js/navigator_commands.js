@@ -77,7 +77,7 @@
       event.preventDefault();
       const name = label.value.trim();
       if (!name) {
-        feedback.textContent = '請為這個搜尋命名。';
+        feedback.textContent = '請為這組條件命名。';
         feedback.hidden = false;
         label.focus();
         return;
@@ -92,10 +92,10 @@
           body: JSON.stringify({label: name, query}),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || '無法儲存搜尋');
-        status.textContent = `已儲存搜尋：${result.label}`;
+        if (!response.ok) throw new Error(result.error || '無法儲存條件');
+        status.textContent = `已儲存常用條件：${result.label}`;
         const view = new URL(global.location.href).searchParams.get('view');
-        global.location.href = `/navigator/views/${result.id}/` + (view === 'knowledge' ? '?view=knowledge' : '');
+        global.location.href = `/navigator/views/${result.id}/` + (view === 'list' ? '?view=list' : '');
       } catch (error) {
         feedback.textContent = error.message;
         feedback.hidden = false;
@@ -106,15 +106,15 @@
     root.querySelectorAll('[data-delete-saved-search]').forEach((button) => {
       button.addEventListener('click', async () => {
         const row = button.closest('[data-saved-search-id]');
-        const name = row?.querySelector('strong')?.textContent || '這個搜尋';
+        const name = row?.querySelector('a')?.textContent || '這組條件';
         if (!global.confirm(`要移除「${name}」嗎？`)) return;
         button.disabled = true;
         try {
           const response = await global.fetch(`/api/catalog/saved-searches/${button.dataset.deleteSavedSearch}`, {method: 'DELETE'});
           const result = await response.json();
-          if (!response.ok) throw new Error(result.error || '無法移除儲存搜尋');
+          if (!response.ok) throw new Error(result.error || '無法移除常用條件');
           row.remove();
-          status.textContent = `已移除儲存搜尋：${name}`;
+          status.textContent = `已移除常用條件：${name}`;
         } catch (error) {
           status.textContent = error.message;
           button.disabled = false;

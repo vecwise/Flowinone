@@ -752,3 +752,28 @@
     gap: 8px;
     cursor: pointer;
 }
+
+.resource-import-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.resource-reading-layout { max-width: 1000px; margin-inline: auto; width: 100%; min-width: 0; }
+.resource-reading-tags { margin-block: 14px; }
+.resource-reader { font-family: inherit; font-size: 1rem; line-height: 1.8; }
+.resource-management { border: 1px solid var(--fo-border); border-radius: 10px; background: var(--fo-surface); min-width: 0; scroll-margin-top: 110px; }
+.resource-management > summary { min-height: 44px; padding: 14px 16px; color: var(--fo-text); cursor: pointer; font-weight: 750; }
+.resource-management > summary span { margin-inline-start: 12px; font-size: .8rem; font-weight: 500; color: var(--fo-muted-text); }
+.resource-management-content { display: grid; gap: 16px; min-width: 0; padding: 16px; border-top: 1px solid var(--fo-border); }
+.resource-detail-tools-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.resource-management-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.resource-management-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px 12px; align-items: center; border-bottom: 1px solid var(--fo-border); padding: 10px 0; }
+.resource-management-list .resource-enrich-select { flex-wrap: nowrap; min-height: 44px; }
+.resource-management-list input[type="checkbox"] { flex-shrink: 0; width: 20px; height: 20px; }
+.resource-management-list span { overflow-wrap: anywhere; }
+.resource-management-list small { color: var(--fo-muted-text); }
+.resource-management-list a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 820px) {
+    .resource-import-grid, .resource-detail-tools-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+    .resource-management-list li { grid-template-columns: minmax(0, 1fr) auto; }
+    .resource-management-list small { grid-column: 1; }
+    .resource-management-list a { grid-column: 2; grid-row: 1 / span 2; }
+}
