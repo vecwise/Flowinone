@@ -28,30 +28,6 @@ Chrome Bookmarks ────────┤
 
 找程式碼時，先看 `src/` 的應用邏輯；`scripts/` 是匯入、維護與 macOS 啟停的執行入口。根目錄的 `run.py` 供 Flask 與手動啟動使用，`config.py`、`routes.py` 只保留舊匯入相容性；設定與路由實作已在 `src/flowinone/`。
 
-## 先接回你熟悉的 Flask
-
-以前可能一個 route 裡同時查資料、整理資料、render HTML。現在只是把工作分到幾個檔案：
-
-```text
-瀏覽器的網址／按鈕
-  → Blueprint 裡的 route：接收 request
-  → Service：執行功能，需要時呼叫 Repository 或直接寫 SQL
-  → SQLite／來源 adapter：取得資料
-  → render_template(...)：把資料交給 HTML template
-  → 瀏覽器顯示結果
-```
-
-| 看到的名詞 | 先這樣理解 |
-| --- | --- |
-| Blueprint | 把相關 Flask routes 放在一起，例如 Navigator 或 Eagle |
-| Service | 處理一件功能的 Python 類別，例如搜尋、匯入、同步 |
-| Repository | 集中放資料庫讀寫；Catalog 的部分 SQL 直接在 Service |
-| Catalog | 四個來源的統一索引，讓你不用每次開頁面都重新掃描來源 |
-| Resource | 匯入 Flowinone 的一筆網址，可附帶擷取全文、標籤與內容版本 |
-| Origin | 同一個項目從哪裡來；例如同一網址既是 Chrome 書籤，也是 Resource |
-| Worker / Job | 另一支 Python 程式，領取資料庫裡的待辦工作並執行 |
-| Migration / FTS | 資料庫結構升級紀錄／全文搜尋索引 |
-
 ## 功能清單
 
 以下路徑都接在 `http://127.0.0.1:5894` 後面。
@@ -75,6 +51,10 @@ Chrome Bookmarks ────────┤
 | 可攜 metadata（sidecar） | 用下方維護指令 audit／export／import `.flowinone.json` | metadata 隨本機素材保存；import／export 預設 dry-run |
 
 Navigator 的頁內搜尋保留目前範圍；其他頁面導覽列的搜尋會進「全部內容」。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。
+
+首頁 `/` 轉到 `/navigator/?scope=gallery`，實際讀取路徑是 `CatalogQuery` → `CatalogService.list()` → `navigator.html`；預設按最近加入排序，「隨機探索」才使用有 seed 的隨機排序。「今天想看什麼」沿用 Catalog tag facets，最多檢查 6 個候選主題，依目前來源、搜尋、類型、資料夾與瀏覽狀態等條件排除空主題，顯示符合條件的筆數。未選主題的第一批結果最多預覽 3 個主題、每個 3 筆；主題與預覽連結保留 Navigator 條件，預覽項目會進入該主題並定位到卡片。選定主題或載入下一批後只保留主題入口，避免重複顯示預覽。
+
+這是標籤式探索，沒有語意分類、個人化模型或新資料表。候選順序沿用全 Catalog 的標籤筆數，優先略過覆蓋九成以上項目的通用標籤；若全部都是通用標籤則保留它們。只檢查前 6 個候選，因此符合目前條件的冷門標籤可能未出現；未標記或尚未同步的內容仍由原本的結果列表瀏覽，同一項目也可能出現在多個主題。
 
 OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊筆記／專案工作流與筆記匯出功能已移除；目前也沒有跨裝置同步。
 
@@ -195,8 +175,6 @@ conda run -n py3.11 pytest -q -m "not online and not performance"
 conda run --no-capture-output -n py3.11 pytest -q -s -m performance
 ```
 
-2026-09-28 在本機 `py3.11`、臨時 SQLite 的單次量測：10 萬筆 Navigator 首次查詢 `0.293s`、快取後 `0.119s`；1,000 筆 Chrome 書籤投影 `0.533s`。測試會印出當次秒數，供重構前後在同一台機器比較。前兩者的硬性門檻仍是 `2.5s`、`0.75s`；書籤同步目前只記錄時間與結果，不以單次耗時判斷回歸。
-
 `test_navigator_sync_browser.py` 需要 Node.js，缺少時會 skip；它用模擬 DOM／fetch 驗證 JavaScript 控制流程，並未開真正瀏覽器。因此畫面布局與真實來源仍需做上面的手動實驗。
 
 需要驗證實際公開網站縮圖時才跑：
@@ -242,13 +220,6 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 ### 資料與維護
 
 資料庫、縮圖與歷史內容的保存位置和備份性質見 [現行架構](docs/architecture.md#3-資料架構權威投影與儲存位置)；同步、升級、重建與 sidecar 指令集中在 [使用手冊](docs/renderer-architecture.md#5-維護指令)。
-
-## 建議閱讀順序
-
-1. **[README](README.md)**：先看「四個資料來源」與「先接回你熟悉的 Flask」，知道頁面從哪裡來。
-2. **[現行架構](docs/architecture.md)**：依序讀資料流、程式架構、資料架構三張圖；需要找實作時看末段讀碼路線。
-3. **[動手接手練習](docs/hands-on.md)**：先做第 1、2 題，從真實 request 追到 Catalog 與畫面；要理解同步再做第 8 題。
-4. **[使用手冊](docs/renderer-architecture.md)**：實際啟動、同步、維護與排錯時查對應章節；無須先通讀。
 
 ## License
 

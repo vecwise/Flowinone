@@ -151,6 +151,41 @@ def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
     return CatalogQuery.create(**values)
 
 
+def _navigator_topics(service: CatalogService, query: CatalogQuery, facets: dict) -> list[dict]:
+    """Use a bounded facet pool and existing browse filters for topic discovery."""
+    item_count = sum(facets["types"].values())
+    candidates = [tag for tag in facets["tags"] if tag["count"] < item_count * 0.9]
+    # A small library may have only one tag shared by every item.
+    candidates = candidates or facets["tags"]
+    show_previews = not query.tags and not query.cursor
+    topics = []
+    for tag in candidates[:6]:
+        values = query.public_dict()
+        values.update({
+            "tags": (tag["name"],), "tag_mode": "any", "cursor": "",
+            "limit": 3 if show_previews and len(topics) < 3 else 1,
+        })
+        topic_query = CatalogQuery.create(**values)
+        page = service.list(topic_query, include_facets=False)
+        items = visible_items(service, page, topic_query)
+        if not items:
+            continue
+        # Topic links switch only the tag, retaining the Navigator context.
+        target = _quick_filter_url(query, tags=topic_query.tags, tag_mode="any")
+        preview_target = _quick_filter_url(
+            query, tags=topic_query.tags, tag_mode="any", limit=max(query.limit, len(items)),
+        )
+        topics.append({
+            "name": tag["name"], "count": page["total_estimate"], "url": target,
+            "selected": topic_query.tags[0] in query.tags,
+            "items": [
+                {**item, "browse_url": f"{preview_target}#item-{item['id']}"}
+                for item in items
+            ] if show_previews and len(topics) < 3 else [],
+        })
+    return topics
+
+
 def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
     sessions = []
     for session in service.recent_sessions(12):
@@ -314,11 +349,7 @@ def navigator_page():
     for depth in range(1, len(folder_parts) + 1):
         path = " / ".join(folder_parts[:depth])
         folder_crumbs.append({"name": path.rsplit(" / ", 1)[-1], "url": _quick_filter_url(query, folder=path, sources=("bookmarks",))})
-    item_count = sum(payload["facets"]["types"].values())
-    topics = [
-        tag for tag in payload["facets"]["tags"]
-        if tag["count"] < item_count * 0.9
-    ][:12]
+    topics = _navigator_topics(service, effective_query, payload["facets"]) if active_sources else []
     reset_query = CatalogQuery.create(scope=query.scope, sources=scope_sources)
     random_values = query.public_dict()
     random_values.update({"sort": "random", "seed": 0, "cursor": ""})
@@ -406,10 +437,7 @@ def navigator_page():
         ],
         folder_crumbs=folder_crumbs,
         folder_clear_url=_quick_filter_url(query, folder="", sources=scope_sources),
-        topics=[
-            {**topic, "url": _quick_filter_url(query, q="", type="", folder="", tags=(topic["name"],), sources=scope_sources)}
-            for topic in topics
-        ],
+        topics=topics,
         topic_clear_url=_quick_filter_url(query, tags=()),
         source_watch_status=CatalogSourceWatcher(_database()).status(),
         similarity_status=CatalogSimilarityService(_database()).status(),
