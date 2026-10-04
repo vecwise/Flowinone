@@ -31,7 +31,7 @@ from src.flowinone.catalog.browse import CatalogService
 from src.flowinone.catalog.query import CatalogQuery
 from src.flowinone.web.database import request_database
 
-from .ui import render_source_browse
+from .ui import management_context, render_source_browse
 
 from .common import (
     content_card_from_db_item,
@@ -98,7 +98,11 @@ def content_library():
             ("resources", "新增網址", None, "resource_library.resource_index"),
         )
     ]
-    return render_template("manage.html", title="來源總覽 · Flowinone", management="sources", sources=sources)
+    return render_template(
+        "manage.html", title="管理收藏 · Flowinone", management="sources", sources=sources,
+        management_return_url=_safe_browse_return(),
+        **management_context(request_database(), facets),
+    )
 
 
 @bp.post("/open_path/")
@@ -171,7 +175,7 @@ def update_item_db_route():
     if _wants_json():
         return jsonify(result)
     return render_template(
-        "operation_result.html", title="Item DB 更新結果", result=result,
+        "manage.html", management="result", title="Item DB 更新結果", result=result,
         result_fields={"seen": "掃描數量", "inserted": "新增", "skipped": "略過既有項目", "removed": "移除不存在的路徑"},
     )
 
@@ -191,7 +195,7 @@ def update_thumbnails_route():
     if _wants_json():
         return jsonify(result)
     return render_template(
-        "operation_result.html",
+        "manage.html", management="result",
         title="Thumbnails 更新結果",
         result=result,
         result_fields={"updated": "已更新", "pending": "未更新"},
@@ -209,7 +213,7 @@ def clear_thumbnails_route():
     if _wants_json():
         return jsonify(result)
     return render_template(
-        "operation_result.html", title="清除縮圖", result=result,
+        "manage.html", management="result", title="清除縮圖", result=result,
         result_fields={"cleared": "清除筆數"},
     )
 
@@ -245,7 +249,7 @@ def view_item_db():
     ]
     available_count = sum(card.get("is_available") for card in item_cards)
     return render_template(
-        "item_db_view.html",
+        "manage.html", management="index",
         title="Item DB",
         payload=payload,
         items=payload.get("items", []),
@@ -255,6 +259,11 @@ def view_item_db():
         stale_count=len(item_cards) - available_count,
         selected_tag=selected_tag,
     )
+
+
+def _safe_browse_return():
+    value = request.args.get("return_to", "")
+    return value if value.startswith("/navigator/") and "\\" not in value else None
 
 
 def _wants_json() -> bool:

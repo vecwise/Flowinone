@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask import Blueprint, abort, redirect, request, url_for
 
 from src.file_handler import (
     ExternalServiceError,
@@ -20,7 +20,7 @@ from src.file_handler import (
     search_eagle_items,
 )
 
-from .ui import render_source_browse
+from .ui import render_media_detail, render_source_browse
 
 from .common import (
     build_detail_actions,
@@ -248,12 +248,10 @@ def _render_eagle_detail(item_id: str, media_kind: str):
     detail_dict["parent_url"] = (
         request.args.get("return_to") or request.referrer or url_for("local.index")
     )
-    return render_template(
-        "media_detail.html",
+    return render_media_detail(
         media_kind=media_kind,
         media=detail_dict,
         metadata=metadata_dict,
-        **{media_kind: detail_dict},
         related_items=merge_related(
             decorate_related_items(metadata_dict.get("similar"), metadata_dict),
             catalog_related_for_origin("eagle", item_id),

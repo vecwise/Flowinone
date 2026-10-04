@@ -12,6 +12,25 @@
     {% if feature_flags.db %}<a class="mode-pill" href="{{ url_for('local.view_item_db') }}">本機索引</a>{% endif %}
     <a class="mode-pill" href="{{ url_for('catalog.duplicate_review_page') }}">重複圖片</a>
   </nav>
-  {% if management == 'resources' %}{% include 'components/_resource_management.html' %}{% else %}{% include 'components/_source_management.html' %}{% endif %}
+  {% if management == 'resources' %}{% include 'components/_resource_management.html' %}
+  {% elif management == 'index' %}{% include 'components/_local_index.html' %}
+  {% elif management == 'result' %}
+    <h2>{{ title }}</h2><p><a class="action-button" href="{{ url_for('local.view_item_db') }}">返回本機索引</a></p>
+    {% include 'components/_operation_result.html' %}
+  {% else %}
+    {% if management_return_url %}<p><a class="action-button" href="{{ management_return_url }}">返回先前條件</a></p>{% endif %}
+    {% include 'components/_source_management.html' %}
+    {% include '_navigator_maintenance.html' %}
+    {% if feature_flags.db %}<section class="resource-surface"><h2>本機維護</h2><div class="action-row">
+      {% for endpoint, label in [('local.update_item_db_route', '同步本機索引'), ('local.update_thumbnails_route', '補齊縮圖'), ('local.clear_thumbnails_route', '清除縮圖紀錄')] %}
+      <form method="post" action="{{ url_for(endpoint) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="action-button" type="submit">{{ label }}</button></form>
+      {% endfor %}
+    </div></section>{% endif %}
+  {% endif %}
 </main>
+{% if management == 'sources' %}
+<script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_similarity.js') }}"></script>
+{% endif %}
 {% endblock %}

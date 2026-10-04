@@ -1,18 +1,3 @@
-{% extends "base_template.html" %}
-
-{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
-
-{% block page_content %}
-<main id="main-content" class="container resource-page resource-versions-page">
-  <nav class="resource-breadcrumb" aria-label="麵包屑">
-    <a href="{{ url_for('resource_library.resource_index') }}">Resources</a><span aria-hidden="true">/</span><a href="{{ url_for('resource_library.resource_detail', resource_id=resource.id) }}">{{ resource.title }}</a><span aria-hidden="true">/</span><span>內容版本</span>
-  </nav>
-
-  <header class="resource-versions-heading">
-    <div><p class="eyebrow">Content history</p><h1>內容版本與差異</h1><p>{{ resource.title }} 的快照只在重新擷取得到不同文字時新增；原始連結和先前快照都會保留。</p></div>
-    <a class="action-button" href="{{ url_for('resource_library.resource_detail', resource_id=resource.id) }}">返回資源</a>
-  </header>
-
   <section class="resource-surface">
     <form class="resource-version-form" method="get">
       <label for="version-from">較早版本</label>
@@ -46,5 +31,3 @@
       {% for version in versions %}<li><strong>{% if version.is_current %}目前版本{% else %}歷史版本{% endif %}</strong><span>{{ version.created_at }} · {{ version.content_type }} · {{ version.extractor_name or 'unknown extractor' }}{% if version.byte_size %} · {{ version.byte_size }} bytes{% endif %}</span></li>{% else %}<li>尚無內容快照。</li>{% endfor %}
     </ul>
   </section>
-</main>
-{% endblock %}

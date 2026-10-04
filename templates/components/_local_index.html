@@ -1,11 +1,7 @@
-{% extends "base_template.html" %}
-
-{% block page_content %}
-<main id="main-content" class="container browse-page">
     <header class="browse-header">
         <div>
-            <p class="eyebrow">Local index</p>
-            <h1 class="detail-title">本機索引</h1>
+            
+            <h2>本機索引</h2>
             <p class="shelf-kicker">
                 {{ payload.total }} 筆索引 · {{ available_count }} 筆可用 · {{ stale_count }} 筆需同步
                 {% if selected_tag %}· #{{ selected_tag }}{% endif %}
@@ -117,5 +113,3 @@
         <p>同步 DB 或移除目前的 tag 篩選。</p>
     </section>
     {% endif %}
-</main>
-{% endblock %}

@@ -240,7 +240,7 @@ def test_navigator_sync_status_displays_processed_total_progress(monkeypatch, tm
 
     client = app.test_client()
     page = BeautifulSoup(
-        client.get("/navigator/?scope=gallery").data, "html.parser"
+        client.get("/library/").data, "html.parser"
     )
     eagle_row = page.select_one('[data-catalog-sync-source="eagle"]')
     assert "125/1000 筆" in eagle_row.select_one(

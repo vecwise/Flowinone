@@ -9,6 +9,7 @@
   {% with page_heading=browse.heading, page_description=browse.description, page_links=browse.links %}{% include 'components/_page_header.html' %}{% endwith %}
   {% if browse.kind == 'catalog' %}
     {% include 'components/_catalog_filters.html' %}
+    {% include 'components/_source_health.html' %}
   {% else %}
     <details class="browse-context"><summary>來源資訊與資料夾</summary>{% include 'components/_metadata_panel.html' %}</details>
     <div class="browse-toolbar">

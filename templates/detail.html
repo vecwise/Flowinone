@@ -1,0 +1,17 @@
+{% extends 'base_template.html' %}
+{% block custom_style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/current_context.css') }}">
+{% endblock %}
+{% block page_content %}
+<main id="main-content" class="container gallery-page detail-page resource-page" data-page-family="detail">
+  {% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}
+  {% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
+  {% with page_heading=detail.title, page_description=detail.source_label, page_links=[{'label': '返回收藏', 'url': detail.parent_url}] %}{% include 'components/_page_header.html' %}{% endwith %}
+  {% include '_current_context.html' %}
+  {% with preview=false %}{% include 'components/_detail_content.html' %}{% endwith %}
+  {% if detail.kind == 'resource' %}{% include 'components/_detail_resource_tools.html' %}{% endif %}
+</main>
+<script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
+{% endblock %}

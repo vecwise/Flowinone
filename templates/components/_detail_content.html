@@ -1,0 +1,53 @@
+<div class="detail-shell ui-detail-layout" {% if preview %}data-gallery-detail-content hidden{% endif %}>
+  <section class="reader-surface ui-detail-main">
+    <div class="media-stage">
+      {% if preview or detail.kind != 'video' %}<img {% if preview %}data-gallery-detail-image{% endif %} src="{{ detail.source_url or detail.thumbnail_url or url_for('static', filename='default_thumbnail.svg') }}" alt="{{ detail.title or '' }}" {% if detail.kind == 'resource' %}width="640" height="360"{% endif %}>{% endif %}
+      {% if preview or detail.kind == 'video' %}
+      <video {% if preview %}data-gallery-detail-video hidden{% endif %} controls preload="metadata" playsinline poster="{{ detail.thumbnail_url or '' }}">
+        {% if not preview %}<source src="{{ detail.source_url }}" type="{{ detail.mime_type }}">您的瀏覽器無法播放此影片。{% endif %}
+      </video>
+      {% endif %}
+    </div>
+    {% if preview %}
+    <p class="navigator-detail-source" data-gallery-detail-source></p>
+    <a class="navigator-detail-folder" data-gallery-detail-folder hidden href="#"></a>
+    <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
+    {% endif %}
+    <p class="navigator-detail-description" {% if preview %}data-gallery-detail-description{% endif %}>{{ detail.description or '目前沒有額外說明。' }}</p>
+    <div class="gallery-tags" {% if preview %}data-gallery-detail-tags{% endif %} aria-label="標籤">{% for tag in detail.tags or [] %}<span>{{ tag }}</span>{% endfor %}</div>
+    <div class="action-row navigator-detail-actions">
+      {% if preview %}
+      <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>
+      <a class="action-button" data-gallery-detail-read href="#" hidden>閱讀內容</a>
+      {% else %}
+      {% if detail.original_url %}<a class="action-button primary" href="{{ detail.original_url }}" target="_blank" rel="noopener noreferrer">開啟原文</a>{% endif %}
+      {% if detail.download_url %}<a class="action-button" href="{{ detail.download_url }}" download>下載</a>{% endif %}
+      {% endif %}
+    </div>
+    {% if not preview %}
+      {% if detail.kind == 'resource' %}
+      <section class="resource-surface"><h2>摘要</h2><p>{{ resource.summary_short or resource.description or '目前沒有摘要，可開啟原文閱讀。' }}</p>{% if resource.why_this_matters %}<h3>內容重點</h3><p>{{ resource.why_this_matters }}</p>{% endif %}</section>
+      <section class="resource-surface"><h2>全文</h2>{% if resource.extracted_text %}<pre class="resource-reader">{{ resource.extracted_text }}</pre>{% else %}<p>目前沒有全文，可開啟原文閱讀。</p>{% endif %}</section>
+      {% else %}
+      <div class="detail-meta-strip">{% for label in [metadata.ext, media.size_display, media.modified_time] %}{% if label %}<span class="meta-chip">{{ label }}</span>{% endif %}{% endfor %}</div>
+      {% include 'components/_metadata_panel.html' %}
+      {% endif %}
+    {% endif %}
+  </section>
+  <aside id="related" class="side-rail ui-detail-related" aria-labelledby="{{ 'navigator-detail-related-title' if preview else 'detail-related-title' }}">
+    <h2 id="{{ 'navigator-detail-related-title' if preview else 'detail-related-title' }}">接著看</h2>
+    <div class="rail-list" {% if preview %}data-gallery-detail-related{% endif %}>
+      {% if not preview %}{% for item in related_items %}
+      <a class="rail-card" href="{{ item.url }}"><img src="{{ item.thumbnail_route or url_for('static', filename='default_thumbnail.svg') }}" alt="" loading="lazy"><span><strong>{{ item.title }}</strong><span>{{ item.why }}</span></span></a>
+      {% else %}<p class="small-note">目前沒有相關項目。</p>{% endfor %}{% endif %}
+    </div>
+    {% if not preview and recommended_actions %}
+    <section><h2>可用操作</h2><div class="rail-actions">
+      {% for action in recommended_actions %}
+      {% if action.url and action.method == 'post' %}<form method="post" action="{{ action.url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="path" value="{{ action.path }}"><button class="rail-action" type="submit"><strong>{{ action.label }}</strong><span>{{ action.description }}</span></button></form>
+      {% else %}<a class="rail-action" href="{{ action.url or (detail.parent_url if action.id == 'back' else '#related') }}"><strong>{{ action.label }}</strong><span>{{ action.description }}</span></a>{% endif %}
+      {% endfor %}
+    </div></section>
+    {% endif %}
+  </aside>
+</div>

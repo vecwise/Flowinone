@@ -22,7 +22,6 @@ from .presentation import SOURCE_LABELS, visible_items
 from .query import CATALOG_SOURCES, CatalogQuery
 from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
-from .watch import CatalogSourceWatcher
 
 NAVIGATOR_SCOPE_SOURCES = {
     "gallery": tuple(source for source in CATALOG_SOURCES if source != "resources"),
@@ -290,6 +289,10 @@ def navigator_saved_view(saved_search_id: str):
 
 @bp.get("/navigator/", strict_slashes=False)
 def navigator_page():
+    if request.args.get("manage") == "1":
+        pairs = [(key, value) for key, value in request.args.items(multi=True) if key != "manage"]
+        return_url = url_for("catalog.navigator_page") + ("?" + urlencode(pairs) if pairs else "")
+        return redirect(url_for("local.content_library", return_to=return_url) + "#collection-maintenance")
     service = CatalogService(_database())
     query = _navigator_query()
     view = _navigator_view()
@@ -409,7 +412,6 @@ def navigator_page():
         reset_url=_navigator_url(reset_query),
         random_url=_navigator_url(CatalogQuery.create(**random_values)),
         all_sources_url=_navigator_url(_with_scope(query, "all")),
-        maintenance_open=request.args.get("manage") == "1",
         recent_sessions=_navigator_recent_sessions(service),
         saved_searches=_navigator_saved_searches(service),
         quick_filter_urls={
@@ -436,8 +438,6 @@ def navigator_page():
         folder_clear_url=_quick_filter_url(query, folder="", sources=scope_sources),
         topics=topics,
         topic_clear_url=_quick_filter_url(query, tags=()),
-        source_watch_status=CatalogSourceWatcher(_database()).status(),
-        similarity_status=CatalogSimilarityService(_database()).status(),
         eagle_available=eagle_available,
         bookmark_source_health=bookmark_source_health,
         item_type_labels=ITEM_TYPE_LABELS,
@@ -449,7 +449,7 @@ def duplicate_review_page():
     """Review every current exact duplicate group in the Local image library."""
     review = CatalogSimilarityService(_database()).duplicate_review()
     return render_template(
-        "duplicate_review.html",
+        "compare.html", comparison_kind="duplicates",
         title="重複圖片檢閱 · Flowinone",
         review=review,
     )

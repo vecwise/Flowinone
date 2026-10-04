@@ -7,7 +7,7 @@ import platform
 from pathlib import Path
 from urllib.parse import unquote
 
-from flask import Blueprint, abort, current_app, render_template, request, send_file
+from flask import Blueprint, abort, current_app, request, send_file
 
 from src.flowinone import config
 from src.file_handler.paths import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
@@ -20,6 +20,8 @@ from src.file_handler import (
     get_image_details,
     get_video_details,
 )
+
+from .ui import render_media_detail
 
 from .common import (
     build_detail_actions,
@@ -104,12 +106,10 @@ def _render_local_detail(path: str, media_kind: str):
         abort(404)
     metadata_dict = to_dict(metadata)
     detail_dict = serialize_detail(detail)
-    return render_template(
-        "media_detail.html",
+    return render_media_detail(
         media_kind=media_kind,
         media=detail_dict,
         metadata=metadata_dict,
-        **{media_kind: detail_dict},
         related_items=merge_related(
             decorate_related_items(metadata_dict.get("similar"), metadata_dict),
             catalog_related_for_origin(

@@ -109,3 +109,37 @@ def test_eagle_stream_and_tag_directory_use_shared_browse(ui_client, monkeypatch
     tags = BeautifulSoup(ui_client.get("/EAGLE_tags/").data, "html.parser")
     assert tags.select_one('.gallery-card a[href="/EAGLE_tag/design/"]')
     assert "7 個項目" in tags.get_text()
+
+
+def test_management_moves_controls_and_preserves_legacy_return_context(ui_client):
+    browse = BeautifulSoup(ui_client.get("/navigator/?source=local").data, "html.parser")
+    assert browse.select_one("#catalog-incremental-sync") is None
+    assert browse.select_one("[data-gallery-detail-content] .ui-detail-main")
+    legacy = ui_client.get("/navigator/?manage=1&source=local&tags=A&tags=B&view=list")
+    assert legacy.status_code == 302
+    destination = urlsplit(legacy.headers["Location"])
+    assert destination.path == "/library/"
+    assert destination.fragment == "collection-maintenance"
+    return_to = parse_qs(destination.query)["return_to"][0]
+    assert parse_qs(urlsplit(return_to).query) == {"source": ["local"], "tags": ["A", "B"], "view": ["list"]}
+    management = BeautifulSoup(ui_client.get(legacy.headers["Location"]).data, "html.parser")
+    assert management.select_one('[data-page-family="manage"]')
+    assert management.select_one("#catalog-incremental-sync")
+    assert management.select_one("#catalog-similarity-rebuild")
+    assert management.find("a", href=return_to)
+
+
+def test_resource_detail_and_comparison_share_page_families(ui_client):
+    created = ui_client.post("/api/resources", json={
+        "url": "https://example.com/shared-detail", "title": "Shared detail", "enqueue": False,
+    }).get_json()["resource"]
+    detail = BeautifulSoup(ui_client.get(created["detail_url"]).data, "html.parser")
+    assert detail.select_one('[data-page-family="detail"] .ui-detail-main')
+    assert detail.select_one('.ui-detail-related')
+    assert detail.select_one('a[href="https://example.com/shared-detail"]')
+    versions = BeautifulSoup(ui_client.get(created["detail_url"] + "versions/").data, "html.parser")
+    assert versions.select_one('[data-page-family="compare"]')
+    assert versions.select_one('#version-from')
+    duplicates = BeautifulSoup(ui_client.get("/catalog/duplicate-review/").data, "html.parser")
+    assert duplicates.select_one('[data-page-family="compare"][data-duplicate-review]')
+    assert duplicates.select_one('a[href="/library/#catalog-similarity-rebuild"]')

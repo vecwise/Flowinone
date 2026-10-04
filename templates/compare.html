@@ -1,0 +1,18 @@
+{% extends 'base_template.html' %}
+{% block custom_style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/duplicate_review.css') }}">
+{% endblock %}
+{% block page_content %}
+<main id="main-content" class="container gallery-page compare-page{% if comparison_kind == 'duplicates' %} duplicate-review-page{% else %} resource-page resource-versions-page{% endif %}" data-page-family="compare" {% if comparison_kind == 'duplicates' %}data-duplicate-review{% endif %}>
+  {% if comparison_kind == 'duplicates' %}
+    {% with page_heading='重複圖片檢閱', page_description='檢閱相同內容的本機圖片，並選擇參考圖片。', page_links=[{'label': '返回管理', 'url': url_for('local.content_library')}, {'label': '重新分析圖片', 'url': url_for('local.content_library')+'#catalog-similarity-rebuild'}] %}{% include 'components/_page_header.html' %}{% endwith %}
+    {% include 'components/_duplicate_comparison.html' %}
+  {% else %}
+    {% with page_heading='內容版本與差異', page_description=resource.title, page_links=[{'label': '返回資源', 'url': url_for('resource_library.resource_detail', resource_id=resource.id)}] %}{% include 'components/_page_header.html' %}{% endwith %}
+    {% include 'components/_version_comparison.html' %}
+  {% endif %}
+</main>
+{% if comparison_kind == 'duplicates' %}<script src="{{ url_for('static', filename='js/duplicate_review.js') }}"></script>{% endif %}
+{% endblock %}

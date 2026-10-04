@@ -75,3 +75,54 @@ def render_catalog_browse(**context):
         "items": context["payload"]["items"], "total": context["payload"]["total_estimate"],
         "next_url": context["next_url"], "previous_url": None}, **context,
     )
+
+
+def render_media_detail(**context):
+    media, metadata = context["media"], context["metadata"]
+    return render_template("detail.html", detail={
+        "kind": context["media_kind"], "title": metadata.get("name") or media.get("name"),
+        "source_label": ITEM_TYPE_LABELS[context["media_kind"]],
+        "description": metadata.get("description"), "tags": metadata.get("tags") or [],
+        "parent_url": media.get("parent_url") or url_for("local.index"),
+        "thumbnail_url": media.get("thumbnail_route"), "source_url": media.get("source_url"),
+        "mime_type": media.get("mime_type"), "download_url": media.get("download_url"),
+        "original_url": media.get("original_url"),
+    }, notice=request.args.get("notice"), **context)
+
+
+def render_resource_detail(**context):
+    resource = context["resource"]
+    current_context = context.get("current_context") or {}
+    return render_template("detail.html", detail={
+        "kind": "resource", "title": resource["title"],
+        "source_label": f"{context['resource_type_labels'].get(resource['source_type'], resource['source_type'])} · {resource.get('domain') or '網站'}",
+        "description": resource.get("summary_one_line") or resource.get("description"),
+        "tags": resource.get("tag_names") or [], "thumbnail_url": resource.get("thumbnail_url"),
+        "parent_url": current_context.get("return_url") or url_for("catalog.navigator_page", scope="all"),
+        "original_url": resource.get("original_url"),
+    }, related_items=[
+        {"title": item["title"], "url": item["detail_url"],
+         "thumbnail_route": item.get("thumbnail_url"), "why": item.get("domain") or item["source_type"]}
+        for item in context.get("similar_resources", [])
+    ], **context)
+
+
+def management_context(database, facets):
+    """The management shell owns source sync/watch/analysis controls."""
+    from pathlib import Path
+    from src.flowinone.catalog.blueprint import _bookmark_source_health
+    from src.flowinone.catalog.presentation import SOURCE_LABELS as catalog_labels
+    from src.flowinone.catalog.query import CATALOG_SOURCES, CatalogQuery
+    from src.flowinone.catalog.similarity import CatalogSimilarityService
+    from src.flowinone.catalog.watch import CatalogSourceWatcher
+    from src.flowinone.config import CHROME_BOOKMARK_PATH
+
+    return {
+        "query": CatalogQuery.create(scope="all"), "payload": {"facets": facets},
+        "catalog_sources": [{"key": source, "label": catalog_labels[source]} for source in CATALOG_SOURCES],
+        "source_watch_status": CatalogSourceWatcher(database).status(),
+        "similarity_status": CatalogSimilarityService(database).status(),
+        "bookmark_source_health": _bookmark_source_health(Path(CHROME_BOOKMARK_PATH),
+            facets["sync"].get("bookmarks", {}), facets["sources"].get("bookmarks", 0)),
+        "eagle_available": get_feature_flags().get("eagle"), "maintenance_open": True,
+    }

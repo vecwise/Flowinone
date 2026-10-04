@@ -13,15 +13,16 @@
     const panel = root.querySelector('[data-catalog-similarity-status]');
     const rebuild = root.getElementById('catalog-similarity-rebuild');
     const dialog = root.querySelector('[data-catalog-similar-dialog]');
-    if (!panel || !rebuild || !dialog) return null;
-    const statusSummary = panel.querySelector('[data-catalog-similarity-summary]');
-    const statusDetail = panel.querySelector('[data-catalog-similarity-detail]');
-    const summary = dialog.querySelector('[data-catalog-similar-summary]');
-    const results = dialog.querySelector('[data-catalog-similar-results]');
-    const empty = dialog.querySelector('[data-catalog-similar-empty]');
+    if ((!panel || !rebuild) && !dialog) return null;
+    const statusSummary = panel?.querySelector('[data-catalog-similarity-summary]');
+    const statusDetail = panel?.querySelector('[data-catalog-similarity-detail]');
+    const summary = dialog?.querySelector('[data-catalog-similar-summary]');
+    const results = dialog?.querySelector('[data-catalog-similar-results]');
+    const empty = dialog?.querySelector('[data-catalog-similar-empty]');
     let pollTimer = null;
 
     const renderStatus = (status) => {
+      if (!panel || !rebuild) return;
       const groups = Number(status?.duplicate_groups || 0);
       statusSummary.textContent = `已分析 ${Number(status?.analyzed_items || 0)} 張本機圖片${groups ? ` · ${groups} 組完全相同檔案` : ''}`;
       const job = status?.job;
@@ -78,7 +79,7 @@
       }).join('');
     };
 
-    rebuild.addEventListener('click', async () => {
+    rebuild?.addEventListener('click', async () => {
       rebuild.disabled = true;
       statusDetail.textContent = '正在排程本機圖片分析…';
       try {

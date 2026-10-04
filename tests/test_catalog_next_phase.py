@@ -718,7 +718,9 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
         '[data-bookmark-source-health][data-state="unavailable"]'
     )
     assert gallery.data.count(b'type="checkbox" name="source"') == 3
-    sync_rows = BeautifulSoup(gallery.data, "html.parser").select("[data-catalog-sync-source]")
+    management_page = BeautifulSoup(client.get("/library/").data, "html.parser")
+    assert not BeautifulSoup(gallery.data, "html.parser").select("[data-catalog-sync-source]")
+    sync_rows = management_page.select("[data-catalog-sync-source]")
     assert [row["data-status"] for row in sync_rows] == [
         "complete",
         "retrying",
@@ -747,19 +749,19 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
         True,
     ]
     assert retry_buttons[2]["aria-label"] == "重試 Chrome 書籤同步"
-    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+    assert management_page.select_one(
         'script[src$="/static/js/navigator_sync.js"]'
     )
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         'script[src$="/static/js/navigator_commands.js"]'
     )
-    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+    assert management_page.select_one(
         'script[src$="/static/js/navigator_watch.js"]'
     )
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         'script[src$="/static/js/navigator_similarity.js"]'
     )
-    assert BeautifulSoup(gallery.data, "html.parser").select_one(
+    assert management_page.select_one(
         "[data-catalog-similarity-status]"
     )
     saved_card = BeautifulSoup(gallery.data, "html.parser").select_one(

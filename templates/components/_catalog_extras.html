@@ -13,7 +13,7 @@
     </div>
   </section>
   {% endif %}
-  {% include '_navigator_maintenance.html' %}
+
   <p id="navigator-action-status" class="sr-only" aria-live="polite"></p>
 
 
@@ -40,17 +40,7 @@
   </div>
 </dialog>
 
-<dialog class="navigator-similar-dialog" data-catalog-similar-dialog aria-labelledby="navigator-similar-title">
-  <div class="navigator-command-shell">
-    <div class="navigator-command-heading">
-      <div><p class="eyebrow">Local image analysis</p><h2 id="navigator-similar-title">相同／相似圖片</h2></div>
-      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉相似圖片">關閉</button></form>
-    </div>
-    <p class="navigator-similar-summary" data-catalog-similar-summary>正在查詢…</p>
-    <div class="navigator-similar-results" data-catalog-similar-results></div>
-    <p class="navigator-similar-empty" data-catalog-similar-empty hidden></p>
-  </div>
-</dialog>
+{% include 'components/_similar_dialog.html' %}
 
 <dialog class="navigator-save-search-dialog" data-save-search-dialog aria-labelledby="navigator-save-search-title">
   <div class="navigator-command-shell">
@@ -80,25 +70,7 @@
       <button class="navigator-dialog-close" type="button" data-gallery-detail-close aria-label="關閉詳情">關閉</button>
     </header>
     <p class="navigator-detail-status" data-gallery-detail-status role="status"></p>
-    <div class="navigator-detail-layout" data-gallery-detail-content hidden>
-      <section class="navigator-detail-main">
-        <img data-gallery-detail-image src="{{ url_for('static', filename='default_thumbnail.svg') }}" alt="">
-        <video data-gallery-detail-video controls preload="metadata" playsinline hidden></video>
-        <p class="navigator-detail-source" data-gallery-detail-source></p>
-        <a class="navigator-detail-folder" data-gallery-detail-folder hidden href="#"></a>
-        <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
-        <p class="navigator-detail-description" data-gallery-detail-description></p>
-        <div class="gallery-tags" data-gallery-detail-tags aria-label="Tags"></div>
-        <div class="navigator-detail-actions">
-          <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>
-          <a class="action-button" data-gallery-detail-read href="#" hidden>閱讀內容</a>
-        </div>
-      </section>
-      <aside class="navigator-detail-related" aria-labelledby="navigator-detail-related-title">
-        <h3 id="navigator-detail-related-title">接著看</h3>
-        <div data-gallery-detail-related></div>
-      </aside>
-    </div>
+    {% with preview=true, detail={} %}{% include 'components/_detail_content.html' %}{% endwith %}
   </div>
 </dialog>
 
@@ -191,6 +163,4 @@
 <script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_detail.js') }}"></script>
-<script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_similarity.js') }}"></script>
-<script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>

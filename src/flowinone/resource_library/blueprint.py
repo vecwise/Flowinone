@@ -6,6 +6,8 @@ import math
 from pathlib import Path
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit
 
+from src.flowinone.web.ui import render_resource_detail
+
 from flask import Flask, abort, current_app, redirect, render_template, request, send_file, url_for
 
 from src.flowinone.config import CHROME_BOOKMARK_PATH
@@ -194,8 +196,7 @@ def resource_detail(resource_id: str):
     content_versions = ResourceVersionService(_database()).list_versions(
         resource_id, limit=5
     )
-    return render_template(
-        "resource_detail.html",
+    return render_resource_detail(
         title=f"{resource['title']} · Flowinone",
         current_context=_resource_current_context(resource_id),
         resource=resource,
@@ -237,7 +238,7 @@ def resource_versions(resource_id: str):
         except (LookupError, ValueError) as exc:
             comparison_error = str(exc)
     return render_template(
-        "resource_versions.html",
+        "compare.html", comparison_kind="versions",
         title=f"內容版本 · {resource['title']} · Flowinone",
         resource=resource,
         versions=versions,

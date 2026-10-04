@@ -1,24 +1,3 @@
-{% extends "base_template.html" %}
-
-{% block custom_style %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/duplicate_review.css') }}">
-{% endblock %}
-
-{% block page_content %}
-<main id="main-content" class="container duplicate-review-page" data-duplicate-review>
-  <header class="gallery-hero duplicate-review-hero">
-    <div>
-      <p class="eyebrow">Local image analysis</p>
-      <h1>重複圖片檢閱</h1>
-      <p>以現有 SHA-256 artifact 分組所有本機圖片。選擇的參考圖片只會儲存在 Flowinone；這個頁面不會刪除、移動或修改任何來源檔案。</p>
-    </div>
-    <div class="duplicate-review-hero-actions">
-      <a class="action-button" href="{{ url_for('catalog.navigator_page', scope='gallery') }}">回到 Navigator</a>
-      <a class="action-button" href="{{ url_for('catalog.navigator_page', scope='gallery') }}#catalog-similarity-rebuild">重新分析圖片</a>
-    </div>
-  </header>
-
   <section class="duplicate-review-overview" aria-label="重複圖片分析摘要">
     <div><strong>{{ review.analyzed_items }}</strong><span>已分析本機圖片</span></div>
     <div><strong>{{ review.duplicate_groups }}</strong><span>完全相同群組</span></div>
@@ -79,10 +58,7 @@
   {% else %}
   <section class="duplicate-review-empty" aria-labelledby="duplicate-review-empty-title">
     <h2 id="duplicate-review-empty-title">尚未分析本機圖片</h2>
-    <p>先從 Navigator 的「來源管理」執行「分析本機圖片」。分析只會讀取來源檔，然後可在這裡檢閱完全相同的群組。</p>
-    <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='gallery') }}#catalog-similarity-rebuild">前往圖片分析</a>
+    <p>先從 管理收藏的「來源與同步」執行「分析本機圖片」。分析只會讀取來源檔，然後可在這裡檢閱完全相同的群組。</p>
+    <a class="action-button primary" href="{{ url_for('local.content_library') }}#catalog-similarity-rebuild">前往圖片分析</a>
   </section>
   {% endif %}
-</main>
-<script src="{{ url_for('static', filename='js/duplicate_review.js') }}"></script>
-{% endblock %}
