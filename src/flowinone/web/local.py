@@ -7,7 +7,7 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, urlencode
 
 import click
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
@@ -128,12 +128,18 @@ def view_both(folder_path: str):
 
 @bp.get("/grid/<path:folder_path>/")
 def view_grid(folder_path: str):
-    return _render_media_view("view_grid.html", folder_path)
+    return _redirect_collection_view(folder_path, "grid")
 
 
 @bp.get("/slide/<path:folder_path>/")
 def view_slide(folder_path: str):
-    return _render_media_view("view_slide.html", folder_path)
+    return _redirect_collection_view(folder_path, "reader")
+
+
+def _redirect_collection_view(folder_path: str, view: str):
+    pairs = [(key, value) for key, value in request.args.items(multi=True) if key != "view"]
+    pairs.append(("view", view))
+    return redirect(url_for("local.view_both", folder_path=folder_path) + "?" + urlencode(pairs))
 
 
 @bp.get("/folders/")
@@ -162,7 +168,10 @@ def update_item_db_route():
         abort(500, description=f"更新 item DB 失敗: {exc}")
     if _wants_json():
         return jsonify(result)
-    return render_template("update_db_result.html", title="Update Item DB", result=result)
+    return render_template(
+        "operation_result.html", title="Item DB 更新結果", result=result,
+        result_fields={"seen": "掃描數量", "inserted": "新增", "skipped": "略過既有項目", "removed": "移除不存在的路徑"},
+    )
 
 
 @bp.post("/update_thumbnails")
@@ -180,9 +189,10 @@ def update_thumbnails_route():
     if _wants_json():
         return jsonify(result)
     return render_template(
-        "update_thumbnails_result.html",
-        title="Update Thumbnails",
+        "operation_result.html",
+        title="Thumbnails 更新結果",
         result=result,
+        result_fields={"updated": "已更新", "pending": "未更新"},
         forced=force,
     )
 
@@ -197,7 +207,8 @@ def clear_thumbnails_route():
     if _wants_json():
         return jsonify(result)
     return render_template(
-        "clear_thumbnails_result.html", title="Clear Thumbnails", result=result
+        "operation_result.html", title="清除縮圖", result=result,
+        result_fields={"cleared": "清除筆數"},
     )
 
 

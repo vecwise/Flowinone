@@ -226,7 +226,9 @@ def _render_eagle_detail(item_id: str, media_kind: str):
         request.args.get("return_to") or request.referrer or url_for("local.index")
     )
     return render_template(
-        "video_player.html" if media_kind == "video" else "image_viewer.html",
+        "media_detail.html",
+        media_kind=media_kind,
+        media=detail_dict,
         metadata=metadata_dict,
         **{media_kind: detail_dict},
         related_items=merge_related(

@@ -1,36 +1,37 @@
-<!-- templates/video_player.html -->
 {% extends 'base_template.html' %}
 
 {% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
 
 {% block page_content %}
-<main class="container detail-page">
+<main id="main-content" class="container detail-page">
   {% if request.args.get('notice') %}<div class="resource-alert is-success" role="status">{{ request.args.get('notice') }}</div>{% endif %}
   <header class="detail-header">
     <div>
-      <p class="eyebrow">影片項目</p>
+      <p class="eyebrow">{{ '影片項目' if media_kind == 'video' else '圖片項目' }}</p>
       <h1 class="detail-title">{{ metadata.name }}</h1>
     </div>
     <div class="action-row">
-      <a href="{{ video.parent_url }}" class="action-button">返回</a>
-      <a href="{{ video.download_url }}" class="action-button" download>下載</a>
+      <a href="{{ media.parent_url }}" class="action-button">返回</a>
+      <a href="{{ media.download_url }}" class="action-button" download>下載</a>
     </div>
   </header>
 
   <section class="detail-shell">
     <div class="reader-surface">
       <div class="media-stage">
-        <video controls preload="metadata" poster="{{ video.thumbnail_route }}">
-          <source src="{{ video.source_url }}" type="{{ video.mime_type }}">
+{% if media_kind == 'video' %}
+        <video controls preload="metadata" poster="{{ media.thumbnail_route }}">
+          <source src="{{ media.source_url }}" type="{{ media.mime_type }}">
           Your browser does not support the video tag.
         </video>
+        {% else %}<img src="{{ media.source_url }}" alt="{{ media.name }}">{% endif %}
       </div>
       <div class="detail-meta-strip">
         {% if metadata.ext %}<span class="meta-chip">{{ metadata.ext | upper }}</span>{% endif %}
-        <span class="meta-chip">{{ video.size_display }}</span>
-        <span class="meta-chip">{{ video.modified_time }}</span>
-        {% if video.original_url %}
-        <a class="meta-chip" href="{{ video.original_url }}" target="_blank" rel="noopener">來源</a>
+        <span class="meta-chip">{{ media.size_display }}</span>
+        <span class="meta-chip">{{ media.modified_time }}</span>
+        {% if media.original_url %}
+        <a class="meta-chip" href="{{ media.original_url }}" target="_blank" rel="noopener">來源</a>
         {% endif %}
       </div>
     </div>
@@ -73,7 +74,7 @@
           {% if action.url %}
           <a class="rail-action" href="{{ action.url }}">
           {% elif action.id == 'back' %}
-          <a class="rail-action" href="{{ video.parent_url }}">
+          <a class="rail-action" href="{{ media.parent_url }}">
           {% else %}
           <a class="rail-action" href="#related">
           {% endif %}
@@ -94,7 +95,7 @@
       {% if metadata.description %}
       <p>{{ metadata.description }}</p>
       {% else %}
-      <p>目前沒有額外說明；原始影片仍是主資料來源。</p>
+      <p>目前沒有額外說明；原始媒體仍是主資料來源。</p>
       {% endif %}
     </section>
   </section>

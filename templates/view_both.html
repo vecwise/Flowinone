@@ -49,7 +49,7 @@
 {% endmacro %}
 
 {% block page_content %}
-<main class="container browse-page">
+<main id="main-content" class="container browse-page">
   <header class="browse-header">
     <div>
       <p class="eyebrow">{{ metadata.category }}</p>
@@ -170,6 +170,9 @@
       linearToggle.classList.toggle('is-active', view === 'linear');
     }
 
+    const initialView = new URL(window.location.href).searchParams.get('view');
+    setActiveView(initialView === 'reader' ? 'single' : initialView === 'list' ? 'linear' : 'grid');
+
     function sortChildren(parent, direction) {
       const items = Array.from(parent.children);
       items.sort((a, b) => {
@@ -193,8 +196,6 @@
     gridToggle.addEventListener('click', () => setActiveView('grid'));
     singleToggle.addEventListener('click', () => setActiveView('single'));
     linearToggle.addEventListener('click', () => setActiveView('linear'));
-    setActiveView('grid');
-
     const pendingStatuses = new Set(['missing', 'queued', 'fetching']);
     const pendingIds = new Set(
       Array.from(document.querySelectorAll('[data-thumbnail-id][data-thumbnail-status]'))

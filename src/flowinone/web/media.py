@@ -105,7 +105,9 @@ def _render_local_detail(path: str, media_kind: str):
     metadata_dict = to_dict(metadata)
     detail_dict = serialize_detail(detail)
     return render_template(
-        "video_player.html" if media_kind == "video" else "image_viewer.html",
+        "media_detail.html",
+        media_kind=media_kind,
+        media=detail_dict,
         metadata=metadata_dict,
         **{media_kind: detail_dict},
         related_items=merge_related(

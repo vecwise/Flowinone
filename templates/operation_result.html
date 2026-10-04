@@ -1,0 +1,22 @@
+{% extends "base_template.html" %}
+{% block page_content %}
+<main id="main-content" class="container browse-page">
+  <header class="browse-header">
+    <h1 class="detail-title">{{ title }}</h1>
+    <a class="action-button" href="{{ url_for('local.view_item_db') }}">返回本機索引</a>
+  </header>
+  <section class="metadata-panel" aria-label="操作結果">
+    {% if result.base_dir %}<p>Base: <code>{{ result.base_dir }}</code></p>{% endif %}
+    {% if result.db_path %}<p>DB: <code>{{ result.db_path }}</code></p>{% endif %}
+    {% if forced %}<p>已強制重建所有縮圖。</p>{% endif %}
+    <dl class="metadata-grid">
+      {% for key, label in result_fields.items() %}
+      <div class="metadata-field"><dt>{{ label }}</dt><dd>{{ result.get(key, 0) }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% if result.errors %}
+    <div role="alert"><h2>錯誤</h2><ul>{% for path, message in result.errors %}<li><strong>{{ path }}</strong>: {{ message }}</li>{% endfor %}</ul></div>
+    {% else %}<p role="status">沒有錯誤。</p>{% endif %}
+  </section>
+</main>
+{% endblock %}
