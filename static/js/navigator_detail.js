@@ -127,7 +127,7 @@
       });
       launch.hidden = !item.launch_uri;
       if (item.launch_uri) {
-        if (item.launch_uri.startsWith('/resources/')) {
+        if (/^\/(resources|image|video|EAGLE_image|EAGLE_video)\//.test(item.launch_uri)) {
           const destination = new URL(item.launch_uri, global.location.href);
           const current = new URL(global.location.href);
           destination.searchParams.set('return_to', current.pathname + current.search);

@@ -8,6 +8,7 @@
           <div class="resource-tags">{% for tag in resource.tags %}<span>{{ tag.name }} · {{ tag.source }}</span>{% else %}<span>尚無標籤</span>{% endfor %}</div>
           <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_tags', resource_id=resource.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if current_context %}<input type="hidden" name="return_to" value="{{ current_context.return_url }}">{% endif %}
             <label for="resource-tags">我的標籤（逗號分隔）</label>
             <input id="resource-tags" name="tags" value="{{ resource.tags|selectattr('source', 'equalto', 'user')|map(attribute='name')|join(', ') }}">
             <button class="action-button" type="submit">更新標籤</button>
@@ -18,6 +19,7 @@
           <h2>擷取設定</h2>
           <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_enrich', resource_id=resource.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if current_context %}<input type="hidden" name="return_to" value="{{ current_context.return_url }}">{% endif %}
             <label class="resource-check"><input type="checkbox" name="include_ai" value="1" {% if not ai_available %}disabled{% endif %}> 同時更新 AI 摘要</label>
             <input type="hidden" name="force" value="1">
             <button class="action-button" type="submit">執行擷取</button>
@@ -31,7 +33,7 @@
         </section>
       </div>
       <section class="resource-surface resource-version-summary">
-        <div class="resource-section-heading"><h2>內容版本</h2><a class="action-button" href="{{ url_for('resource_library.resource_versions', resource_id=resource.id) }}">查看差異</a></div>
+        <div class="resource-section-heading"><h2>內容版本</h2><a class="action-button" href="{{ url_for('resource_library.resource_versions', resource_id=resource.id, return_to=current_context.return_url if current_context else none) }}">查看差異</a></div>
         {% if content_versions %}
         <p>每次重新擷取到不同文字時會保存快照；目前有 {{ content_versions|length }} 個最近版本。</p>
         <ul class="resource-version-list">

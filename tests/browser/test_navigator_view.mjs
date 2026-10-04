@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../../static/js/navigator_view.js', import.meta.url), 'utf8');
 
-function harness(storedView = null, {href = 'http://localhost/navigator/?scope=all'} = {}) {
+function harness(storedView = null, {href = 'http://localhost/navigator/?scope=all', extraLinks = []} = {}) {
   const gallery = {dataset: {galleryView: 'grid'}};
   const buttons = ['grid', 'list'].map((view) => ({
     dataset: {galleryViewOption: view},
@@ -20,7 +20,7 @@ function harness(storedView = null, {href = 'http://localhost/navigator/?scope=a
   const window = {
     document: {
       querySelector: (selector) => selector === '[data-gallery-view]' ? gallery : viewInput,
-      querySelectorAll: (selector) => selector === '[data-gallery-view-option]' ? buttons : [readingLink],
+      querySelectorAll: (selector) => selector === '[data-gallery-view-option]' ? buttons : [readingLink, ...extraLinks],
     },
     location,
     history: {replaceState(_state, _title, value) { location.href = new URL(value, location.href).toString(); }},
@@ -50,11 +50,11 @@ test('an unknown saved mode falls back to the grid', () => {
 });
 
 test('legacy modes migrate without loading a different page or losing the query', () => {
-  for (const mode of ['knowledge', 'shelf']) {
+  for (const mode of ['knowledge', 'reader', 'single', 'linear', 'shelf']) {
     const oldUrl = `http://localhost/navigator/?scope=gallery&source=bookmarks&tags=ML&view=${mode}#item-example`;
     const result = harness(null, {href: oldUrl});
     const url = new URL(result.location.href);
-    const expected = mode === 'knowledge' ? 'list' : 'grid';
+    const expected = mode === 'shelf' ? 'grid' : 'list';
     assert.equal(result.gallery.dataset.galleryView, expected);
     assert.equal(result.location.assigned, undefined);
     assert.equal(url.searchParams.get('tags'), 'ML');
@@ -81,4 +81,21 @@ test('reading links return to the same layout and theme', () => {
   assert.equal(returnUrl.searchParams.get('tags'), 'ML');
   assert.equal(returnUrl.searchParams.get('view'), 'list');
   assert.equal(returnUrl.hash, '#item-example');
+});
+
+test('source folders, pagination and media return links keep reading mode and source parameters', () => {
+  const folder = {href: 'http://localhost/both/nested/?src=internal'};
+  const batch = {href: 'http://localhost/EAGLE_stream/?offset=24&limit=24'};
+  const media = {href: 'http://localhost/image/a.jpg?src=internal&return_to=%2Fboth%2Fnested%2F%3Fsrc%3Dinternal'};
+  const external = {href: 'https://example.com/article'};
+  const result = harness(null, {href: 'http://localhost/both/nested/?src=internal', extraLinks: [folder, batch, media, external]});
+  result.buttons[1].click();
+  assert.equal(new URL(folder.href, 'http://localhost').searchParams.get('src'), 'internal');
+  assert.equal(new URL(folder.href, 'http://localhost').searchParams.get('view'), 'list');
+  assert.equal(new URL(batch.href, 'http://localhost').searchParams.get('offset'), '24');
+  assert.equal(new URL(batch.href, 'http://localhost').searchParams.get('view'), 'list');
+  const returnUrl = new URL(new URL(media.href, 'http://localhost').searchParams.get('return_to'), 'http://localhost');
+  assert.equal(returnUrl.searchParams.get('src'), 'internal');
+  assert.equal(returnUrl.searchParams.get('view'), 'list');
+  assert.equal(external.href, 'https://example.com/article');
 });

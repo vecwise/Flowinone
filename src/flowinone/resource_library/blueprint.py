@@ -36,7 +36,7 @@ RESOURCE_TYPE_LABELS = {
 
 def _resource_current_context(resource_id: str) -> dict | None:
     """Keep only a local Navigator return URL on Resource detail pages."""
-    raw = request.args.get("return_to", "")
+    raw = request.values.get("return_to", "")
     if not raw or len(raw) > 4000:
         return None
     try:
@@ -237,6 +237,7 @@ def resource_versions(resource_id: str):
             )
         except (LookupError, ValueError) as exc:
             comparison_error = str(exc)
+    current_context = _resource_current_context(resource_id)
     return render_template(
         "compare.html", comparison_kind="versions",
         title=f"內容版本 · {resource['title']} · Flowinone",
@@ -246,28 +247,34 @@ def resource_versions(resource_id: str):
         selected_to=to_version,
         comparison=comparison,
         comparison_error=comparison_error,
+        comparison_return_to=(current_context or {}).get("return_url"),
+        detail_return_url=url_for("resource_library.resource_detail", resource_id=resource_id,
+                                  return_to=(current_context or {}).get("return_url")),
     )
 
 
 @bp.post("/resources/<resource_id>/tags")
 def resource_tags(resource_id: str):
+    return_to = (_resource_current_context(resource_id) or {}).get("return_url")
     raw = request.form.get("tags", "")
     tags = [value.strip() for value in raw.replace("，", ",").split(",") if value.strip()]
     try:
         _service().replace_tags(resource_id, tags)
     except Exception as exc:
-        return _form_error("resource_library.resource_detail", exc, resource_id=resource_id)
+        return _form_error("resource_library.resource_detail", exc, resource_id=resource_id, return_to=return_to)
     return redirect(
         url_for(
             "resource_library.resource_detail",
             resource_id=resource_id,
             notice="Tags 已更新",
+            return_to=return_to,
         )
     )
 
 
 @bp.post("/resources/<resource_id>/enrich")
 def resource_enrich(resource_id: str):
+    return_to = (_resource_current_context(resource_id) or {}).get("return_url")
     try:
         _service().enqueue_enrichment(
             resource_id,
@@ -275,12 +282,13 @@ def resource_enrich(resource_id: str):
             force=request.form.get("force") == "1",
         )
     except Exception as exc:
-        return _form_error("resource_library.resource_detail", exc, resource_id=resource_id)
+        return _form_error("resource_library.resource_detail", exc, resource_id=resource_id, return_to=return_to)
     return redirect(
         url_for(
             "resource_library.resource_detail",
             resource_id=resource_id,
             notice="已加入處理佇列",
+            return_to=return_to,
         )
     )
 

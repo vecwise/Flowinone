@@ -1,0 +1,61 @@
+/* Shared rules for browse, detail, manage and compare. Source modules inherit these tokens. */
+[hidden] { display: none !important; }
+[data-page-family] { min-width: 0; }
+[data-page-family] h1, [data-page-family] h2, [data-page-family] h3 { overflow-wrap: anywhere; }
+.ui-page-header { align-items: center; }
+.ui-page-header > div { min-width: 0; }
+.ui-page-header h1 { font-size: clamp(1.5rem, 3vw, 2.25rem); line-height: 1.2; }
+.ui-page-header .action-row { flex-shrink: 0; }
+.navigator-page .ui-page-header { padding: 8px 14px; }
+.navigator-page .ui-page-header h1 { font-size: 1.5rem; }
+.navigator-page .ui-page-header p { display: none; }
+.browse-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.browse-toolbar .gallery-search-field { flex: 1; min-width: min(100%, 220px); }
+.browse-toolbar input { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--fo-border); border-radius: 8px; background: var(--fo-surface); color: var(--fo-text); }
+.browse-context > summary { min-height: 44px; padding: 10px 12px; cursor: pointer; }
+.source-browse-links { margin-top: 12px; }
+.mode-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.mode-pill { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border: 1px solid var(--fo-border); border-radius: 8px; background: var(--fo-surface); color: var(--fo-text); text-decoration: none; }
+.mode-pill.is-active { border-color: var(--fo-primary); background: var(--fo-primary-soft); color: var(--fo-primary); }
+.navigator-view-switch button, .navigator-dialog-close { min-height: 44px; }
+.navigator-sessions { min-width: 0; }
+.ui-detail-main { display: grid; align-content: start; gap: 16px; min-width: 0; padding: 16px; }
+.ui-detail-main h2 { margin: 0 0 8px; }
+.ui-detail-main .media-stage { min-height: 0; border-radius: 8px; overflow: hidden; }
+.ui-detail-main .media-stage img, .ui-detail-main .media-stage video { width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+.ui-detail-main[data-detail-kind="resource"] .media-stage img { max-height: 260px; }
+.ui-detail-related { min-width: 0; }
+.ui-detail-related .rail-card span { min-width: 0; }
+.ui-detail-related .rail-card strong { overflow-wrap: anywhere; }
+.navigator-detail-dialog .ui-detail-layout { margin: 0; padding: 16px; }
+.navigator-detail-dialog .ui-detail-related { position: static; }
+.navigator-detail-dialog .media-stage img, .navigator-detail-dialog .media-stage video { max-height: 48vh; }
+.navigator-detail-dialog .ui-detail-main { box-shadow: none; }
+/* Reading keeps an image's full aspect ratio, including legacy Slide links. */
+.gallery-grid[data-gallery-view="list"] .gallery-card[data-card-type="image"] { grid-template-columns: minmax(0, 1fr); }
+.gallery-grid[data-gallery-view="list"] .gallery-card[data-card-type="image"] .gallery-card-media { min-height: 0; aspect-ratio: auto; }
+.gallery-grid[data-gallery-view="list"] .gallery-card[data-card-type="image"] .gallery-card-media img { height: auto; max-height: 80vh; object-fit: contain; }
+.gallery-grid[data-gallery-view="list"] .gallery-card-description { -webkit-line-clamp: 6; }
+.resource-reader, .resource-code { max-width: 100%; overflow-wrap: anywhere; }
+.data-table-wrap { max-width: 100%; overflow-x: auto; }
+.compare-page .resource-version-form { flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .ui-page-header { align-items: start; flex-direction: column; gap: 12px; padding: 14px; }
+  .ui-page-header .action-row { width: 100%; }
+  .ui-detail-layout { grid-template-columns: minmax(0, 1fr); }
+  .ui-detail-related { position: static; }
+  .navigator-detail-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+  .navigator-detail-dialog .ui-detail-layout { padding: 12px; }
+  .ui-detail-main { padding: 12px; }
+  .catalog-sync-status li, .catalog-watch-status li { grid-template-columns: minmax(0, 1fr) auto; }
+  .catalog-sync-status li small, .catalog-watch-status li small { grid-column: 1 / -1; overflow-wrap: anywhere; }
+  .resource-version-form select { width: 100%; min-width: 0; }
+  .compare-page .resource-version-form { grid-template-columns: minmax(0, 1fr); }
+  .compare-page .resource-version-form > label,
+  .compare-page .resource-version-form > select,
+  .compare-page .resource-version-form > button { grid-column: 1; grid-row: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

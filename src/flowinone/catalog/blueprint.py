@@ -12,13 +12,13 @@ from flask import Flask, abort, current_app, g, redirect, render_template, reque
 from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.config import CHROME_BOOKMARK_PATH
 
-from src.flowinone.web.ui import render_catalog_browse
+from src.flowinone.web.ui import browse_view, render_catalog_browse
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .browse import CatalogService
 from .commands import register_catalog_commands
 from .http import bp, _database
-from .presentation import SOURCE_LABELS, visible_items
+from .presentation import SOURCE_LABELS, bookmark_source_health as _bookmark_source_health, visible_items
 from .query import CATALOG_SOURCES, CatalogQuery
 from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
@@ -42,33 +42,6 @@ ITEM_TYPE_LABELS = {
 }
 
 
-def _bookmark_source_health(path: Path, sync_state: dict, indexed_count: int) -> dict[str, str | int]:
-    """Describe whether the visible bookmark index still reflects its source."""
-    raw_synced_at = sync_state.get("synced_at")
-    synced_at = None
-    if raw_synced_at:
-        try:
-            synced_at = datetime.fromisoformat(str(raw_synced_at).replace("Z", "+00:00"))
-            if synced_at.tzinfo is None:
-                synced_at = synced_at.replace(tzinfo=timezone.utc)
-        except ValueError:
-            pass
-    display_time = synced_at.astimezone().strftime("%Y-%m-%d %H:%M") if synced_at else "尚未同步"
-    count = indexed_count
-    try:
-        source_mtime = path.stat().st_mtime
-    except OSError:
-        state = "unavailable"
-    else:
-        if sync_state.get("status") == "failed":
-            state = "failed"
-        elif not synced_at:
-            state = "never_synced"
-        elif source_mtime > synced_at.timestamp() + 1:
-            state = "changed"
-        else:
-            state = "current"
-    return {"state": state, "count": count, "synced_at": display_time}
 
 
 def _navigator_query() -> CatalogQuery:
@@ -131,7 +104,7 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
 
 def _navigator_view() -> str:
     """Keep old knowledge links readable through the remaining list layout."""
-    return "list" if request.args.get("view") in {"list", "knowledge"} else "grid"
+    return browse_view()
 
 
 def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:

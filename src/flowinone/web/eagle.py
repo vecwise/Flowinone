@@ -20,7 +20,7 @@ from src.file_handler import (
     search_eagle_items,
 )
 
-from .ui import render_media_detail, render_source_browse
+from .ui import render_media_detail, render_source_browse, render_source_error
 
 from .common import (
     build_detail_actions,
@@ -88,7 +88,7 @@ def _render_paginated(loader, *args):
     except MediaNotFound:
         abort(404)
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return {"name": "來源暫時無法使用", "error": str(exc), "status_code": 500}, []
     metadata_dict, data_list = serialize_payload(metadata, data)
     attach_pagination_urls(metadata_dict)
     _attach_detail_urls(data_list, normalize_current_url())
@@ -101,7 +101,7 @@ def list_all_eagle_folder():
     try:
         metadata, data = get_eagle_folders()
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     return render_source_browse(metadata=metadata_dict, data=data_list)
 
@@ -112,7 +112,7 @@ def list_eagle_tags():
     try:
         metadata, tags = get_eagle_tags()
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     data = [
         {"id": tag["name"], "name": tag["name"], "media_type": "tag",
          "description": f"{tag.get('count') or 0} 個項目",
@@ -128,7 +128,7 @@ def list_eagle_smart_folders():
     try:
         metadata, data = get_eagle_smart_folders()
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     return render_source_browse(metadata=metadata_dict, data=data_list)
 
@@ -155,7 +155,7 @@ def view_eagle_folder(eagle_folder_id: str):
     except MediaNotFound:
         abort(404)
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     attach_pagination_urls(metadata_dict)
     _attach_detail_urls(data_list, normalize_current_url())
@@ -190,12 +190,12 @@ def eagle_stream():
     try:
         data = [to_dict(item) for item in get_eagle_stream_items(offset=offset, limit=limit)]
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     _attach_detail_urls(data, normalize_current_url())
     metadata = {"name": "Eagle 串流", "category": "stream", "pagination": {
         "previous_url": url_for("eagle.eagle_stream", offset=max(0, offset-limit), limit=limit, view=request.args.get("view")) if offset else None,
         "next_url": url_for("eagle.eagle_stream", offset=offset+len(data), limit=limit, view=request.args.get("view")) if len(data) == limit else None,
-        "total": offset+len(data),
+        "total": len(data),
     }}
     return render_source_browse(metadata=metadata, data=data)
 
@@ -242,7 +242,7 @@ def _render_eagle_detail(item_id: str, media_kind: str):
     except MediaNotFound:
         abort(404)
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict = to_dict(metadata)
     detail_dict = serialize_detail(detail)
     detail_dict["parent_url"] = (

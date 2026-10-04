@@ -7,9 +7,9 @@
 <main id="main-content" class="container gallery-page manage-page" data-page-family="manage">
   {% with page_heading='管理收藏', page_description='新增資源、檢查來源與執行維護。', page_links=[] %}{% include 'components/_page_header.html' %}{% endwith %}
   <nav class="mode-tabs" aria-label="管理功能">
-    <a class="mode-pill {% if management == 'sources' %}is-active{% endif %}" href="{{ url_for('local.content_library') }}">來源與同步</a>
-    <a class="mode-pill {% if management == 'resources' %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}">新增與匯入</a>
-    {% if feature_flags.db %}<a class="mode-pill" href="{{ url_for('local.view_item_db') }}">本機索引</a>{% endif %}
+    <a class="mode-pill {% if management == 'sources' %}is-active{% endif %}" href="{{ url_for('local.content_library') }}" {% if management == 'sources' %}aria-current="page"{% endif %}>來源與同步</a>
+    <a class="mode-pill {% if management == 'resources' %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}" {% if management == 'resources' %}aria-current="page"{% endif %}>新增與匯入</a>
+    {% if feature_flags.db %}<a class="mode-pill {{ 'is-active' if management in ['index', 'result'] else '' }}" href="{{ url_for('local.view_item_db') }}" {% if management in ['index', 'result'] %}aria-current="page"{% endif %}>本機索引</a>{% endif %}
     <a class="mode-pill" href="{{ url_for('catalog.duplicate_review_page') }}">重複圖片</a>
   </nav>
   {% if management == 'resources' %}{% include 'components/_resource_management.html' %}

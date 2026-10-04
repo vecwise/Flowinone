@@ -1,5 +1,5 @@
 <div class="detail-shell ui-detail-layout" {% if preview %}data-gallery-detail-content hidden{% endif %}>
-  <section class="reader-surface ui-detail-main">
+  <section class="reader-surface ui-detail-main" data-detail-kind="{{ detail.kind or 'preview' }}">
     <div class="media-stage">
       {% if preview or detail.kind != 'video' %}<img {% if preview %}data-gallery-detail-image{% endif %} src="{{ detail.source_url or detail.thumbnail_url or url_for('static', filename='default_thumbnail.svg') }}" alt="{{ detail.title or '' }}" {% if detail.kind == 'resource' %}width="640" height="360"{% endif %}>{% endif %}
       {% if preview or detail.kind == 'video' %}

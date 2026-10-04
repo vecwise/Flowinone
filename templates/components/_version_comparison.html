@@ -1,5 +1,6 @@
   <section class="resource-surface">
     <form class="resource-version-form" method="get">
+      {% if comparison_return_to %}<input type="hidden" name="return_to" value="{{ comparison_return_to }}">{% endif %}
       <label for="version-from">較早版本</label>
       <select id="version-from" name="from" {% if not versions %}disabled{% endif %}>
         <option value="">選擇版本</option>

@@ -31,7 +31,7 @@ from src.flowinone.catalog.browse import CatalogService
 from src.flowinone.catalog.query import CatalogQuery
 from src.flowinone.web.database import request_database
 
-from .ui import management_context, render_source_browse
+from .ui import management_context, render_source_browse, render_source_error
 
 from .common import (
     content_card_from_db_item,
@@ -68,7 +68,7 @@ def _render_media_view(folder_path: str, source: str | None = None):
     except (FolderNotFound, MediaNotFound, BookmarkNotFound):
         abort(404)
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     return render_source_browse(metadata=metadata_dict, data=data_list)
 
@@ -98,6 +98,15 @@ def content_library():
             ("resources", "新增網址", None, "resource_library.resource_index"),
         )
     ]
+    source_links = {
+        "local": [("資料夾", "local.view_source_folders", "db")],
+        "eagle": [("資料夾", "eagle.list_all_eagle_folder", "eagle"), ("標籤", "eagle.list_eagle_tags", "eagle"),
+                  ("智慧資料夾", "eagle.list_eagle_smart_folders", "eagle"), ("串流", "eagle.eagle_stream", "eagle")],
+        "bookmarks": [("書籤資料夾", "chrome.view_chrome_root", "chrome"), ("YouTube", "chrome.view_chrome_youtube", "youtube")],
+    }
+    for source in sources:
+        source["links"] = [{"label": label, "url": url_for(endpoint)}
+                           for label, endpoint, flag in source_links.get(source["key"], []) if flags.get(flag)]
     return render_template(
         "manage.html", title="管理收藏 · Flowinone", management="sources", sources=sources,
         management_return_url=_safe_browse_return(),
@@ -158,7 +167,7 @@ def view_source_folders():
     except (FolderNotFound, MediaNotFound, BookmarkNotFound):
         abort(404)
     except ExternalServiceError as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     return render_source_browse(metadata=metadata_dict, data=data_list)
 

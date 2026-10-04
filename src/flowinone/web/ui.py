@@ -1,6 +1,6 @@
 """Presentation adapters for shared page families; source loaders keep ownership of data."""
 
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from flask import render_template, request, url_for
 
@@ -24,6 +24,11 @@ def source_cards(data: list[dict], source: str) -> list[dict]:
     for index, item in enumerate(data):
         kind = item.get("media_type", "image")
         uri = item.get("url") or item.get("detail_url") or "#"
+        if kind in {"image", "video"} and uri.startswith("/") and not uri.startswith("//"):
+            target = urlsplit(uri)
+            pairs = [(key, value) for key, value in parse_qsl(target.query) if key != "return_to"]
+            pairs.append(("return_to", request.full_path.rstrip("?")))
+            uri = urlunsplit(("", "", target.path, urlencode(pairs), target.fragment))
         try:
             domain = urlsplit(uri).hostname or ""
         except ValueError:
@@ -50,7 +55,7 @@ def render_source_browse(*, metadata: dict, data: list[dict]):
     source = request.blueprint or "local"
     pagination = metadata.get("pagination") or {}
     links = [{"label": "返回收藏", "url": url_for("catalog.navigator_page", scope="all")}]
-    if get_feature_flags().get("eagle"):
+    if source == "eagle" and get_feature_flags().get("eagle"):
         links.extend({"label": label, "url": url_for(endpoint)} for label, endpoint in (
             ("資料夾", "eagle.list_all_eagle_folder"), ("標籤", "eagle.list_eagle_tags"),
             ("智慧資料夾", "eagle.list_eagle_smart_folders"), ("串流", "eagle.eagle_stream"),
@@ -60,9 +65,14 @@ def render_source_browse(*, metadata: dict, data: list[dict]):
         browse={"kind": "source", "heading": metadata.get("name", "來源瀏覽"),
                 "description": "瀏覽來源中的資料夾與項目。", "links": links,
                 "items": source_cards(data, source), "total": pagination.get("total", len(data)),
-                "previous_url": pagination.get("previous_url"), "next_url": pagination.get("next_url")},
+                "previous_url": pagination.get("previous_url"), "next_url": pagination.get("next_url"),
+                "error": metadata.get("error"), "batch_only": metadata.get("category") == "stream"},
         view=browse_view(), item_type_labels=ITEM_TYPE_LABELS,
-    )
+    ), metadata.get("status_code", 200)
+
+
+def render_source_error(message):
+    return render_source_browse(metadata={"name": "來源暫時無法使用", "error": message, "status_code": 500}, data=[])
 
 
 def render_catalog_browse(**context):
@@ -79,15 +89,29 @@ def render_catalog_browse(**context):
 
 def render_media_detail(**context):
     media, metadata = context["media"], context["metadata"]
+    context.setdefault("title", f"{metadata.get('name') or media.get('name') or '項目詳情'} · Flowinone")
     return render_template("detail.html", detail={
         "kind": context["media_kind"], "title": metadata.get("name") or media.get("name"),
         "source_label": ITEM_TYPE_LABELS[context["media_kind"]],
         "description": metadata.get("description"), "tags": metadata.get("tags") or [],
-        "parent_url": media.get("parent_url") or url_for("local.index"),
+        "parent_url": safe_browse_return(request.args.get("return_to")) or safe_browse_return(media.get("parent_url")) or url_for("local.index"),
         "thumbnail_url": media.get("thumbnail_route"), "source_url": media.get("source_url"),
         "mime_type": media.get("mime_type"), "download_url": media.get("download_url"),
         "original_url": media.get("original_url"),
     }, notice=request.args.get("notice"), **context)
+
+
+def safe_browse_return(value):
+    if not value or len(value) > 4000 or "\\" in value:
+        return None
+    try:
+        target = urlsplit(value)
+    except ValueError:
+        return None
+    if target.scheme or target.netloc or not target.path.startswith("/"):
+        return None
+    allowed = ("/navigator/", "/both/", "/chrome/", "/chrome_youtube/", "/EAGLE_", "/folders/", "/library/")
+    return value if target.path == "/" or target.path == "/search" or target.path.startswith(allowed) else None
 
 
 def render_resource_detail(**context):
@@ -101,7 +125,8 @@ def render_resource_detail(**context):
         "parent_url": current_context.get("return_url") or url_for("catalog.navigator_page", scope="all"),
         "original_url": resource.get("original_url"),
     }, related_items=[
-        {"title": item["title"], "url": item["detail_url"],
+        {"title": item["title"], "url": item["detail_url"] + (
+             "?" + urlencode({"return_to": current_context["return_url"]}) if current_context.get("return_url") else ""),
          "thumbnail_route": item.get("thumbnail_url"), "why": item.get("domain") or item["source_type"]}
         for item in context.get("similar_resources", [])
     ], **context)
@@ -110,8 +135,7 @@ def render_resource_detail(**context):
 def management_context(database, facets):
     """The management shell owns source sync/watch/analysis controls."""
     from pathlib import Path
-    from src.flowinone.catalog.blueprint import _bookmark_source_health
-    from src.flowinone.catalog.presentation import SOURCE_LABELS as catalog_labels
+    from src.flowinone.catalog.presentation import SOURCE_LABELS as catalog_labels, bookmark_source_health
     from src.flowinone.catalog.query import CATALOG_SOURCES, CatalogQuery
     from src.flowinone.catalog.similarity import CatalogSimilarityService
     from src.flowinone.catalog.watch import CatalogSourceWatcher
@@ -122,7 +146,7 @@ def management_context(database, facets):
         "catalog_sources": [{"key": source, "label": catalog_labels[source]} for source in CATALOG_SOURCES],
         "source_watch_status": CatalogSourceWatcher(database).status(),
         "similarity_status": CatalogSimilarityService(database).status(),
-        "bookmark_source_health": _bookmark_source_health(Path(CHROME_BOOKMARK_PATH),
+        "bookmark_source_health": bookmark_source_health(Path(CHROME_BOOKMARK_PATH),
             facets["sync"].get("bookmarks", {}), facets["sources"].get("bookmarks", 0)),
         "eagle_available": get_feature_flags().get("eagle"), "maintenance_open": True,
     }

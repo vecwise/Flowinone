@@ -3,6 +3,8 @@
 
   const STORAGE_KEY = 'flowinone-gallery-view';
   const normalizeView = (view) => ['list', 'knowledge', 'reader', 'single', 'linear'].includes(view) ? 'list' : 'grid';
+  const isBrowsePath = (path) => path === '/navigator/' || path.startsWith('/navigator/views/')
+    || /^\/(both|folders|chrome|chrome_youtube|EAGLE_folders|EAGLE_tags|EAGLE_smart_folders|EAGLE_smart_folder|EAGLE_folder|EAGLE_tag|EAGLE_stream)\//.test(path);
 
   function createNavigatorViews(root = global.document) {
     const gallery = root?.querySelector('[data-gallery-view]');
@@ -27,16 +29,16 @@
       root.querySelectorAll('a[href]').forEach((link) => {
         const destination = new URL(link.href, global.location.href);
         if (destination.origin !== global.location.origin) return;
-        if (destination.pathname.startsWith('/resources/') && destination.searchParams.has('return_to')) {
+        if (destination.searchParams.has('return_to')) {
           const returnUrl = new URL(destination.searchParams.get('return_to'), global.location.href);
-          if (returnUrl.origin !== global.location.origin || returnUrl.pathname !== '/navigator/') return;
+          if (returnUrl.origin !== global.location.origin || !isBrowsePath(returnUrl.pathname)) return;
           if (normalized === 'list') returnUrl.searchParams.set('view', 'list');
           else returnUrl.searchParams.delete('view');
           destination.searchParams.set('return_to', returnUrl.pathname + returnUrl.search + returnUrl.hash);
           link.href = destination.pathname + destination.search + destination.hash;
           return;
         }
-        if (!(destination.pathname === '/navigator/' || destination.pathname.startsWith('/navigator/views/'))) return;
+        if (!isBrowsePath(destination.pathname) && !link.hasAttribute?.('data-browse-link')) return;
         if (normalized === 'list') destination.searchParams.set('view', 'list');
         else destination.searchParams.delete('view');
         link.href = destination.pathname + destination.search + destination.hash;

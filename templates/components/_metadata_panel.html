@@ -11,30 +11,30 @@
   <div class="metadata-panel-body">
 {% else %}
 <section class="metadata-panel" aria-label="Item metadata">
-  <h2>Metadata Layer</h2>
+  <h2>來源資訊</h2>
 {% endif %}
 
   <div class="metadata-grid">
     <div class="metadata-field">
-      <span>Name</span>
+      <span>名稱</span>
       <strong>{{ metadata.name }}</strong>
     </div>
 
     <div class="metadata-field">
-      <span>Category</span>
+      <span>類型</span>
       <strong>{{ metadata.category }}</strong>
     </div>
 
     {% if metadata.ext %}
     <div class="metadata-field">
-      <span>Format</span>
+      <span>格式</span>
       <strong>{{ metadata.ext | upper }}</strong>
     </div>
     {% endif %}
 
     {% if metadata.path %}
     <div class="metadata-field">
-      <span>Route</span>
+      <span>路徑</span>
       <code>{{ metadata.path }}</code>
     </div>
     {% endif %}
@@ -42,7 +42,7 @@
 
   {% if metadata.description %}
   <div class="metadata-field">
-    <span>Description</span>
+    <span>說明</span>
     <strong>{{ metadata.description }}</strong>
   </div>
   {% endif %}
@@ -86,13 +86,13 @@
 
   {% if metadata.tags %}
   <div>
-    <p class="small-note">Tags are recommendation graph nodes.</p>
+    <p class="small-note">標籤</p>
     <div class="tag-row">
       {% for tag in metadata.tags %}
       {% if compact_metadata %}
       <span class="tag-chip">#{{ tag }}</span>
       {% else %}
-      <a href="{{ url_for('eagle.view_images_by_tag', target_tag=tag) }}" class="tag-chip">#{{ tag }}</a>
+      <a href="{{ url_for('eagle.view_images_by_tag', target_tag=tag) if request.blueprint == 'eagle' else url_for('catalog.navigator_page', scope='all', source='local', tags=tag) }}" class="tag-chip">#{{ tag }}</a>
       {% endif %}
       {% endfor %}
     </div>
@@ -101,7 +101,7 @@
 
   {% if metadata.folders %}
   <div>
-    <p class="small-note">Source folders</p>
+    <p class="small-note">來源資料夾</p>
     <div class="tag-row">
       {% for folder in metadata.folders %}
       <a href="{{ folder.url }}" class="tag-chip">{{ folder.name }}</a>
@@ -112,12 +112,12 @@
 
   {% if metadata.filesystem_path %}
   <div class="metadata-field">
-    <span>Filesystem path</span>
+    <span>檔案位置</span>
     <code>{{ metadata.filesystem_path }}</code>
     <form method="post" action="{{ url_for('local.open_filesystem_path') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="path" value="{{ metadata.filesystem_path }}">
-      <button class="action-button" type="submit">Open folder</button>
+      <button class="action-button" type="submit">在檔案管理器開啟</button>
     </form>
   </div>
   {% endif %}

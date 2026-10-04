@@ -7,7 +7,9 @@
 <main id="main-content" class="container gallery-page browse-page{% if browse.kind == 'catalog' %} navigator-page{% endif %}" data-page-family="browse"
 {% if browse.kind == 'catalog' %}data-navigator-query="{{ query.signature() }}" data-navigator-query-payload='{{ query.public_dict()|tojson }}' data-resume-scroll="{{ resume_scroll|int if resume_scroll else '' }}"{% endif %}>
   {% with page_heading=browse.heading, page_description=browse.description, page_links=browse.links %}{% include 'components/_page_header.html' %}{% endwith %}
-  {% if browse.kind == 'catalog' %}
+  {% if browse.error %}
+    <section class="gallery-empty" role="alert"><h2>無法載入來源</h2><p>{{ browse.error }}</p><a class="action-button primary" href="{{ request.full_path.rstrip('?') }}">重試載入</a><a class="action-button" href="{{ url_for('local.content_library') }}">檢查來源與同步</a></section>
+  {% elif browse.kind == 'catalog' %}
     {% include 'components/_catalog_filters.html' %}
     {% include 'components/_source_health.html' %}
   {% else %}
@@ -17,12 +19,12 @@
       <button class="action-button" type="button" data-browse-sort data-direction="asc">依名稱排序</button>
     </div>
   {% endif %}
-  <section aria-labelledby="navigator-results-heading">
+  {% if not browse.error %}<section aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
-      <h2 id="navigator-results-heading">{{ browse.total }} 個項目</h2>
+      <h2 id="navigator-results-heading">{{ '這批 ' if browse.batch_only else '' }}{{ browse.total }} 個項目</h2>
       {% if browse['items'] %}<div class="navigator-view-switch" role="group" aria-label="結果檢視方式">
-        <button type="button" data-gallery-view-option="grid" aria-pressed="{{ 'true' if view == 'grid' else 'false' }}">網格</button>
-        <button type="button" data-gallery-view-option="list" aria-pressed="{{ 'true' if view == 'list' else 'false' }}">列表</button>
+        <button type="button" data-gallery-view-option="grid" aria-pressed="{{ 'true' if view == 'grid' else 'false' }}">視覺</button>
+        <button type="button" data-gallery-view-option="list" aria-pressed="{{ 'true' if view == 'list' else 'false' }}">閱讀</button>
       </div>{% endif %}
     </div>
     <div class="gallery-grid" data-gallery-view="{{ view }}">
@@ -30,12 +32,13 @@
     </div>
     {% if not browse['items'] %}<section class="gallery-empty"><h3>目前沒有符合的項目</h3><p>可調整篩選或切換來源資料夾。</p>{% if reset_url %}<a class="action-button" href="{{ reset_url }}">清除篩選</a>{% endif %}</section>{% endif %}
     <p data-browse-empty hidden role="status">這批項目沒有符合的結果。</p>
-  </section>
+  </section>{% endif %}
   {% if browse.previous_url or browse.next_url %}<nav class="gallery-pagination" aria-label="批次載入">
     {% if browse.previous_url %}<a class="action-button" data-browse-link href="{{ browse.previous_url }}">上一批</a>{% endif %}
     {% if browse.next_url %}<a class="action-button primary" data-browse-link href="{{ browse.next_url }}">載入下一批</a>{% endif %}
   </nav>{% endif %}
   <p id="thumbnailSyncStatus" class="sr-only" aria-live="polite"></p>
+{% if browse.kind == 'catalog' %}{% include 'components/_recent_sessions.html' %}{% endif %}
 </main>
 {% if browse.kind == 'catalog' %}{% include 'components/_catalog_extras.html' %}{% endif %}
 {% if browse.kind != 'catalog' %}<script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>{% endif %}

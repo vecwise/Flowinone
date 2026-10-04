@@ -6,9 +6,10 @@
         <h3>{{ source.label }}</h3>
         <p>{{ source.count }} 筆 · {% if source.status == 'complete' %}已同步{% elif source.status == 'failed' %}同步失敗{% elif source.status in ['syncing', 'retrying'] %}同步中{% else %}尚未同步{% endif %}</p>
         <div class="navigator-card-actions">
-          <a class="action-button primary" href="{{ source.catalog_url }}">在 Catalog 查看</a>
-          {% if source.detail_url %}<a class="action-button" href="{{ source.detail_url }}">來源頁面</a>{% endif %}
+          <a class="action-button primary" href="{{ source.catalog_url }}">瀏覽收藏</a>
+          {% if source.detail_url and not source.links %}<a class="action-button" href="{{ source.detail_url }}">新增與匯入</a>{% endif %}
         </div>
+        {% if source.links %}<nav class="action-row source-browse-links" aria-label="{{ source.label }}瀏覽方式">{% for link in source.links %}<a class="action-button" href="{{ link.url }}">{{ link.label }}</a>{% endfor %}</nav>{% endif %}
       </article>
       {% endfor %}
     </div>

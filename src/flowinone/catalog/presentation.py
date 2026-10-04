@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from src.file_handler.thumbnails.store import get_thumbnail_store
@@ -105,3 +107,32 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
         for item, media_id in bookmark_thumbnails:
             item["thumbnail_is_fallback"] = providers.get(media_id) in {None, "site-tile"}
     return visible_items
+
+
+def bookmark_source_health(path: Path, sync_state: dict, indexed_count: int) -> dict[str, str | int]:
+    """Describe whether the visible bookmark index still reflects its source."""
+    raw_synced_at = sync_state.get("synced_at")
+    synced_at = None
+    if raw_synced_at:
+        try:
+            synced_at = datetime.fromisoformat(str(raw_synced_at).replace("Z", "+00:00"))
+            if synced_at.tzinfo is None:
+                synced_at = synced_at.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    display_time = synced_at.astimezone().strftime("%Y-%m-%d %H:%M") if synced_at else "尚未同步"
+    count = indexed_count
+    try:
+        source_mtime = path.stat().st_mtime
+    except OSError:
+        state = "unavailable"
+    else:
+        if sync_state.get("status") == "failed":
+            state = "failed"
+        elif not synced_at:
+            state = "never_synced"
+        elif source_mtime > synced_at.timestamp() + 1:
+            state = "changed"
+        else:
+            state = "current"
+    return {"state": state, "count": count, "synced_at": display_time}

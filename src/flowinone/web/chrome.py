@@ -22,7 +22,7 @@ from src.file_handler.thumbnails.store import (
 )
 from src.file_handler.thumbnails.worker import ThumbnailWorker
 
-from .ui import render_source_browse
+from .ui import render_source_browse, render_source_error
 
 from .common import require_feature, serialize_payload
 from .api import parse_json, parse_query, validated_json
@@ -110,7 +110,7 @@ def view_chrome_folder(folder_path: str):
     except BookmarkNotFound:
         abort(404)
     except (BookmarkError, ExternalServiceError) as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     return render_source_browse(metadata=metadata_dict, data=data_list)
 
@@ -123,7 +123,7 @@ def view_chrome_youtube():
     except BookmarkNotFound:
         abort(404)
     except (BookmarkError, ExternalServiceError) as exc:
-        abort(500, description=str(exc))
+        return render_source_error(str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
     return render_source_browse(metadata=metadata_dict, data=data_list)
 

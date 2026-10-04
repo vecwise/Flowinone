@@ -143,3 +143,68 @@ def test_resource_detail_and_comparison_share_page_families(ui_client):
     duplicates = BeautifulSoup(ui_client.get("/catalog/duplicate-review/").data, "html.parser")
     assert duplicates.select_one('[data-page-family="compare"][data-duplicate-review]')
     assert duplicates.select_one('a[href="/library/#catalog-similarity-rebuild"]')
+
+
+def test_navigation_exposes_all_enabled_source_views(ui_client, monkeypatch):
+    monkeypatch.setattr("src.flowinone.web.common.compute_feature_flags", lambda: {
+        "eagle": True, "chrome": True, "youtube": True, "db": True,
+    })
+    page = BeautifulSoup(ui_client.get("/library/").data, "html.parser")
+    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏"]
+    assert page.select_one('.nav-links a[aria-current="page"]')["href"] == "/library/"
+    expected = {"/folders/", "/chrome/", "/chrome_youtube/", "/EAGLE_folders/", "/EAGLE_tags/",
+                "/EAGLE_smart_folders/", "/EAGLE_stream/", "/resources/", "/item_db", "/catalog/duplicate-review/"}
+    assert expected <= {link.get("href") for link in page.select('main a[href]')}
+    assert ui_client.get("/library/?return_to=//example.com/").status_code == 200
+    assert not BeautifulSoup(ui_client.get("/library/?return_to=//example.com/").data, "html.parser").find('a', href='//example.com/')
+
+
+def test_media_detail_returns_to_source_filters_and_rejects_external_return(ui_client, monkeypatch):
+    monkeypatch.setattr("src.flowinone.web.media.get_image_details", lambda *args: (
+        {"name": "Image", "category": "local"},
+        {"name": "Image", "source_url": "/static/default_thumbnail.svg", "parent_url": "/both/board/?src=internal"},
+    ))
+    return_to = "/both/board/?src=internal&view=list&tag=design"
+    page = BeautifulSoup(ui_client.get("/image/a.jpg", query_string={"return_to": return_to}).data, "html.parser")
+    assert page.select_one('[data-page-family="detail"]')
+    assert page.find('a', href=return_to)
+    rejected = BeautifulSoup(ui_client.get("/image/a.jpg?return_to=https://example.com/").data, "html.parser")
+    assert rejected.find('a', href='/both/board/?src=internal')
+    assert rejected.find('a', href='https://example.com/') is None
+
+
+def test_source_failure_keeps_navigation_and_retry_on_shared_browse(ui_client, monkeypatch):
+    from src.file_handler import ExternalServiceError
+
+    monkeypatch.setattr("src.flowinone.web.common.compute_feature_flags", lambda: {"eagle": True})
+
+    def unavailable(*args, **kwargs):
+        raise ExternalServiceError("Eagle unavailable")
+
+    monkeypatch.setattr("src.flowinone.web.eagle.get_eagle_stream_items", unavailable)
+    response = ui_client.get("/EAGLE_stream/?offset=24&limit=24&view=list")
+    assert response.status_code == 500
+    page = BeautifulSoup(response.data, "html.parser")
+    assert page.select_one('[data-page-family="browse"] [role="alert"]')
+    assert page.find('a', href='/EAGLE_stream/?offset=24&limit=24&view=list').get_text() == '重試載入'
+    assert page.find('a', href='/library/')
+    monkeypatch.setattr("src.flowinone.web.eagle.get_eagle_images_by_tag", unavailable)
+    assert ui_client.get("/EAGLE_tag/design/").status_code == 500
+
+
+def test_resource_tools_and_versions_keep_return_context(ui_client):
+    resource = ui_client.post("/api/resources", json={
+        "url": "https://example.com/context", "enqueue": False,
+    }).get_json()["resource"]
+    return_to = "/navigator/?scope=all&source=resources&tags=design&view=list"
+    page = BeautifulSoup(ui_client.get(resource["detail_url"], query_string={"return_to": return_to}).data, "html.parser")
+    versions_link = page.find('a', string='查看差異')["href"]
+    assert parse_qs(urlsplit(versions_link).query)["return_to"] == [return_to]
+    versions = BeautifulSoup(ui_client.get(versions_link).data, "html.parser")
+    assert versions.select_one('form input[name="return_to"]')["value"] == return_to
+    assert parse_qs(urlsplit(versions.find('a', string='返回資源')["href"]).query)["return_to"] == [return_to]
+    form = page.select_one(f'form[action="/resources/{resource["id"]}/tags"]')
+    response = ui_client.post(form["action"], data={
+        "csrf_token": form.select_one('[name="csrf_token"]')["value"], "tags": "design", "return_to": return_to,
+    })
+    assert parse_qs(urlsplit(response.headers["Location"]).query)["return_to"] == [return_to]

@@ -252,7 +252,7 @@ rg -n 'match_reason|match_field|catalog_fts|def list\(' src/flowinone/catalog/br
 
 ## 8. 新圖在磁碟上，為什麼 Navigator 還沒有？
 
-**前提：** Web 已啟動，root 指向你的測試素材資料夾；先在「設定與維護」→「來源與同步」暫停自動偵測，記下原設定。此題會更新本機索引與 Catalog。
+**前提：** Web 已啟動，root 指向你的測試素材資料夾；先在「管理收藏」→「來源與同步」暫停自動偵測，記下原設定。此題會更新本機索引與 Catalog。
 
 **操作與觀察：**
 

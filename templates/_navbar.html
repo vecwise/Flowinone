@@ -1,53 +1,11 @@
+{% set managing = request.endpoint in ['local.content_library', 'local.view_item_db', 'local.update_item_db_route', 'local.update_thumbnails_route', 'local.clear_thumbnails_route', 'resource_library.resource_index', 'resource_library.resource_versions', 'catalog.duplicate_review_page'] %}
 <nav class="app-nav" aria-label="主要導覽">
-    <a class="app-brand" href="{{ url_for('catalog.navigator_page', scope='all') }}">
-        <span class="app-brand-mark" aria-hidden="true">F</span>
-        <span>
-            <strong>Flowinone</strong>
-            <small>自己的收藏，接著逛</small>
-        </span>
-    </a>
-
-    <div class="nav-links">
-        <a class="{% if request.endpoint == 'catalog.navigator_page' %}is-active{% endif %}" href="{{ url_for('catalog.navigator_page', scope='all') }}" {% if request.endpoint == 'catalog.navigator_page' %}aria-current="page"{% endif %}>我的收藏</a>
-    </div>
-
-    <div class="nav-actions">
-        {% if request.endpoint != 'catalog.navigator_page' %}
-        <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="GET" role="search">
-            <label class="sr-only" for="globalSearch">搜尋全部收藏</label>
-            <input id="globalSearch" type="search" placeholder="搜尋我的收藏" name="q">
-            <input type="hidden" name="scope" value="all">
-            <button type="submit">搜尋</button>
-        </form>
-        {% endif %}
-
-        <a class="action-button nav-add-resource {% if request.endpoint == 'resource_library.resource_index' %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}">新增資源</a>
-        <details class="nav-tools">
-            <summary>設定與維護</summary>
-            <div class="nav-tools-menu">
-                <a href="{{ url_for('catalog.navigator_page', scope='all', manage='1') }}#collection-maintenance">來源與同步</a>
-                <a href="{{ url_for('catalog.duplicate_review_page') }}">重複圖片檢閱</a>
-                <a href="{{ url_for('local.content_library') }}">來源總覽</a>
-                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.eagle_stream') }}">Eagle 串流</a>{% endif %}
-                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.list_all_eagle_folder') }}">Eagle Folders</a>{% endif %}
-                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.list_eagle_tags') }}">Eagle Tags</a>{% endif %}
-                {% if feature_flags.eagle %}<a href="{{ url_for('eagle.list_eagle_smart_folders') }}">Eagle Smart Folders</a>{% endif %}
-                {% if feature_flags.chrome %}<a href="{{ url_for('chrome.view_chrome_root') }}">Chrome 書籤</a>{% endif %}
-                {% if feature_flags.youtube %}<a href="{{ url_for('chrome.view_chrome_youtube') }}">YouTube 書籤</a>{% endif %}
-                {% if feature_flags.db %}<a href="{{ url_for('local.view_item_db') }}">本機索引</a>{% endif %}
-                {% if feature_flags.db %}<a href="{{ url_for('local.view_source_folders') }}">本機資料夾</a>{% endif %}
-                {% if feature_flags.db %}
-                <span class="nav-menu-label">本機維護</span>
-                <form class="nav-action-form" method="post" action="{{ url_for('local.update_item_db_route') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit">同步本機索引</button>
-                </form>
-                <form class="nav-action-form" method="post" action="{{ url_for('local.update_thumbnails_route') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit">補齊縮圖</button>
-                </form>
-                {% endif %}
-            </div>
-        </details>
-    </div>
+  <a class="app-brand" href="{{ url_for('catalog.navigator_page', scope='all') }}" aria-label="Flowinone 我的收藏"><span class="app-brand-mark" aria-hidden="true">F</span><span><strong>Flowinone</strong><small>自己的收藏，接著逛</small></span></a>
+  <div class="nav-links">
+    <a class="{{ 'is-active' if not managing else '' }}" href="{{ url_for('catalog.navigator_page', scope='all') }}" {% if not managing %}aria-current="page"{% endif %}>我的收藏</a>
+    <a class="{{ 'is-active' if managing else '' }}" href="{{ url_for('local.content_library') }}" {% if managing %}aria-current="page"{% endif %}>管理收藏</a>
+  </div>
+  {% if request.endpoint != 'catalog.navigator_page' %}
+  <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="get" role="search"><label class="sr-only" for="globalSearch">搜尋全部收藏</label><input id="globalSearch" type="search" placeholder="搜尋我的收藏" name="q"><input type="hidden" name="scope" value="all"><button type="submit">搜尋</button></form>
+  {% endif %}
 </nav>

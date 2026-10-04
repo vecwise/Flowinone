@@ -10,7 +10,7 @@
     {% with page_heading='重複圖片檢閱', page_description='檢閱相同內容的本機圖片，並選擇參考圖片。', page_links=[{'label': '返回管理', 'url': url_for('local.content_library')}, {'label': '重新分析圖片', 'url': url_for('local.content_library')+'#catalog-similarity-rebuild'}] %}{% include 'components/_page_header.html' %}{% endwith %}
     {% include 'components/_duplicate_comparison.html' %}
   {% else %}
-    {% with page_heading='內容版本與差異', page_description=resource.title, page_links=[{'label': '返回資源', 'url': url_for('resource_library.resource_detail', resource_id=resource.id)}] %}{% include 'components/_page_header.html' %}{% endwith %}
+    {% with page_heading='內容版本與差異', page_description=resource.title, page_links=[{'label': '返回資源', 'url': detail_return_url}] %}{% include 'components/_page_header.html' %}{% endwith %}
     {% include 'components/_version_comparison.html' %}
   {% endif %}
 </main>
