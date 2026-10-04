@@ -1,0 +1,17 @@
+{% extends "base_template.html" %}
+{% block custom_style %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">
+{% endblock %}
+{% block page_content %}
+<main id="main-content" class="container gallery-page manage-page" data-page-family="manage">
+  {% with page_heading='管理收藏', page_description='新增資源、檢查來源與執行維護。', page_links=[] %}{% include 'components/_page_header.html' %}{% endwith %}
+  <nav class="mode-tabs" aria-label="管理功能">
+    <a class="mode-pill {% if management == 'sources' %}is-active{% endif %}" href="{{ url_for('local.content_library') }}">來源與同步</a>
+    <a class="mode-pill {% if management == 'resources' %}is-active{% endif %}" href="{{ url_for('resource_library.resource_index') }}">新增與匯入</a>
+    {% if feature_flags.db %}<a class="mode-pill" href="{{ url_for('local.view_item_db') }}">本機索引</a>{% endif %}
+    <a class="mode-pill" href="{{ url_for('catalog.duplicate_review_page') }}">重複圖片</a>
+  </nav>
+  {% if management == 'resources' %}{% include 'components/_resource_management.html' %}{% else %}{% include 'components/_source_management.html' %}{% endif %}
+</main>
+{% endblock %}

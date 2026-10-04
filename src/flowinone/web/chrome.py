@@ -22,6 +22,8 @@ from src.file_handler.thumbnails.store import (
 )
 from src.file_handler.thumbnails.worker import ThumbnailWorker
 
+from .ui import render_source_browse
+
 from .common import require_feature, serialize_payload
 from .api import parse_json, parse_query, validated_json
 from .schemas import (
@@ -110,7 +112,7 @@ def view_chrome_folder(folder_path: str):
     except (BookmarkError, ExternalServiceError) as exc:
         abort(500, description=str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
-    return render_template("view_both.html", metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 @bp.get("/chrome_youtube/")
@@ -123,7 +125,7 @@ def view_chrome_youtube():
     except (BookmarkError, ExternalServiceError) as exc:
         abort(500, description=str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
-    return render_template("view_both.html", metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 def register_commands(app) -> None:

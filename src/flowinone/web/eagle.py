@@ -20,6 +20,8 @@ from src.file_handler import (
     search_eagle_items,
 )
 
+from .ui import render_source_browse
+
 from .common import (
     build_detail_actions,
     catalog_related_for_origin,
@@ -101,7 +103,7 @@ def list_all_eagle_folder():
     except ExternalServiceError as exc:
         abort(500, description=str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
-    return render_template("view_both.html", metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 @bp.get("/EAGLE_tags/")
@@ -111,7 +113,13 @@ def list_eagle_tags():
         metadata, tags = get_eagle_tags()
     except ExternalServiceError as exc:
         abort(500, description=str(exc))
-    return render_template("eagle_tags.html", metadata=to_dict(metadata), tags=tags)
+    data = [
+        {"id": tag["name"], "name": tag["name"], "media_type": "tag",
+         "description": f"{tag.get('count') or 0} 個項目",
+         "url": url_for("eagle.view_images_by_tag", target_tag=tag["name"])}
+        for tag in tags
+    ]
+    return render_source_browse(metadata=to_dict(metadata), data=data)
 
 
 @bp.get("/EAGLE_smart_folders/")
@@ -122,7 +130,7 @@ def list_eagle_smart_folders():
     except ExternalServiceError as exc:
         abort(500, description=str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
-    return render_template("view_both.html", metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 @bp.get("/EAGLE_smart_folder/<smart_folder_id>/")
@@ -131,7 +139,7 @@ def view_eagle_smart_folder(smart_folder_id: str):
     metadata, data = _render_paginated(
         get_eagle_images_by_smart_folder_id, smart_folder_id
     )
-    return render_template("view_both.html", metadata=metadata, data=data)
+    return render_source_browse(metadata=metadata, data=data)
 
 
 @bp.get("/EAGLE_folder/<eagle_folder_id>/")
@@ -151,14 +159,14 @@ def view_eagle_folder(eagle_folder_id: str):
     metadata_dict, data_list = serialize_payload(metadata, data)
     attach_pagination_urls(metadata_dict)
     _attach_detail_urls(data_list, normalize_current_url())
-    return render_template("view_both.html", metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 @bp.get("/EAGLE_tag/<target_tag>/")
 @require_feature("eagle")
 def view_images_by_tag(target_tag: str):
     metadata, data = _render_paginated(get_eagle_images_by_tag, target_tag)
-    return render_template("view_both.html", metadata=metadata, data=data)
+    return render_source_browse(metadata=metadata, data=data)
 
 
 @bp.get("/search")
@@ -168,13 +176,28 @@ def search_eagle():
     if not keyword:
         return redirect(request.referrer or url_for("local.index"))
     metadata, data = _render_paginated(search_eagle_items, keyword)
-    return render_template("view_both.html", metadata=metadata, data=data)
+    return render_source_browse(metadata=metadata, data=data)
 
 
 @bp.get("/EAGLE_stream/")
 @require_feature("eagle")
 def eagle_stream():
-    return render_template("eagle_stream.html")
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+        limit = max(1, min(60, int(request.args.get("limit", 24))))
+    except ValueError:
+        abort(400, description="Invalid Eagle pagination")
+    try:
+        data = [to_dict(item) for item in get_eagle_stream_items(offset=offset, limit=limit)]
+    except ExternalServiceError as exc:
+        abort(500, description=str(exc))
+    _attach_detail_urls(data, normalize_current_url())
+    metadata = {"name": "Eagle 串流", "category": "stream", "pagination": {
+        "previous_url": url_for("eagle.eagle_stream", offset=max(0, offset-limit), limit=limit, view=request.args.get("view")) if offset else None,
+        "next_url": url_for("eagle.eagle_stream", offset=offset+len(data), limit=limit, view=request.args.get("view")) if len(data) == limit else None,
+        "total": offset+len(data),
+    }}
+    return render_source_browse(metadata=metadata, data=data)
 
 
 @bp.get("/api/EAGLE_stream/")

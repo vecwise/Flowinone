@@ -31,6 +31,8 @@ from src.flowinone.catalog.browse import CatalogService
 from src.flowinone.catalog.query import CatalogQuery
 from src.flowinone.web.database import request_database
 
+from .ui import render_source_browse
+
 from .common import (
     content_card_from_db_item,
     get_feature_flags,
@@ -55,7 +57,7 @@ def _open_in_file_manager(target_path: str) -> None:
         subprocess.Popen(["xdg-open", target_path])
 
 
-def _render_media_view(template_name: str, folder_path: str, source: str | None = None):
+def _render_media_view(folder_path: str, source: str | None = None):
     try:
         if source is None:
             metadata, data = get_folder_images(folder_path)
@@ -68,7 +70,7 @@ def _render_media_view(template_name: str, folder_path: str, source: str | None 
     except ExternalServiceError as exc:
         abort(500, description=str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
-    return render_template(template_name, metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 @bp.get("/")
@@ -96,7 +98,7 @@ def content_library():
             ("resources", "新增網址", None, "resource_library.resource_index"),
         )
     ]
-    return render_template("source_overview.html", title="來源總覽 · Flowinone", sources=sources)
+    return render_template("manage.html", title="來源總覽 · Flowinone", management="sources", sources=sources)
 
 
 @bp.post("/open_path/")
@@ -122,7 +124,7 @@ def open_filesystem_path():
 @bp.get("/both/<path:folder_path>/")
 def view_both(folder_path: str):
     return _render_media_view(
-        "view_both.html", folder_path, request.args.get("src", "external")
+        folder_path, request.args.get("src", "external")
     )
 
 
@@ -154,7 +156,7 @@ def view_source_folders():
     except ExternalServiceError as exc:
         abort(500, description=str(exc))
     metadata_dict, data_list = serialize_payload(metadata, data)
-    return render_template("view_both.html", metadata=metadata_dict, data=data_list)
+    return render_source_browse(metadata=metadata_dict, data=data_list)
 
 
 @bp.post("/update_db")

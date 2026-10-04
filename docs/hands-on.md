@@ -74,17 +74,17 @@ rg -n 'def create_app|def register_routes|def index|def navigator_page|def api_i
 **為什麼／哪段程式：**
 
 ```text
-templates/navigator.html：<form method="get">，input name="q"
+templates/components/_catalog_filters.html：<form method="get">，input name="q"
   → catalog/blueprint.py：_navigator_query() 讀 request.args
   → CatalogQuery.create() 整理條件
   → navigator_page() 呼叫 CatalogService.list(effective_query)
   → catalog/browse.py：list() 查 Catalog／全文索引
-  → render_template("navigator.html", payload=..., query=...)
+  → render_catalog_browse(payload=..., query=...)
   → template 的 for item in payload['items'] 畫卡片
 ```
 
 ```bash
-rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_page|def list\(' templates/navigator.html src/flowinone/catalog/blueprint.py src/flowinone/catalog/browse.py
+rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_page|def list\(' templates/browse.html templates/components/_*.html src/flowinone/catalog/blueprint.py src/flowinone/catalog/browse.py
 ```
 
 **換一個條件：** 在搜尋 URL 把 `q` 改成 `flowinonezznomatch987654`。若資料中沒有這個詞，結果應為零；頁面仍正常顯示，零筆不是 server error。
@@ -105,12 +105,12 @@ rg -n 'name="q"|for item in|render_template|def _navigator_query|def navigator_p
 
 **為什麼／哪段程式：**
 
-- [navigator.html](../templates/navigator.html) 的 `.navigator-favorite` click handler 先 `fetch()`，成功後改按鈕文字。
+- [瀏覽頁互動](../templates/components/_catalog_extras.html) 的 `.navigator-favorite` click handler 先 `fetch()`，成功後改按鈕文字。
 - [catalog/api.py](../src/flowinone/catalog/api.py) 的 `api_event()` 把事件交給 `CatalogService.record_event()`。
 - [catalog/browse.py](../src/flowinone/catalog/browse.py) 的 `record_event()` 新增 `catalog_events`，並更新 `item_user_state.favorite`；所以刷新後能再讀回。
 
 ```bash
-rg -n 'navigator-favorite|def api_event|def record_event|UPDATE item_user_state SET favorite' templates/navigator.html src/flowinone/catalog
+rg -n 'navigator-favorite|def api_event|def record_event|UPDATE item_user_state SET favorite' templates/browse.html templates/components/_*.html src/flowinone/catalog
 ```
 
 **若不同：** 沒 request 先查 Console／click handler；非 200 看 response；已 200 但重整不保留，再追寫入與下次查詢。取消收藏會還原收藏狀態，但事件紀錄仍保留。
@@ -245,7 +245,7 @@ conda run -n py3.11 pytest -vv tests/test_catalog_next_phase.py::test_catalog_me
 **再操作一次：**
 
 ```bash
-rg -n 'match_reason|match_field|catalog_fts|def list\(' src/flowinone/catalog/browse.py templates/navigator.html
+rg -n 'match_reason|match_field|catalog_fts|def list\(' src/flowinone/catalog/browse.py templates/components/_item_card.html
 ```
 
 **預期：** 同時找到查詢／結果欄位的 Python 與顯示它的 template。你要能指出：改命中規則要看 Python，改「命中」提示的呈現要看 HTML。
@@ -276,7 +276,7 @@ conda run -n py3.11 flask --app run catalog-sync --source local
   → file_handler/item_db.py：update_item_database() 掃描 root，更新 item_db.db
   → catalog-sync CLI → CatalogSyncService.sync(("local",))
   → catalog/sync.py：_sync_local() 讀 fetch_items()，寫 Catalog
-  → CatalogService.list() 查到 → navigator.html 顯示
+  → CatalogService.list() 查到 → browse.html 顯示
 ```
 
 ```bash
@@ -289,7 +289,7 @@ rg -n 'def update_item_db_route|def update_item_database|def _sync_local|def cat
 
 ## 最後做一次自己的修改
 
-1. 在 [navigator.html](../templates/navigator.html) 找卡片附近的「命中：」文字，記下原文，改成「符合搜尋的原因：」。
+1. 在 [共用卡片](../templates/components/_item_card.html) 找卡片附近的「命中：」文字，記下原文，改成「符合搜尋的原因：」。
 2. 重新啟動 Web，回到第 7 題對應的真實搜尋場景，找有命中片段的結果。
 3. 預期顯示文字改變，搜尋結果不因這次純文案修改而改變；原因是查詢在 `CatalogService.list()`，這次改的是 template。
 4. 只把剛才那一處文字改回，重新啟動。不要用整檔 Git 還原，以免覆蓋其他未提交修改。

@@ -1,0 +1,196 @@
+  {% if recent_sessions %}
+  <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">
+    <div class="gallery-results-heading"><div><h2 id="navigator-sessions-heading">接著逛</h2></div></div>
+    <div class="navigator-session-grid">
+      {% for session in recent_sessions %}
+      <a class="navigator-session-card" href="{{ session.url }}">
+        <span class="navigator-session-meta">{{ session.updated_display }}</span>
+        <h3>{{ session.query.q or '篩選瀏覽' }}</h3>
+        {% if session.focused_title %}<p>上次看到：{{ session.focused_title }}</p>{% endif %}
+        <p>{{ session.summary }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% include '_navigator_maintenance.html' %}
+  <p id="navigator-action-status" class="sr-only" aria-live="polite"></p>
+
+
+<dialog class="navigator-command-dialog" data-command-palette aria-labelledby="navigator-command-title">
+  <div class="navigator-command-shell">
+    <div class="navigator-command-heading">
+      <div><h2 id="navigator-command-title">快速開啟</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉快速開啟">關閉</button></form>
+    </div>
+    <label class="sr-only" for="navigator-command-input">篩選快速開啟選項</label>
+    <input id="navigator-command-input" class="navigator-command-input" data-command-palette-input type="search" placeholder="搜尋動作或常用條件" autocomplete="off">
+    <div class="navigator-command-list" data-command-palette-list aria-label="快速開啟選項">
+      <button type="button" class="navigator-command-item" data-command-item data-command-action="focus-search">搜尋目前範圍</button>
+      <a class="navigator-command-item" data-command-item href="{{ url_for('catalog.navigator_page', scope='all') }}">查看全部收藏</a>
+      <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.favorites }}">查看我的最愛</a>
+      <a class="navigator-command-item" data-command-item href="{{ quick_filter_urls.unviewed }}">查看尚未瀏覽</a>
+      <a class="navigator-command-item" data-command-item href="{{ random_url }}">隨機探索</a>
+      {% for saved in saved_searches %}
+      <a class="navigator-command-item" data-command-item href="{{ saved.url }}">{{ saved.label }} <small>{{ saved.summary }}</small></a>
+      {% endfor %}
+    </div>
+    <p class="navigator-command-empty" data-command-palette-empty hidden>找不到相符的動作或常用條件。</p>
+    <p class="navigator-command-hint"><kbd>⌘ K</kbd> 開啟 · <kbd>Esc</kbd> 關閉</p>
+  </div>
+</dialog>
+
+<dialog class="navigator-similar-dialog" data-catalog-similar-dialog aria-labelledby="navigator-similar-title">
+  <div class="navigator-command-shell">
+    <div class="navigator-command-heading">
+      <div><p class="eyebrow">Local image analysis</p><h2 id="navigator-similar-title">相同／相似圖片</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉相似圖片">關閉</button></form>
+    </div>
+    <p class="navigator-similar-summary" data-catalog-similar-summary>正在查詢…</p>
+    <div class="navigator-similar-results" data-catalog-similar-results></div>
+    <p class="navigator-similar-empty" data-catalog-similar-empty hidden></p>
+  </div>
+</dialog>
+
+<dialog class="navigator-save-search-dialog" data-save-search-dialog aria-labelledby="navigator-save-search-title">
+  <div class="navigator-command-shell">
+    <div class="navigator-command-heading">
+      <div><h2 id="navigator-save-search-title">儲存為常用條件</h2></div>
+      <form method="dialog"><button class="navigator-dialog-close" aria-label="關閉常用條件">關閉</button></form>
+    </div>
+    <form data-save-search-form>
+      <label for="navigator-saved-search-label">名稱</label>
+      <input id="navigator-saved-search-label" name="label" maxlength="80" required placeholder="例如：未看設計參考">
+      <p class="navigator-save-search-feedback" data-save-search-feedback role="alert" hidden></p>
+      <div class="navigator-save-search-actions">
+        <button class="action-button primary" type="submit">儲存</button>
+        <button class="action-button" type="button" data-save-search-cancel>取消</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog class="navigator-detail-dialog" data-gallery-detail aria-labelledby="navigator-detail-title">
+  <div class="navigator-detail-shell">
+    <header class="navigator-detail-heading">
+      <div class="navigator-detail-navigation">
+        <button class="action-button" type="button" data-gallery-detail-back hidden>返回上個項目</button>
+        <span class="eyebrow">收藏預覽</span>
+      </div>
+      <button class="navigator-dialog-close" type="button" data-gallery-detail-close aria-label="關閉詳情">關閉</button>
+    </header>
+    <p class="navigator-detail-status" data-gallery-detail-status role="status"></p>
+    <div class="navigator-detail-layout" data-gallery-detail-content hidden>
+      <section class="navigator-detail-main">
+        <img data-gallery-detail-image src="{{ url_for('static', filename='default_thumbnail.svg') }}" alt="">
+        <video data-gallery-detail-video controls preload="metadata" playsinline hidden></video>
+        <p class="navigator-detail-source" data-gallery-detail-source></p>
+        <a class="navigator-detail-folder" data-gallery-detail-folder hidden href="#"></a>
+        <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
+        <p class="navigator-detail-description" data-gallery-detail-description></p>
+        <div class="gallery-tags" data-gallery-detail-tags aria-label="Tags"></div>
+        <div class="navigator-detail-actions">
+          <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>
+          <a class="action-button" data-gallery-detail-read href="#" hidden>閱讀內容</a>
+        </div>
+      </section>
+      <aside class="navigator-detail-related" aria-labelledby="navigator-detail-related-title">
+        <h3 id="navigator-detail-related-title">接著看</h3>
+        <div data-gallery-detail-related></div>
+      </aside>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const page = document.querySelector('[data-navigator-query]');
+  if (!page) return;
+  const stateKey = `flowinone-navigator-scroll:${page.dataset.navigatorQuery}`;
+  const sessionKey = `flowinone-navigator-session:${page.dataset.navigatorQuery}`;
+  const focusKey = `flowinone-navigator-focus:${page.dataset.navigatorQuery}`;
+  const saved = sessionStorage.getItem(stateKey);
+  const query = {{ query.public_dict()|tojson }};
+  const target = location.hash.startsWith('#item-') ? document.getElementById(location.hash.slice(1)) : null;
+  let focusedItemId = target?.dataset.navigatorItem || sessionStorage.getItem(focusKey);
+  if (focusedItemId && !document.getElementById(`item-${focusedItemId}`)) {
+    focusedItemId = null;
+    sessionStorage.removeItem(focusKey);
+  }
+  const restoredScroll = page.dataset.resumeScroll !== '' ? page.dataset.resumeScroll : saved;
+  if (target) requestAnimationFrame(() => target.scrollIntoView({block: 'center'}));
+  else if (restoredScroll) requestAnimationFrame(() => window.scrollTo({top: Number(restoredScroll), behavior: 'instant'}));
+  let browseSession = sessionStorage.getItem(sessionKey);
+  let pendingSave = Promise.resolve();
+  const saveSession = (payload) => {
+    const values = {...payload, cursor: query.cursor, focused_item_id: focusedItemId};
+    pendingSave = pendingSave.then(() => fetch(
+      browseSession ? `/api/catalog/sessions/${browseSession}` : '/api/catalog/sessions',
+      {method: browseSession ? 'PATCH' : 'POST', headers: {'Content-Type': 'application/json'}, keepalive: true, body: JSON.stringify(values)},
+    )).then(async (response) => {
+      if (response.ok) {
+        const value = await response.json();
+        browseSession = value.id;
+        sessionStorage.setItem(sessionKey, value.id);
+      }
+    }).catch(() => {});
+    return pendingSave;
+  };
+  const defaultSources = query.scope === 'gallery' ? ['local', 'eagle', 'bookmarks'] : ['local', 'eagle', 'bookmarks', 'resources'];
+  const meaningfulQuery = Boolean(
+    query.q || query.type || query.folder || query.tags.length || query.favorite || query.unviewed ||
+    query.duration_min != null || query.duration_max != null || query.sort !== 'recently_added' ||
+    query.sources.join(',') !== defaultSources.join(',')
+  );
+  if (meaningfulQuery) saveSession({query, scroll_position: Number(restoredScroll || 0)});
+
+  document.querySelectorAll('[data-navigator-item] a').forEach((link) => link.addEventListener('click', () => {
+    sessionStorage.setItem(stateKey, String(window.scrollY));
+    const item = link.closest('[data-navigator-item]');
+    if (!item) return;
+    focusedItemId = item.dataset.navigatorItem;
+    sessionStorage.setItem(focusKey, focusedItemId);
+    saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
+    navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: link.hasAttribute('data-gallery-detail-open') ? 'view' : 'open'})], {type: 'application/json'}));
+  }));
+
+  document.querySelectorAll('.navigator-favorite').forEach((button) => button.addEventListener('click', async () => {
+    const item = button.closest('[data-navigator-item]');
+    const enabled = button.dataset.favorite === '1';
+    const status = document.getElementById('navigator-action-status');
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/catalog/items/${item.dataset.navigatorItem}/events`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({event_type: enabled ? 'unfavorite' : 'favorite'})});
+      if (!response.ok) throw new Error('無法更新收藏');
+      const next = !enabled;
+      button.dataset.favorite = next ? '1' : '0';
+      button.setAttribute('aria-pressed', String(next));
+      button.textContent = next ? '移出最愛' : '加入最愛';
+      const title = item.querySelector('h3').textContent;
+      button.setAttribute('aria-label', `${next ? '移出我的最愛' : '加入我的最愛'}：${title}`);
+      status.textContent = next ? `已加入我的最愛：${title}` : `已從我的最愛移除：${title}`;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  }));
+
+  let scrollTimer;
+  window.addEventListener('scroll', () => {
+    window.clearTimeout(scrollTimer);
+    scrollTimer = window.setTimeout(() => {
+      sessionStorage.setItem(stateKey, String(window.scrollY));
+      if (browseSession) saveSession({query, scroll_position: window.scrollY});
+    }, 500);
+  }, {passive: true});
+
+})();
+</script>
+<script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
+<script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_detail.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_watch.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_similarity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/navigator_sync.js') }}"></script>

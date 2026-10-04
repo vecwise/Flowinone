@@ -1,19 +1,4 @@
-{% extends "base_template.html" %}
-
-{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">{% endblock %}
-
-{% block page_content %}
-<main id="main-content" class="container gallery-page">
-  <header class="gallery-hero">
-    <div>
-      <p class="eyebrow">Catalog sources</p>
-      <h1>來源總覽</h1>
-      <p>筆數與同步狀態來自 Catalog。跨來源搜尋和知識閱讀使用同一份索引。</p>
-    </div>
-    <a class="action-button primary" href="{{ url_for('catalog.navigator_page', scope='all') }}">瀏覽我的收藏</a>
-  </header>
-
-  <section class="navigator-sessions" aria-labelledby="source-overview-heading">
+<section class="navigator-sessions" aria-labelledby="source-overview-heading">
     <div class="gallery-results-heading"><h2 id="source-overview-heading">已索引來源</h2></div>
     <div class="navigator-session-grid">
       {% for source in sources %}
@@ -28,5 +13,3 @@
       {% endfor %}
     </div>
   </section>
-</main>
-{% endblock %}

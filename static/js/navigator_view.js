@@ -2,7 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'flowinone-gallery-view';
-  const normalizeView = (view) => view === 'list' || view === 'knowledge' ? 'list' : 'grid';
+  const normalizeView = (view) => ['list', 'knowledge', 'reader', 'single', 'linear'].includes(view) ? 'list' : 'grid';
 
   function createNavigatorViews(root = global.document) {
     const gallery = root?.querySelector('[data-gallery-view]');

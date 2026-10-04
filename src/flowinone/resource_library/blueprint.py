@@ -88,7 +88,8 @@ def resource_index():
     params = _list_params()
     page = service.repository.list(**params)
     return render_template(
-        "resource_library.html",
+        "manage.html",
+        management="resources",
         title="新增資源 · Flowinone",
         resources=[decorate_resource(item) for item in page.items],
         page=page,

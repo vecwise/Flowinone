@@ -1,13 +1,6 @@
-{% extends "base_template.html" %}
-{% block custom_style %}<link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">{% endblock %}
-{% block page_content %}
-<main id="main-content" class="container resource-page">
-  {% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}
+{% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}
   {% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
-  <header class="resource-hero">
-    <div><h1>新增資源</h1><p>把網址加入收藏，之後在「我的收藏」接著逛。</p></div>
-    <a class="action-button" href="{{ url_for('catalog.navigator_page', scope='all') }}">返回我的收藏</a>
-  </header>
+
   <section class="resource-panel">
     <h2>新增單一網址</h2>
     <form class="resource-form" method="post" action="{{ url_for('resource_library.resource_create') }}">
@@ -77,5 +70,3 @@
       {% endif %}
     </div>
   </details>
-</main>
-{% endblock %}

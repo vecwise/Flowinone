@@ -52,3 +52,60 @@ def test_maintenance_results_keep_metrics_errors_and_json(ui_client, monkeypatch
     assert "problem.jpg" in rendered.get_text()
     assert "cannot read file" in rendered.select_one('[role="alert"]').get_text()
     assert ui_client.post(f"/{route}?format=json", data={"csrf_token": token}).get_json()[metric] == 123
+
+
+@pytest.mark.parametrize("route,loader,source", [
+    ("/both/board/?src=internal&view=reader", "local.get_folder_images", "local"),
+    ("/chrome/bookmark_bar/", "chrome.get_chrome_bookmarks", "bookmarks"),
+    ("/EAGLE_tag/design/?offset=2&limit=2&view=list", "eagle.get_eagle_images_by_tag", "eagle"),
+    ("/EAGLE_smart_folder/smart/", "eagle.get_eagle_images_by_smart_folder_id", "eagle"),
+])
+def test_source_browse_shares_cards_without_losing_source_links(ui_client, monkeypatch, route, loader, source):
+    monkeypatch.setattr("src.flowinone.web.common.compute_feature_flags", lambda: {
+        "eagle": True, "chrome": True, "youtube": True, "db": True,
+    })
+    calls = []
+
+    def records(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ({"name": "Design", "pagination": {
+            "limit": 2, "total": 8, "previous_offset": 0, "next_offset": 4,
+        }}, [{"id": "one", "name": "Example", "media_type": "bookmark",
+              "url": "https://example.com/article", "description": "Useful text"}])
+
+    monkeypatch.setattr(f"src.flowinone.web.{loader}", records)
+    response = ui_client.get(route)
+    assert response.status_code == 200
+    page = BeautifulSoup(response.data, "html.parser")
+    assert page.select_one('[data-page-family="browse"]')
+    card = page.select_one(".gallery-card")
+    assert card["data-card-source"] == source
+    assert card.select_one('a[href="https://example.com/article"]')["target"] == "_blank"
+    assert "Useful text" in card.get_text()
+    if source == "local":
+        assert calls[0][0] == ("board", "internal")
+        assert page.select_one("[data-gallery-view]")["data-gallery-view"] == "list"
+    if "EAGLE_tag" in route:
+        assert calls[0][1] == {"offset": 2, "limit": 2}
+        next_link = page.select('[data-browse-link]')[-1]["href"]
+        assert parse_qs(urlsplit(next_link).query) == {"offset": ["4"], "limit": ["2"], "view": ["list"]}
+
+
+def test_eagle_stream_and_tag_directory_use_shared_browse(ui_client, monkeypatch):
+    monkeypatch.setattr("src.flowinone.web.common.compute_feature_flags", lambda: {"eagle": True})
+    monkeypatch.setattr("src.flowinone.web.eagle.get_eagle_stream_items", lambda **kwargs: [
+        {"id": "image-one", "name": "Image", "media_type": "image"},
+        {"id": "video-two", "name": "Video", "media_type": "video"},
+    ])
+    page = BeautifulSoup(ui_client.get("/EAGLE_stream/?limit=2&view=list").data, "html.parser")
+    assert len(page.select(".gallery-card")) == 2
+    assert page.select_one('a[href^="/EAGLE_image/image-one/"]')
+    assert page.select_one('a[href^="/EAGLE_video/video-two/"]')
+    assert "offset=2" in page.select_one('[data-browse-link]')["href"]
+    assert ui_client.get("/EAGLE_stream/?limit=invalid").status_code == 400
+    monkeypatch.setattr("src.flowinone.web.eagle.get_eagle_tags", lambda: (
+        {"name": "Eagle Tags"}, [{"name": "design", "count": 7}],
+    ))
+    tags = BeautifulSoup(ui_client.get("/EAGLE_tags/").data, "html.parser")
+    assert tags.select_one('.gallery-card a[href="/EAGLE_tag/design/"]')
+    assert "7 個項目" in tags.get_text()

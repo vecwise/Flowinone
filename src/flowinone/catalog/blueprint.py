@@ -12,6 +12,8 @@ from flask import Flask, abort, current_app, g, redirect, render_template, reque
 from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.config import CHROME_BOOKMARK_PATH
 
+from src.flowinone.web.ui import render_catalog_browse
+
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .browse import CatalogService
 from .commands import register_catalog_commands
@@ -375,8 +377,7 @@ def navigator_page():
         or query.duration_max is not None or query.added_from or query.added_to
         or query.sources != scope_sources or query.sort != "recently_added"
     )
-    return render_template(
-        "navigator.html",
+    return render_catalog_browse(
         title="我的收藏 · Flowinone",
         current_context={
             "label": active_context["label"] if active_context else "目前條件",

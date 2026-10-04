@@ -1,0 +1,4 @@
+<header class="gallery-hero ui-page-header">
+  <div><h1>{{ page_heading }}</h1>{% if page_description %}<p>{{ page_description }}</p>{% endif %}</div>
+  {% if page_links %}<div class="action-row">{% for link in page_links %}<a class="action-button" href="{{ link.url }}">{{ link.label }}</a>{% endfor %}</div>{% endif %}
+</header>
