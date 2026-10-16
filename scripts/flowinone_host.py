@@ -1,18 +1,17 @@
-"""One-click macOS lifecycle control, using launchd instead of saved PIDs."""
+"""Run Web and Worker for exactly the lifetime of their foreground terminal."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
+from contextlib import contextmanager
 import http.client
 import os
 from pathlib import Path
-import plistlib
-import re
+import signal
 import socket
 import subprocess
 import sys
-import tempfile
+import threading
 import time
 
 
@@ -25,82 +24,47 @@ class Host:
         self.root = root.resolve()
         self.runtime = self.root / ".flowinone_local" / "host"
         self.runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
-        digest = hashlib.sha256(os.fsencode(self.root)).hexdigest()[:16]
-        self.label = f"local.flowinone.{digest}"
-        self.domain = f"gui/{os.getuid()}"
+        self.processes: dict[str, subprocess.Popen] = {}
+        self.stop_event = threading.Event()
+        self.stop_signal: int | None = None
 
-    def target(self, component: str) -> str:
-        return f"{self.domain}/{self.label}.{component}"
+    @contextmanager
+    def handle_signals(self):
+        def request_stop(signum, _frame):
+            self.stop_signal = signum
+            self.stop_event.set()
 
-    @staticmethod
-    def launchctl(*arguments: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["/bin/launchctl", *arguments], capture_output=True, text=True,
-            timeout=35,
-        )
+        previous = {
+            signum: signal.signal(signum, request_stop)
+            for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
+        }
+        try:
+            yield
+        finally:
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
 
-    def state(self, component: str) -> str | None:
-        result = self.launchctl("print", self.target(component))
-        if result.returncode:
-            # Do not silently treat a missing GUI session as a stopped service.
-            domain = self.launchctl("print", self.domain)
-            if domain.returncode:
-                raise RuntimeError("無法連線到 macOS 登入工作階段，請在本機桌面執行。")
-            return None
-        return result.stdout
-
-    @staticmethod
-    def running(state: str | None) -> bool:
-        return bool(state and re.search(r"^\s*pid = \d+\s*$", state, re.MULTILINE))
-
-    def unload(self, component: str) -> None:
-        if self.state(component) is None:
-            return
-        result = self.launchctl("bootout", "--wait", self.target(component))
-        if result.returncode and self.state(component) is not None:
-            raise RuntimeError(f"無法停止 {component}：{result.stderr.strip()}")
-        deadline = time.monotonic() + 30
-        while self.state(component) is not None:
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"{component} 仍在停止中，請稍後再按一次停止。")
-            time.sleep(0.2)
-
-    def load(self, component: str) -> None:
+    def command(self, component: str) -> list[str]:
         arguments = (
             [str(self.root / "run.py")]
             if component == "web" else ["-m", "src.flowinone.workers"]
         )
-        # Preserve application settings and Conda's executable search path.
-        # Temporary plists are private and removed after launchd reads them.
-        extra_keys = {
-            "PATH", "HOME", "TMPDIR", "HTTP_TIMEOUT_SECONDS", "MAX_DOWNLOAD_BYTES",
-            "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
-            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-            "http_proxy", "https_proxy", "all_proxy", "no_proxy",
-        }
-        environment = {
-            key: value for key, value in os.environ.items()
-            if key.startswith(("FLOWINONE_", "LLM_", "CONDA_")) or key in extra_keys
-        }
-        environment.update(FLOWINONE_DEBUG="0", FLOWINONE_HEADLESS="1")
-        log = str(self.runtime / f"{component}.log")
-        payload = {
-            "Label": f"{self.label}.{component}",
-            "ProgramArguments": [sys.executable, "-u", *arguments],
-            "WorkingDirectory": str(self.root),
-            "EnvironmentVariables": environment,
-            "RunAtLoad": True,
-            "ExitTimeOut": 20,
-            "StandardOutPath": log,
-            "StandardErrorPath": log,
-        }
-        # No LaunchAgents installation: this only runs for the current login.
-        with tempfile.NamedTemporaryFile(dir=self.runtime, suffix=".plist") as file:
-            plistlib.dump(payload, file)
-            file.flush()
-            result = self.launchctl("bootstrap", self.domain, file.name)
-        if result.returncode:
-            raise RuntimeError(f"無法啟動 {component}：{result.stderr.strip()}")
+        return [sys.executable, "-u", *arguments]
+
+    def load(self, component: str) -> None:
+        environment = dict(os.environ, FLOWINONE_DEBUG="0", FLOWINONE_HEADLESS="1")
+        with (self.runtime / f"{component}.log").open("ab", buffering=0) as log:
+            self.processes[component] = subprocess.Popen(
+                self.command(component),
+                cwd=self.root,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                # Keep Terminal's session and privacy attribution. Separate
+                # process groups let us also stop each service's subprocesses.
+                process_group=0,
+            )
 
     @staticmethod
     def port_busy() -> bool:
@@ -119,63 +83,76 @@ class Host:
         finally:
             connection.close()
 
-    def start(self) -> None:
-        web_running = self.running(self.state("web"))
-        if not web_running and self.port_busy():
+    def check_processes(self) -> None:
+        for name, process in self.processes.items():
+            code = process.poll()
+            if code is not None:
+                raise RuntimeError(f"{name} 已退出（結束碼 {code}），請查看記錄。")
+
+    def run(self, *, open_browser: bool = True) -> None:
+        if self.port_busy():
             raise RuntimeError(
-                "5894 埠已被其他程序使用；若先前手動啟動過 Flowinone，"
-                "請先回原終端機按 Ctrl+C，再雙擊啟動。"
+                "5894 埠已被使用；若 Flowinone 已在另一個終端機執行，"
+                "請回到該視窗使用，或先關閉該視窗再啟動。"
             )
-        started = []
-        try:
-            for component in ("web", "worker"):
-                state = self.state(component)
-                if self.running(state):
-                    continue
-                if state is not None:
-                    self.unload(component)
-                # Include failed/partially completed bootstrap in rollback.
-                started.append(component)
-                self.load(component)
-            deadline = time.monotonic() + 30
-            healthy_since = None
-            while time.monotonic() < deadline:
-                states = [self.state(name) for name in ("web", "worker")]
-                if any(state and "last exit code =" in state and not self.running(state)
-                       for state in states):
-                    raise RuntimeError("Web 或 Worker 啟動後退出，請查看下方記錄。")
-                if all(self.running(state) for state in states) and self.web_ready():
-                    healthy_since = healthy_since or time.monotonic()
-                    if time.monotonic() - healthy_since >= 2:
-                        print(f"Flowinone 已啟動（Web + Worker）：{URL}")
+        with self.handle_signals():
+            try:
+                for component in ("web", "worker"):
+                    if self.stop_event.is_set():
                         return
-                else:
-                    healthy_since = None
-                time.sleep(0.25)
-            raise RuntimeError("等候啟動逾時，請查看下方記錄。")
-        except BaseException:
-            for component in reversed(started):
-                try:
-                    self.unload(component)
-                except Exception as error:
-                    print(f"清理未完成：{error}", file=sys.stderr)
-            raise
+                    self.load(component)
+                deadline = time.monotonic() + 30
+                healthy_since = None
+                while not self.stop_event.is_set():
+                    self.check_processes()
+                    if self.web_ready():
+                        healthy_since = healthy_since or time.monotonic()
+                        if time.monotonic() - healthy_since >= 2:
+                            break
+                    else:
+                        healthy_since = None
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("等候啟動逾時，請查看記錄。")
+                    self.stop_event.wait(0.25)
+                if self.stop_event.is_set():
+                    return
+                print(f"Flowinone 已啟動（Web + Worker）：{URL}", flush=True)
+                print("請保持這個終端機視窗開啟；關閉視窗或按 Ctrl+C 會停止所有服務。", flush=True)
+                print(f"記錄位置：{self.runtime}", flush=True)
+                if open_browser:
+                    subprocess.run(["/usr/bin/open", URL], check=False)
+                while not self.stop_event.wait(0.25):
+                    self.check_processes()
+            finally:
+                self.stop()
+                if self.stop_signal != signal.SIGHUP:
+                    print("Flowinone 已停止（Web + Worker）。", flush=True)
+
+    @staticmethod
+    def signal_process_group(process: subprocess.Popen, signum: int) -> None:
+        try:
+            os.killpg(process.pid, signum)
+        except ProcessLookupError:
+            pass
 
     def stop(self) -> None:
-        errors = []
-        for component in ("web", "worker"):
+        # Only groups created by this invocation are touched; no saved PIDs or
+        # process-name matching. Terminate both before waiting on either one.
+        processes = list(self.processes.values())
+        for process in processes:
+            self.signal_process_group(process, signal.SIGTERM)
+        deadline = time.monotonic() + 5
+        for process in processes:
             try:
-                self.unload(component)
-            except Exception as error:
-                errors.append(str(error))
-        if errors:
-            raise RuntimeError("\n".join(errors))
-        print("Flowinone 已停止（Web + Worker）。")
-
-    def status(self) -> None:
-        for component in ("web", "worker"):
-            status = "執行中" if self.running(self.state(component)) else "已停止"
-            print(f"{component}: {status}")
+                process.wait(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                pass
+        for process in processes:
+            # Also reap descendants if their service leader already exited.
+            self.signal_process_group(process, signal.SIGKILL)
+        for process in processes:
+            process.wait(timeout=5)
+        self.processes.clear()
 
 
 def preflight() -> None:
@@ -185,42 +162,48 @@ def preflight() -> None:
     from src.flowinone.resource_library.database import ensure_database_current
     from src.flowinone.resource_library.settings import ResourceSettings
 
-    # Let the foreground launcher show the existing folder picker when needed;
-    # launchd children must never wait for an invisible configuration dialog.
     config.ensure_db_routes(interactive=True)
     ensure_database_current(ResourceSettings.from_environment().database_path)
     os.environ["FLOWINONE_DB_ROUTE_EXTERNAL"] = config.DB_route_external
     os.environ["FLOWINONE_DB_ROUTE_INTERNAL"] = config.DB_route_internal
 
 
+def report_chrome_bookmarks() -> None:
+    from src.file_handler.chrome_bookmarks import iter_chrome_bookmark_records
+    from src.file_handler.models import BookmarkError
+
+    try:
+        count = sum(1 for _ in iter_chrome_bookmark_records())
+    except BookmarkError as error:
+        print(f"Chrome 書籤暫時無法讀取：{error}；其他來源仍可使用。", flush=True)
+    else:
+        print(f"Chrome 書籤讀取成功（{count:,} 筆）。", flush=True)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Flowinone macOS 一鍵啟停")
-    parser.add_argument("action", choices=("start", "stop", "status"))
+    parser = argparse.ArgumentParser(description="Flowinone 終端機啟動入口")
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
     if sys.platform != "darwin":
         print("此快捷入口適用 macOS；其他平台請使用 README 的手動啟動指令。")
+        return 1
+    if not sys.stdin.isatty():
+        print("請在終端機執行，或雙擊「啟動 Flowinone.command」。", file=sys.stderr)
         return 1
     import fcntl
 
     os.chdir(ROOT)
     host = Host()
     try:
+        # Hold the lock until the terminal's entire service set has stopped.
         with (host.runtime / "control.lock").open("a") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                raise RuntimeError("另一個啟動／停止操作正在執行，請等它完成。") from None
-            if args.action == "start":
-                preflight()
-                host.start()
-                if not args.no_browser:
-                    subprocess.run(["/usr/bin/open", URL], check=False)
-                print("可以關閉這個終端機視窗。要結束服務，雙擊「停止 Flowinone.command」。")
-            elif args.action == "stop":
-                host.stop()
-            else:
-                host.status()
+                raise RuntimeError("Flowinone 已在另一個終端機執行，請回到該視窗使用。") from None
+            preflight()
+            report_chrome_bookmarks()
+            host.run(open_browser=not args.no_browser)
     except (Exception, KeyboardInterrupt) as error:
         print(f"操作未完成：{error}\n記錄位置：{host.runtime}", file=sys.stderr)
         return 1

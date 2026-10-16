@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import logging
 import threading
 from pathlib import Path
 
@@ -202,3 +204,26 @@ def test_dedicated_worker_runtime_owns_and_stops_source_watcher():
     thread.join(timeout=2)
     assert not thread.is_alive()
     assert watcher.stopped.is_set()
+
+
+def test_database_migration_preserves_worker_failure_logs(tmp_path, monkeypatch):
+    from src.flowinone.resource_library.database import upgrade_database
+    from src.flowinone.workers import LOGGER
+
+    monkeypatch.setattr(LOGGER, "disabled", False)
+    upgrade_database(tmp_path / "worker-logging.db")
+
+    output = io.StringIO()
+    handler = logging.StreamHandler(output)
+    LOGGER.addHandler(handler)
+    try:
+        def inaccessible_data():
+            raise PermissionError("data directory is inaccessible")
+
+        WorkerRuntime._run("thumbnail worker", inaccessible_data)
+    finally:
+        LOGGER.removeHandler(handler)
+        handler.close()
+
+    assert "thumbnail worker stopped unexpectedly" in output.getvalue()
+    assert "PermissionError: data directory is inaccessible" in output.getvalue()

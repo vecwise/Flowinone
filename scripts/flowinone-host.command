@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Shared Finder/Terminal entry point; always use the project's Conda environment.
+# Finder/Terminal entry point; keep one foreground process in Conda py3.11.
 set -u
 cd -- "${0:A:h:h}" || exit 1
 
@@ -24,9 +24,11 @@ if [[ ! -x "$conda_path" ]]; then
     exit 1
 fi
 
-"$conda_path" run --no-capture-output -n py3.11 python scripts/flowinone_host.py "$@"
-result=$?
-if (( result != 0 )) && [[ -t 0 ]]; then
-    read -r "?按 Enter 關閉。"
+# Activate before exec so no Conda wrapper can outlive the terminal supervisor.
+conda_base_path="$("$conda_path" info --base)" || exit 1
+source "$conda_base_path/etc/profile.d/conda.sh" || exit 1
+if ! conda activate py3.11; then
+    print -u2 "無法啟用既有 Conda py3.11 環境。"
+    exit 1
 fi
-exit "$result"
+exec python -u scripts/flowinone_host.py "$@"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import os
 import tempfile
 import threading
@@ -20,6 +21,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 from src.flowinone.config import CHROME_BOOKMARK_PATH
 
+from ..models import BookmarkError
 from .providers import provider_for_url
 from .store import (
     PRIORITY_BOOKMARK_CHANGE,
@@ -35,6 +37,7 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_REDIRECTS = 3
 MAX_IMAGE_EDGE = 640
 WEBP_QUALITY = 80
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -327,9 +330,21 @@ class ThumbnailWorker:
 
         from ..chrome_bookmarks import iter_chrome_bookmark_records
 
+        try:
+            bookmarks = list(iter_chrome_bookmark_records())
+        except BookmarkError as exc:
+            # Chrome is optional. Leave the successful mtime unchanged so a
+            # denied read or an incomplete Chrome write is retried next minute.
+            LOGGER.warning(
+                "Chrome bookmarks scan skipped for %s; retrying in 60 seconds: %s",
+                CHROME_BOOKMARK_PATH,
+                exc,
+            )
+            return
+
         initial_scan = previous is None
         priority = PRIORITY_MISSING if initial_scan else PRIORITY_BOOKMARK_CHANGE
-        for bookmark in iter_chrome_bookmark_records():
+        for bookmark in bookmarks:
             self.store.register_bookmark(
                 bookmark["url"],
                 bookmark["title"],
