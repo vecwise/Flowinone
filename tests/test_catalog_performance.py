@@ -6,14 +6,16 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from bs4 import BeautifulSoup
+from sqlalchemy import event
 
+from run import create_app
 from src.flowinone.catalog import sync as catalog_sync
 from src.flowinone.catalog.service import CatalogQuery, CatalogService, CatalogSyncService
 from src.flowinone.resource_library.database import get_resource_database
 
 
-@pytest.mark.performance
-def test_catalog_100k_keyset_query_contract(tmp_path):
+def _catalog_100k(tmp_path):
     database = get_resource_database(tmp_path / "catalog-100k.db")
     now = "2026-07-11T00:00:00+00:00"
     items = [
@@ -33,7 +35,12 @@ def test_catalog_100k_keyset_query_contract(tmp_path):
             "INSERT INTO catalog_origins(id,catalog_item_id,source_kind,source_key,last_seen_at) VALUES(?,?,?,?,?)",
             origins,
         )
+    return database
 
+
+@pytest.mark.performance
+def test_catalog_100k_keyset_query_contract(tmp_path):
+    database = _catalog_100k(tmp_path)
     query = CatalogQuery.create(scope="gallery", sources=["local"], limit=48)
     service = CatalogService(database)
     started = time.perf_counter()
@@ -49,6 +56,53 @@ def test_catalog_100k_keyset_query_contract(tmp_path):
     assert page["next_cursor"]
     assert cold_seconds < 2.5
     assert warm_seconds < 0.75
+
+
+@pytest.mark.performance
+def test_navigator_home_100k_topics_query_contract(tmp_path, monkeypatch):
+    database = _catalog_100k(tmp_path)
+    now = "2026-10-01"
+    with database.engine.begin() as conn:
+        conn.exec_driver_sql(
+            "INSERT INTO catalog_tags(id,name,normalized_name,created_at) VALUES(?,?,?,?)",
+            [(f"t{index}", f"Topic {index}", f"topic {index}", now) for index in range(6)],
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO catalog_item_tags(catalog_item_id,tag_id,source,created_at) VALUES(?,?,?,?)",
+            [(f"{index:032x}", f"t{index % 6}", "source", now) for index in range(100_000)],
+        )
+    monkeypatch.setattr("src.flowinone.catalog.blueprint.is_eagle_available", lambda: False)
+    monkeypatch.setattr("src.flowinone.web.common.compute_feature_flags", lambda: {})
+    client = create_app({
+        "TESTING": True, "FLOWINONE_RESOURCE_DB_PATH": str(database.path),
+        "FLOWINONE_RESOURCE_LINK_THUMBNAILS": False, "FLOWINONE_CATALOG_SYNC_INLINE": False,
+    }).test_client()
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(" ".join(statement.split()))
+
+    timings = []
+    event.listen(database.engine, "before_cursor_execute", capture)
+    try:
+        for _ in range(2):
+            statements.clear()
+            started = time.perf_counter()
+            response = client.get("/navigator/?scope=all&source=local")
+            timings.append(time.perf_counter() - started)
+            assert response.status_code == 200
+            soup = BeautifulSoup(response.data, "html.parser")
+            assert len(soup.select(".navigator-topic-card")) == 3
+            assert len(soup.select("[data-topic-item]")) == 9
+            assert len(soup.select(".navigator-topic-list a.navigator-chip")) == 6
+            # One result page plus three previews; remaining chips need only totals.
+            assert sum(sql.startswith("SELECT i.*,") for sql in statements) == 4
+        assert not any("COUNT(DISTINCT i.id)" in sql for sql in statements)
+    finally:
+        event.remove(database.engine, "before_cursor_execute", capture)
+    print(f"navigator_home_100k_topics cold={timings[0]:.3f}s warm={timings[1]:.3f}s")
+    assert timings[0] < 2.5
+    assert timings[1] < 0.75
 
 
 @pytest.mark.performance

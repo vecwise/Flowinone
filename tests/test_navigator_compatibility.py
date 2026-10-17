@@ -169,6 +169,42 @@ def test_topic_links_and_previews_keep_all_navigator_filters(client, topic_catal
         assert "cursor" not in params
 
 
+def test_topic_links_keep_offline_source_selection_and_random_seed(client, topic_catalog):
+    response = client.get(
+        "/navigator/?scope=all&source=local&source=eagle&q=Design&type=image"
+        "&sort=random&seed=23&view=list"
+    )
+    soup = BeautifulSoup(response.data, "html.parser")
+    links = [*_topic_links(soup), *soup.select(".navigator-topic-card a")]
+    assert links
+    for link in links:
+        params = parse_qs(urlsplit(link["href"]).query)
+        assert params["source"] == ["local", "eagle"]
+        assert params["scope"] == ["all"]
+        assert params["q"] == ["Design"]
+        assert params["type"] == ["image"]
+        assert params["sort"] == ["random"]
+        assert params["seed"] == ["23"]
+        assert params["view"] == ["list"]
+    destination = BeautifulSoup(client.get(links[0]["href"]).data, "html.parser")
+    assert destination.select_one('input[name="source"][value="eagle"][checked]') is not None
+
+
+def test_same_topic_keeps_named_context_when_eagle_is_offline(client, topic_catalog):
+    database, _ids = topic_catalog
+    saved = CatalogService(database).save_search(
+        "Design sources", {"scope": "all", "sources": ["local", "eagle"], "tags": ["design"]},
+    )
+    response = client.get(f"/navigator/views/{saved['id']}/", follow_redirects=True)
+    soup = BeautifulSoup(response.data, "html.parser")
+    active = soup.select_one('.navigator-topic-list [aria-current="true"]')
+    assert active is not None
+    assert parse_qs(urlsplit(active["href"]).query)["context"] == [saved["id"]]
+    for link in _topic_links(soup):
+        if link != active:
+            assert "context" not in parse_qs(urlsplit(link["href"]).query)
+
+
 def test_topic_previews_are_stable_and_do_not_repeat_on_next_batch(client, topic_catalog):
     _database, ids = topic_catalog
     path = "/navigator/?scope=gallery&source=local&limit=1"
@@ -239,16 +275,38 @@ def test_topic_queries_and_preview_size_are_bounded(client, monkeypatch):
                 tags=((f"topic-{index}", "source"),),
             )
     queries = []
+    row_queries = []
     original = CatalogService.list
 
     def record_queries(self, query, **kwargs):
         if not kwargs.get("include_facets", True):
             queries.append(query)
+            row_queries.append(kwargs.get("include_items", True))
         return original(self, query, **kwargs)
 
     monkeypatch.setattr(CatalogService, "list", record_queries)
     soup = BeautifulSoup(client.get("/navigator/?source=local").data, "html.parser")
     assert len(queries) == len(_topic_links(soup)) == 6
+    assert row_queries == [True, True, True, False, False, False]
     assert len(soup.select(".navigator-topic-card")) == 3
     assert all(query.limit <= 3 and not query.cursor for query in queries)
     assert all(len(card.select("[data-topic-item]")) <= 3 for card in soup.select(".navigator-topic-card"))
+
+
+@pytest.mark.parametrize("selected_topic", [False, True])
+def test_topic_chips_do_not_query_preview_rows(client, topic_catalog, monkeypatch, selected_topic):
+    first = BeautifulSoup(client.get("/navigator/?source=local&limit=1").data, "html.parser")
+    path = _topic_links(first)[0]["href"] if selected_topic else first.select_one(".gallery-pagination a")["href"]
+    original = CatalogService.list
+    preview_queries = []
+
+    def record_queries(self, query, **kwargs):
+        if not kwargs.get("include_facets", True):
+            preview_queries.append(kwargs.get("include_items", True))
+        return original(self, query, **kwargs)
+
+    monkeypatch.setattr(CatalogService, "list", record_queries)
+    soup = BeautifulSoup(client.get(path).data, "html.parser")
+    assert _topic_links(soup)
+    assert soup.select_one(".navigator-topic-recommendations") is None
+    assert preview_queries and not any(preview_queries)

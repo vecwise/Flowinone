@@ -287,6 +287,30 @@ rg -n 'def update_item_db_route|def update_item_database|def _sync_local|def cat
 
 **收尾：** 用檔案管理器只把剛才的測試副本移到垃圾桶，再重做 B、C，確認 Navigator 不再顯示；依原設定恢復自動偵測。
 
+## 9. 主題探索如何驗證？
+
+**前提：** 用「啟動 Flowinone.command」啟動服務並保持終端機開啟；更新程式後需停止再啟動。Catalog 至少要有帶標籤的已同步內容；若要驗證 F，該主題至少需 3 筆。沒有主題時先從「管理收藏」→「來源與同步」檢查索引。以下網址都接在 `http://127.0.0.1:5894` 後面。
+
+| 步驟 | 網址與點擊 | 預期結果 |
+| --- | --- | --- |
+| A | 開 `/` | 轉到 `/navigator/?scope=all`，標題「我的收藏」；「今天想看什麼」最多 6 個主題入口、3 張主題卡，每張最多 3 個項目。數量較少也正常。 |
+| B | 記住一個主題名稱，點卡片中的某個項目 | 仍在 `/navigator/`，URL 增加 `tags=...` 與 `#item-...`；頁面定位到該卡片，結果限於該主題，主題預覽收起。需再點結果卡片才開啟詳情。 |
+| C | 點「清除主題」 | `tags` 移除，其他搜尋與篩選保留；返回未選主題的第一批時重新出現預覽。 |
+| D | 開 `/navigator/?scope=all&source=bookmarks&sort=title&view=list&limit=12`；搜尋一個確定存在的詞，選一個有結果的類型，按「套用」，再點主題 | URL 保留 `scope=all`、`source=bookmarks`、`q`、`type`、`sort=title`、`view=list`、`limit=12`；來源不擴大，搜尋框與類型不清空，閱讀模式不改變。收藏、尚未瀏覽、資料夾、日期、影片長度條件若原本存在也保留。若沒有主題可點，先放寬篩選。 |
+| E | Eagle 離線時開 `/navigator/?scope=all&source=bookmarks&source=eagle&sort=random&seed=23&view=list`，點任一有結果的主題，再展開「更多篩選」 | 兩個 `source`、`sort=random`、`seed=23`、`view=list` 都保留，Eagle 仍被勾選；實際結果暫時略過離線 Eagle，沒有偷偷取消來源。若原本已有同一個主題的「常用條件」，重點該主題仍保留 `context`；切換不同主題則移除不再相符的命名脈絡。 |
+| F | 開 `/navigator/?scope=all&limit=1`，點第一張主題卡的第 2 或第 3 個預覽項目 | URL 可把 `limit` 提高到 `3`，目標 `#item-...` 卡片確實存在。 |
+| G | 回到 F 的原網址，往下點「載入下一批」 | URL 有 `cursor`，保留主題入口但沒有預覽。再點主題時 cursor 清除，進入該主題第一批。 |
+
+**數量與空結果：** 主題筆數依目前條件計算；沒有已同步標籤、被隱藏／刪除、只有失效 origin，或候選主題皆不符篩選時，不應顯示那些主題。只檢查前 6 個候選，因此沒有主題不一定代表整個 Catalog 都沒有標籤。
+
+**效能驗證：** 瀏覽器開發工具 → Network，重新整理首頁，查看 `/navigator/` 的 document request 的 Waiting／TTFB，連續重整比較快取前後；此時間也包含來源連線檢查與模板渲染，不能直接當 SQL 耗時。可重現的 10 萬筆測試在 repo 根目錄執行：
+
+```bash
+conda run --no-capture-output -n py3.11 pytest -q -s tests/test_catalog_performance.py::test_navigator_home_100k_topics_query_contract
+```
+
+**預期：** 印出 `navigator_home_100k_topics cold=...s warm=...s` 並顯示 `1 passed`。測試使用臨時 SQLite、6 個主題，不讀寫日常資料；只有 3 組預覽讀取，快取後不重算總筆數。實機 Network 時間不保證等於合成資料量測。
+
 ## 最後做一次自己的修改
 
 1. 在 [共用卡片](../templates/components/_item_card.html) 找卡片附近的「命中：」文字，記下原文，改成「符合搜尋的原因：」。

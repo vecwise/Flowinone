@@ -271,7 +271,9 @@ class CatalogService:
         *,
         candidate_ids: tuple[str, ...] | None = None,
         include_facets: bool = True,
+        include_items: bool = True,
     ) -> dict[str, Any]:
+        """Read a page, or only its cached exact total for topic chips."""
         if candidate_ids is not None and not candidate_ids:
             return {"items": [], "next_cursor": None, "total_estimate": 0, "query": query.public_dict(), "facets": self.facets(query) if include_facets else {}}
         cursor = self._decode_cursor(query)
@@ -333,11 +335,19 @@ class CatalogService:
             for index, tag in enumerate(query.tags):
                 params[f"tag_{index}"] = tag
                 tag_placeholders.append(f":tag_{index}")
-            operator = ">= :tag_count" if query.tag_mode == "all" else ">= 1"
-            params["tag_count"] = len(query.tags)
-            conditions.append(
-                f"(SELECT COUNT(DISTINCT ct.normalized_name) FROM catalog_item_tags cit JOIN catalog_tags ct ON ct.id=cit.tag_id WHERE cit.catalog_item_id=i.id AND ct.normalized_name IN ({','.join(tag_placeholders)})) {operator}"
-            )
+            if query.tag_mode == "all" and len(query.tags) > 1:
+                params["tag_count"] = len(query.tags)
+                conditions.append(
+                    f"(SELECT COUNT(DISTINCT ct.normalized_name) FROM catalog_item_tags cit JOIN catalog_tags ct ON ct.id=cit.tag_id WHERE cit.catalog_item_id=i.id AND ct.normalized_name IN ({','.join(tag_placeholders)})) >= :tag_count"
+                )
+            else:
+                # Start from the existing normalized-tag and tag/item indexes,
+                # rather than counting matching tags once for every item.
+                conditions.append(
+                    f"i.id IN (SELECT cit.catalog_item_id FROM catalog_tags ct "
+                    f"JOIN catalog_item_tags cit ON cit.tag_id=ct.id "
+                    f"WHERE ct.normalized_name IN ({','.join(tag_placeholders)}))"
+                )
         rank_expression = "0.0"
         match_select = """
             NULL AS fts_matched_title,
@@ -403,7 +413,7 @@ class CatalogService:
         """
         cache_context = self._browse_cache_context(query) if candidate_ids is None else None
         with self.database.engine.connect() as conn:
-            rows = list(conn.execute(text(sql), params).mappings())
+            rows = list(conn.execute(text(sql), params).mappings()) if include_items else []
             total = self._browse_cache.get_total(*cache_context) if cache_context else None
             if total is None:
                 count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(filter_conditions)}"

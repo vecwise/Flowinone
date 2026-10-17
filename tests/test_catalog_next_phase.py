@@ -375,6 +375,23 @@ def test_catalog_merges_origins_filters_fts_cursor_events_and_sessions(tmp_path)
     assert service.recent_sessions(1)[0]["id"] == session["id"]
 
 
+@pytest.mark.parametrize(
+    "tags,mode,positions",
+    [
+        (["KNOWLEDGE"], "any", (0, 2)),
+        (["knowledge", "visual"], "any", (0, 1, 2)),
+        (["knowledge", "visual"], "all", (0,)),
+        (["knowledge", "missing"], "all", ()),
+        (["missing"], "any", ()),
+    ],
+)
+def test_tag_filters_keep_any_all_semantics_and_deduplicate_origins(tmp_path, tags, mode, positions):
+    database, *ids = _catalog(tmp_path)
+    page = CatalogService(database).list(CatalogQuery.create(tags=tags, tag_mode=mode))
+    assert {item["id"] for item in page["items"]} == {ids[index] for index in positions}
+    assert len(page["items"]) == page["total_estimate"] == len(positions)
+
+
 def test_fulltext_result_opens_its_resource_context_and_keeps_original_link(tmp_path):
     database, first, _second, _third = _catalog(tmp_path)
     app = Flask(

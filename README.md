@@ -56,6 +56,8 @@ Navigator 的頁內搜尋保留目前條件；其他頁面導覽列的搜尋會�
 
 首頁 `/` 轉到 `/navigator/?scope=all`，實際讀取路徑是 `CatalogQuery` → `CatalogService.list()` → `browse.html`；預設按最近加入排序，「隨機探索」才使用有 seed 的隨機排序。「今天想看什麼」沿用 Catalog tag facets，最多檢查 6 個候選主題，依目前來源、搜尋、類型、資料夾與瀏覽狀態等條件排除空主題，顯示符合條件的筆數。未選主題的第一批結果最多預覽 3 個主題、每個 3 筆；主題與預覽連結保留 Navigator 條件，預覽項目會進入該主題並定位到卡片。選定主題或載入下一批後只保留主題入口，避免重複顯示預覽。
 
+單標籤查詢使用既有 tag/item 索引；只有要顯示的 3 個主題讀取預覽，其餘入口只讀取符合條件的筆數並沿用 browse metadata 快取。離線 Eagle 只在內容查詢時略過，主題連結仍保留使用者勾選的來源。點主題會切換標籤並清除 cursor；預覽連結必要時把批次大小提高到 3，確保目標卡片可見。手工驗證見 [主題探索操作流程](docs/hands-on.md#9-主題探索如何驗證)。
+
 這是標籤式探索，沒有語意分類、個人化模型或新資料表。候選順序沿用全 Catalog 的標籤筆數，優先略過覆蓋九成以上項目的通用標籤；若全部都是通用標籤則保留它們。只檢查前 6 個候選，因此符合目前條件的冷門標籤可能未出現；未標記或尚未同步的內容仍由原本的結果列表瀏覽，同一項目也可能出現在多個主題。
 
 OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊筆記／專案工作流與筆記匯出功能已移除；目前也沒有跨裝置同步。
@@ -175,6 +177,8 @@ conda run -n py3.11 pytest -q -m "not online and not performance"
 ```bash
 conda run --no-capture-output -n py3.11 pytest -q -s -m performance
 ```
+
+`test_navigator_home_100k_topics_query_contract` 另外量測含 6 個候選主題的完整首頁 request，檢查只載入 3 組預覽、快取後不重算 exact totals；同樣使用首次 `2.5s`、快取後 `0.75s` 的門檻。這組使用合成資料，不包含真實來源連線延遲。
 
 `test_navigator_sync_browser.py` 需要 Node.js，缺少時會 skip；它用模擬 DOM／fetch 驗證 JavaScript 控制流程，並未開真正瀏覽器。因此畫面布局與真實來源仍需做上面的手動實驗。
 
