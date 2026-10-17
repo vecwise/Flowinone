@@ -102,3 +102,29 @@ def test_permission_denied_keeps_worker_alive_and_processes_existing_jobs(chrome
     assert not thread.is_alive()
     assert errors == []
     assert worker.store.acquire_runtime_lease("thumbnail-worker", "test:next-worker")
+
+
+def test_failed_refresh_preserves_content_cover(chrome_worker, monkeypatch, tmp_path):
+    worker, _ = chrome_worker
+    lookup = worker.store.register_bookmark("https://example.com/article", "Article")
+    path = tmp_path / "thumbs" / f"{lookup.media_id}.webp"
+    worker_module.Image.new("RGB", (400, 240), "navy").save(path, "WEBP")
+    original = path.read_bytes()
+    worker.store.record_thumbnail(lookup.media_id, str(path), provider="metadata",
+                                 source_url="https://example.com/cover.jpg", width=400, height=240)
+    worker.store.enqueue_job(lookup.media_id, force=True)
+    job = worker.store.claim_jobs("test", 1)[0]
+
+    def unavailable(*args, **kwargs):
+        raise worker_module.FetchError("HTTP 403")
+
+    monkeypatch.setattr(worker_module, "validate_public_http_url", lambda url: url)
+    monkeypatch.setattr(worker_module, "provider_for_url", unavailable)
+    worker._process_job(job)
+
+    assert path.read_bytes() == original
+    status = worker.store.get_status(lookup.media_id)
+    assert status["provider"] == "metadata"
+    assert status["thumbnail_url"]
+    assert status["status"] == "retry"
+    assert status["error"] == "HTTP 403"

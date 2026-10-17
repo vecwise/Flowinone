@@ -300,17 +300,19 @@ class ThumbnailWorker:
             raise FetchError(detail)
         except Exception as exc:
             try:
-                local_path, width, height = _site_tile(media_id, url, self.store.cache_dir)
-                self.store.record_thumbnail(
-                    media_id,
-                    local_path,
-                    provider="site-tile",
-                    source_url=None,
-                    width=width,
-                    height=height,
-                    ttl_days=7,
-                    status="retry",
-                )
+                existing = self.store.get_status(media_id)
+                if not existing.get("thumbnail_url") or existing.get("provider") == "site-tile":
+                    local_path, width, height = _site_tile(media_id, url, self.store.cache_dir)
+                    self.store.record_thumbnail(
+                        media_id,
+                        local_path,
+                        provider="site-tile",
+                        source_url=None,
+                        width=width,
+                        height=height,
+                        ttl_days=7,
+                        status="retry",
+                    )
             finally:
                 self.store.mark_job_failure(media_id, str(exc))
 
