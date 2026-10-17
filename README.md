@@ -129,7 +129,29 @@ Chrome 來源預設讀平台的 Default profile `Bookmarks` 檔；若它不存�
 
 ### Chrome guid/id 對應與回填
 
-書籤身分對應採用 Chrome profile、local/account 儲存區和 guid（id 作為備援），保留既有 Catalog／Resources 主鍵。這是明確啟用的功能：migration 本身不回填資料，只有已檢閱的名單會建立 binding。已登記範圍內不在名單的書籤先略過；共用 row 網址分歧、目標網址已有其他 row、切換 profile／儲存區或有擷取任務正在執行時，會保留既有資料並記錄衝突，不會拆分或合併。資料夾位置更新不會刪除原標籤。`catalog-sync` 回傳 `identity_matched`、`identity_conflicts`、`identity_excluded`；Resources 匯入回傳 `conflicts` 和 `skipped`。
+書籤身分對應採用 Chrome profile、local/account 儲存區和 guid（id 作為備援），保留既有 Catalog／Resources 主鍵。migration 本身不回填資料。下方的已檢閱名單模式只建立核准的 binding；另可明確啟用整個 profile 的 Chrome 同步模式。共用 row 網址分歧、目標網址已有其他 row、切換 profile／儲存區或有擷取任務正在執行時，會記錄衝突，不會拆分或合併。`catalog-sync` 回傳 `identity_matched`、`identity_conflicts`、`identity_excluded`；Resources 匯入回傳 `conflicts` 和 `skipped`。
+
+### Chrome 作為書籤主來源
+
+啟用後，Flowinone 會同步目前設定的整個 Chrome profile，包括新增書籤、網址、標題、資料夾和刪除；原先只限已核准名單的範圍不再適用。Chrome 不會被改寫。停止 Web／Worker 後執行：
+
+```bash
+conda run -n py3.11 python -B scripts/chrome_mirror.py enable --compact
+```
+
+這會直接升級並套用，不建立備份或回收站。往後重新啟動 Worker，Chrome 變動會經預設 30 秒輪詢及 8 秒 debounce 排入同步；停用「來源自動偵測」時則需手動同步。未設定全來源自動偵測時，mirror 模式只自動監看 Chrome。也可用同一指令的 `sync` 手動套用、`status` 查詢數量及縮圖覆蓋率；`--compact` 會 VACUUM 主 DB 和縮圖 DB，僅在服務已停止時使用。
+
+指定其他 `--database` 時，必須同時指定獨立的 `--cache-database` 與 `--cache-dir`，避免用測試資料清理正式快取。
+
+刪掉一個書籤會移除其 GUID binding 和來源；最後一個書籤消失、且沒有手動匯入、Eagle 等獨立來源時，實際刪除內容 row、收藏、標籤關聯、搜尋資料、相關工作和無人使用的快取檔案。同一書籤產生的 Resources 投影不算獨立來源。共用 row 還有書籤時會保留，若剩下的書籤換網址可沿用原 row；其他網址衝突仍需另行處理。資料夾衍生標籤隨移動更新，使用者標籤保留。
+
+啟用時會將兩個 DB 設為 incremental auto-vacuum；刪除後合併搜尋索引、回收空頁並嘗試截斷 WAL。其他讀寫程序佔用時會延後空間回收，資料刪除本身不會回復。
+
+`chrome_bookmark_nodes` 保存每個現存 URL 節點，因此它的數量應和 Chrome URL 書籤數一致；資料夾不計入。非 HTTP(S) 項目也保存在這張清單中，但不建立 Resource 或抓縮圖。`bookmark_bindings` 只包含可匯入項目，Catalog／Resources 則可能因重複網址共用 row。這幾種數字不能直接互相比較。衝突項目的清單仍保存 Chrome 目前網址，內容 row 保留最後接受的網址並標示 conflict。
+
+來源讀取失敗、JSON 結構不完整、GUID/id 重複、或來源在同步期間改變時不套用刪除。縮圖清理只刪 Flowinone 自己管理且無引用的檔案，不刪外部原圖。
+
+### 已檢閱名單回填模式
 
 先用唯讀預檢報告的 `all-bookmarks.json` 作為基準；其中只有 `classification=matched` 的書籤會列入回填。獨立預覽指令不啟動 Flask、不升級資料庫、不排入網路工作，也不寫 Chrome 書籤。它將資料庫和已提交 WAL 讀入記憶體，查詢只發生在記憶體副本：
 

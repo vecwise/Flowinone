@@ -43,11 +43,13 @@ class CatalogSyncService(EagleSyncMixin):
         lock_max_retries: int = CATALOG_LOCK_MAX_RETRIES,
         lock_retry_base_delay: float = CATALOG_LOCK_RETRY_BASE_DELAY,
         sleep: Callable[[float], None] | None = None,
+        thumbnail_store=None,
     ):
         self.database = database
         self.lock_max_retries = max(0, int(lock_max_retries))
         self.lock_retry_base_delay = max(0.0, float(lock_retry_base_delay))
         self._sleep = sleep or time.sleep
+        self.thumbnail_store = thumbnail_store
 
     @staticmethod
     def _url_identity(url: str) -> tuple[str, str]:
@@ -281,6 +283,7 @@ class CatalogSyncService(EagleSyncMixin):
             "identity_matched": reconciled["matched"],
             "identity_conflicts": reconciled["conflicts"],
             "identity_excluded": len(reconciled["handled"]) - reconciled["matched"] - reconciled["conflicts"],
+            **{key:reconciled[key] for key in ('nodes','new_bindings','deleted_bindings','deleted_catalog','deleted_resources') if key in reconciled},
         }
         count = reconciled["matched"] + reconciled["conflicts"]
         for index, record in enumerate(records):
@@ -556,6 +559,12 @@ class CatalogSyncService(EagleSyncMixin):
         selected = tuple(source for source in sources if source in CATALOG_SOURCES)
         with self.database.catalog_sync():
             result = self._sync_selected(selected, full_rescan=full_rescan)
+            if result.get('bookmarks',{}).get('status') == 'complete':
+                from src.flowinone.bookmarks.mirror import maintain_mirror_cache
+                cleanup = maintain_mirror_cache(self.database,store=self.thumbnail_store,
+                    deleted_content=bool(result['bookmarks'].get('deleted_catalog') or result['bookmarks'].get('deleted_resources')))
+                if cleanup:
+                    result['bookmarks']['cache_cleanup'] = cleanup
         if self._browse_data_may_have_changed(result):
             # A failed incremental source can already have committed a page, so
             # invalidate non-lock failures as well as fully successful results.

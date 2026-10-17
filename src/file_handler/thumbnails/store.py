@@ -10,6 +10,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from src.flowinone.paths import data_dir, thumbnail_cache_database_path
@@ -419,6 +420,17 @@ class ThumbnailStore:
     ) -> None:
         now = _utcnow()
         with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if not conn.execute("SELECT 1 FROM media_items WHERE id=?", (media_id,)).fetchone():
+                # A Chrome sync may have removed this item while the provider
+                # was fetching. Never resurrect its cache row or image.
+                conn.rollback()
+                candidate = Path(local_path).resolve()
+                root = Path(self.cache_dir).resolve()
+                referenced = {str(Path(r[0]).resolve()) for r in conn.execute('SELECT local_path FROM thumbnails')}
+                if root in candidate.parents and str(candidate) not in referenced:
+                    candidate.unlink(missing_ok=True)
+                return
             conn.execute(
                 """
                 INSERT INTO thumbnails (
@@ -578,6 +590,61 @@ class ThumbnailStore:
             if limit is not None and considered >= limit:
                 break
         return {"considered": considered, "queued": queued, "force": force, "domain": normalized_domain or None}
+
+    def reuse_thumbnail(self, previous_id: str, current_id: str) -> bool:
+        """Reuse an image after a GUID-preserving URL edit without copying it."""
+        if previous_id == current_id:
+            return False
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            old = conn.execute("SELECT * FROM thumbnails WHERE media_id=?", (previous_id,)).fetchone()
+            new = conn.execute("SELECT * FROM thumbnails WHERE media_id=?", (current_id,)).fetchone()
+            if (not old or not os.path.isfile(old['local_path'])
+                    or not conn.execute("SELECT 1 FROM media_items WHERE id=?", (current_id,)).fetchone()
+                    or (new and os.path.isfile(new['local_path']) and (new['source']!='site-tile' or old['source']=='site-tile'))):
+                return False
+            conn.execute("""INSERT OR REPLACE INTO thumbnails(media_id,local_path,fetched_at,source,source_url,width,height,content_type,expires_at)
+                VALUES(?,?,?,?,?,?,?,?,?)""", (current_id,old['local_path'],old['fetched_at'],old['source'],old['source_url'],old['width'],old['height'],old['content_type'],old['expires_at']))
+            conn.execute("UPDATE media_items SET thumbnail_status='ready',last_error=NULL WHERE id=?", (current_id,))
+            conn.execute("UPDATE thumbnail_jobs SET status='complete',lease_owner=NULL,lease_expires_at=NULL WHERE media_id=?", (current_id,))
+            conn.commit()
+            return True
+
+
+    def prune_bookmarks(self, retained_ids: Iterable[str], *, keep_paths: Iterable[str] = ()) -> dict:
+        """Remove unreferenced bookmark rows/jobs and owned image files only."""
+        keep = set(retained_ids)
+        removed = []
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute("SELECT id FROM media_items WHERE source='bookmark'").fetchall()
+            for row in rows:
+                if row['id'] not in keep:
+                    conn.execute("DELETE FROM media_items WHERE id=?", (row['id'],))
+                    removed.append(row['id'])
+            paths = {str(Path(r[0]).resolve()) for r in conn.execute("SELECT local_path FROM thumbnails") if r[0]}
+            paths.update(str(Path(p).resolve()) for p in keep_paths if p)
+            root = Path(self.cache_dir).resolve()
+            paths.update(str(root / (r[0]+'.webp')) for r in conn.execute('SELECT id FROM media_items'))
+            files, freed, errors = 0, 0, []
+            # Holding the cache writer lock also fences record_thumbnail(). A
+            # newly generated in-flight image is handled by its rejected write.
+            for path in root.iterdir():
+                resolved = path.resolve()
+                if not path.is_file() or str(resolved) in paths or root not in resolved.parents:
+                    continue
+                if path.name.startswith('.') or path.suffix.lower() not in {'.webp','.jpg','.jpeg','.png','.gif','.avif'}:
+                    continue
+                try:
+                    size = path.stat().st_size
+                    path.unlink()
+                    files += 1
+                    freed += size
+                except OSError as exc:
+                    errors.append(str(exc))
+            conn.commit()
+        return {'deleted_media':len(removed),'deleted_files':files,'freed_file_bytes':freed,'errors':errors}
+
 
     def acquire_runtime_lease(self, name: str, owner: str, lease_seconds: int = 90) -> bool:
         now = _utcnow()

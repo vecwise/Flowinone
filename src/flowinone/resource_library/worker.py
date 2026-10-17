@@ -106,6 +106,16 @@ class ResourceWorker:
                 },
             )
             return
+        finally:
+            # A running fetch may finish after Chrome removed its last source.
+            # Its DB write is fenced by foreign keys; reclaim any late files.
+            resource_id = job.get('resource_id')
+            if resource_id:
+                with self.database.engine.connect() as conn:
+                    exists = conn.execute(text('SELECT 1 FROM resources WHERE id=:id'),{'id':resource_id}).scalar()
+                if not exists:
+                    from src.flowinone.bookmarks.mirror import prune_resource_files
+                    prune_resource_files(self.database)
         self.queue.complete(str(job["id"]))
         LOGGER.info(
             "resource_job_complete",

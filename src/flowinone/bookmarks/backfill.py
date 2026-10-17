@@ -33,10 +33,37 @@ def read_bookmarks(path: Path) -> tuple[list[dict], str]:
     after = path.stat()
     if (before.st_ino, before.st_mtime_ns, before.st_size) != (after.st_ino, after.st_mtime_ns, after.st_size):
         raise ValueError("Bookmark file changed while reading; regenerate the preview")
-    records = [record_dict(record) for record in iter_chrome_json_bookmarks(json.loads(raw))]
+    payload = json.loads(raw)
+    validate_chrome_tree(payload)
+    records = [record_dict(record) for record in iter_chrome_json_bookmarks(payload)]
     for record in records:
         record["source_path"] = str(path)
     return records, hashlib.sha256(raw).hexdigest()
+
+
+def validate_chrome_tree(payload: dict) -> None:
+    """Do not interpret a malformed or incomplete tree as deletions."""
+    roots = payload.get("roots") if isinstance(payload, dict) else None
+    if not isinstance(roots, dict) or not isinstance(roots.get("bookmark_bar"), dict):
+        raise ValueError("Chrome snapshot needs a complete bookmark_bar root")
+
+    def visit(node):
+        if not isinstance(node, dict):
+            raise ValueError("Invalid Chrome bookmark node")
+        kind = node.get("type")
+        if kind == "folder":
+            if not isinstance(node.get("children"), list):
+                raise ValueError("Chrome folder needs a complete children list")
+            for child in node["children"]:
+                visit(child)
+        elif kind != "url" or not isinstance(node.get("url"), str) or not node["url"]:
+            raise ValueError("Invalid Chrome URL node")
+
+    for key in ("bookmark_bar", "other", "synced", "mobile"):
+        if key in roots:
+            if not isinstance(roots[key], dict) or roots[key].get("type") != "folder":
+                raise ValueError("Invalid Chrome bookmark root")
+            visit(roots[key])
 
 
 def build_plan(conn, bookmark_path: Path, baseline: dict, *, expected_count: int | None = None) -> dict:

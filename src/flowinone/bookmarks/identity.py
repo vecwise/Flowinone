@@ -101,7 +101,7 @@ def _scoped(record: dict, source: dict) -> bool:
     return folder == prefix or folder.startswith(prefix + " / ")
 
 
-def reconcile_bound_bookmarks(conn, records: list[dict], source_path: str) -> dict:
+def reconcile_bound_bookmarks(conn, records: list[dict], source_path: str, *, _mirror_dispatch: bool = True) -> dict:
     """Apply a full source observation atomically inside the caller transaction.
 
     Return record indexes handled by the registry (including held/excluded
@@ -119,6 +119,9 @@ def reconcile_bound_bookmarks(conn, records: list[dict], source_path: str) -> di
             raise ValueError("Chrome profile/storage changed; review the new source before synchronizing")
         return result
     source = dict(source)
+    if _mirror_dispatch and source.get("sync_mode") == "mirror":
+        from .mirror import reconcile_mirror
+        return reconcile_mirror(conn, records, source)
     bindings = [dict(row) for row in conn.execute(text(
         "SELECT * FROM bookmark_bindings WHERE source_id=:source"
     ), {"source": source["id"]}).mappings()]
@@ -215,6 +218,9 @@ def reconcile_bound_bookmarks(conn, records: list[dict], source_path: str) -> di
                 WHERE catalog_item_id=:id AND stale=0 AND source_kind!='bookmarks'"""), {"id": item_id}).mappings()
             if any(o["source_kind"] != "resources" or o["source_key"] != resource_id for o in external):
                 reason = reason or "shared_row_other_origin"
+            if source.get('sync_mode') == 'mirror' and conn.execute(text("""SELECT 1 FROM resource_origins
+                WHERE resource_id=:id AND (source!='chrome_json' OR COALESCE(source_key,'') NOT LIKE 'chrome-bookmark:%') LIMIT 1"""), {'id':resource_id}).scalar():
+                reason = reason or 'shared_row_other_origin'
         if reason:
             for b in group:
                 record = observed.get(b["id"])

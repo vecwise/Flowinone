@@ -373,3 +373,230 @@ def test_snapshot_ignores_uncommitted_wal_frames(tmp_path):
     memory.close()
     writer.rollback()
     writer.close()
+
+
+def enable_mirror(seed, monkeypatch, tmp_path):
+    from src.file_handler.thumbnails.store import ThumbnailStore
+    store = ThumbnailStore(str(tmp_path / 'mirror-cache.db'),str(tmp_path / 'mirror-thumbs'))
+    monkeypatch.setattr('src.file_handler.thumbnails.store.get_thumbnail_store',lambda:store)
+    apply(seed)
+    with seed.db.write_transaction() as conn:
+        conn.execute(text("UPDATE bookmark_sources SET sync_mode='mirror'"))
+    return store
+
+
+def test_mirror_delete_last_source_cascades_state_search_and_cache(seeded,monkeypatch,tmp_path):
+    seed = seeded()
+    store = enable_mirror(seed,monkeypatch,tmp_path)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    lookup = store.register_bookmark(seed.nodes[0]['url'],'cached')
+    image = tmp_path / 'mirror-thumbs' / 'old.webp'
+    image.write_bytes(b'image')
+    store.record_thumbnail(lookup.media_id,str(image),provider='metadata',source_url=None,width=10,height=10)
+    seed.nodes.clear();write_nodes(seed)
+    result = seed.sync.sync(('bookmarks',))['bookmarks']
+    assert result['status']=='complete'
+    assert result['deleted_bindings']==result['deleted_catalog']==result['deleted_resources']==1
+    with seed.db.engine.connect() as conn:
+        for table in ('catalog_items','resources','bookmark_bindings','chrome_bookmark_nodes','catalog_origins',
+                      'resource_origins','catalog_item_tags','resource_tags','item_user_state','catalog_events','catalog_fts','resource_fts'):
+            assert conn.execute(text('SELECT count(*) FROM '+table)).scalar()==0,table
+        assert not conn.exec_driver_sql('PRAGMA foreign_key_check').all()
+    with store.connect() as conn:
+        for table in ('media_items','thumbnails','thumbnail_jobs'):
+            assert conn.execute('SELECT count(*) FROM '+table).fetchone()[0]==0
+    assert not image.exists()
+
+
+def test_mirror_dedup_then_url_change_preserves_surviving_row_and_user_metadata(seeded,monkeypatch,tmp_path):
+    seed = seeded(('https://example.com/old','https://example.com/old'))
+    enable_mirror(seed,monkeypatch,tmp_path)
+    seed.nodes.pop();seed.nodes[0]['url']='https://example.com/new';seed.nodes[0]['name']='Renamed'
+    seed.payload['roots']['bookmark_bar']['children'][0]['name']='Moved folder'
+    write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT id FROM catalog_items')).scalars().all()==[seed.cid]
+        assert conn.execute(text('SELECT id FROM resources')).scalars().all()==[seed.rid]
+        assert conn.execute(text('SELECT canonical_url FROM resources')).scalar()=='https://example.com/new'
+        assert conn.execute(text('SELECT title FROM catalog_items')).scalar()=='Renamed'
+        assert conn.execute(text('SELECT status FROM bookmark_bindings')).scalar()=='matched'
+        assert conn.execute(text('SELECT favorite FROM item_user_state')).scalar()==1
+        assert conn.execute(text("SELECT count(*) FROM resource_tags WHERE source='user'")).scalar()==1
+        assert conn.execute(text("SELECT count(*) FROM catalog_tags t JOIN catalog_item_tags x ON x.tag_id=t.id WHERE x.source='folder' AND t.name='Moved folder'")).scalar()==1
+        assert conn.execute(text("SELECT count(*) FROM catalog_fts WHERE catalog_fts MATCH 'Renamed'")).scalar()==1
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM bookmark_url_history')).scalar()==1
+
+
+def test_mirror_manual_origin_prevents_content_and_thumbnail_deletion(seeded,monkeypatch,tmp_path):
+    seed = seeded();store = enable_mirror(seed,monkeypatch,tmp_path)
+    seed.service.create_url('https://example.com/old',enqueue=False)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    media = store.register_bookmark('https://example.com/old','manual')
+    image = tmp_path/'mirror-thumbs'/'manual.webp';image.write_bytes(b'keep')
+    store.record_thumbnail(media.media_id,str(image),provider='metadata',source_url=None,width=1,height=1)
+    seed.nodes.clear();write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT id FROM resources')).scalar()==seed.rid
+        assert conn.execute(text('SELECT id FROM catalog_items')).scalar()==seed.cid
+        assert conn.execute(text('SELECT count(*) FROM bookmark_bindings')).scalar()==0
+        assert conn.execute(text('SELECT favorite FROM item_user_state')).scalar()==1
+    assert image.exists()
+    assert store.get_thumbnail_path(media.media_id)==str(image)
+
+
+def test_mirror_adopts_unbound_and_non_web_nodes_and_removes_gone_legacy(seeded,monkeypatch,tmp_path):
+    seed=seeded(('https://example.com/keep','https://example.com/remove'),selected={0})
+    enable_mirror(seed,monkeypatch,tmp_path)
+    seed.nodes.pop()
+    seed.nodes.extend([
+        {**seed.nodes[0],'id':'101','guid':str(uuid.uuid4()),'url':'https://example.com/new'},
+        {**seed.nodes[0],'id':'102','guid':str(uuid.uuid4()),'url':'chrome://newtab/'},
+    ])
+    write_nodes(seed)
+    result=seed.sync.sync(('bookmarks',))['bookmarks']
+    assert result['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM chrome_bookmark_nodes')).scalar()==3
+        assert conn.execute(text('SELECT count(*) FROM bookmark_bindings')).scalar()==2
+        assert conn.execute(text('SELECT count(*) FROM resources')).scalar()==2
+        assert not conn.execute(text("SELECT id FROM resources WHERE canonical_url='https://example.com/remove'")).scalar()
+        assert conn.execute(text("SELECT unsupported_reason FROM chrome_bookmark_nodes WHERE url='chrome://newtab/'")).scalar()
+        assert not conn.execute(text("SELECT 1 FROM catalog_origins WHERE source_kind='bookmarks' AND source_key NOT LIKE 'chrome-bookmark:%'")).scalar()
+
+
+def test_mirror_collision_keeps_two_rows_without_merging(seeded,monkeypatch,tmp_path):
+    seed=seeded(('https://example.com/one','https://example.com/two'))
+    enable_mirror(seed,monkeypatch,tmp_path)
+    seed.nodes[0]['url']=seed.nodes[1]['url'];write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM catalog_items')).scalar()==2
+        assert conn.execute(text('SELECT count(*) FROM resources')).scalar()==2
+        assert conn.execute(text("SELECT count(*) FROM bookmark_bindings WHERE conflict_reason='target_url_already_owned'")).scalar()==1
+        assert conn.execute(text('SELECT count(*) FROM chrome_bookmark_nodes')).scalar()==2
+        assert conn.execute(text('SELECT favorite FROM item_user_state')).scalar()==1
+
+
+def test_mirror_malformed_or_missing_source_cannot_delete(seeded,monkeypatch,tmp_path):
+    seed=seeded();store=enable_mirror(seed,monkeypatch,tmp_path)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    before=protected(seed)
+    seed.path.write_text(json.dumps({'roots':{}}))
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='failed'
+    assert protected(seed)==before
+    seed.path.unlink()
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='failed'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM resources')).scalar()==1
+        assert conn.execute(text('SELECT count(*) FROM bookmark_bindings')).scalar()==1
+    with store.connect() as conn:
+        assert conn.execute('SELECT count(*) FROM media_items').fetchone()[0]==1
+
+
+def test_mirror_auto_watcher_is_bookmark_only_and_queues_first_snapshot(seeded,monkeypatch,tmp_path):
+    from src.flowinone.catalog.watch import CatalogSourceWatcher
+    seed=seeded();enable_mirror(seed,monkeypatch,tmp_path)
+    watcher=CatalogSourceWatcher(seed.db,signatures={'bookmarks':lambda:'first','local':lambda:pytest.fail('unrelated scan')})
+    assert watcher.process_once()['enabled'] is True
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM processing_jobs WHERE job_type='catalog_sync'")).scalar()==1
+    assert watcher.process_once()['enabled'] is True
+    watcher.set_enabled(False)
+    assert watcher.process_once()['enabled'] is False
+
+
+def test_mirror_independent_resource_origin_blocks_url_reassignment(seeded,monkeypatch,tmp_path):
+    seed=seeded();enable_mirror(seed,monkeypatch,tmp_path)
+    seed.service.create_url('https://example.com/old',enqueue=False)
+    seed.nodes[0]['url']='https://example.com/new';write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT canonical_url FROM resources')).scalar()=='https://example.com/old'
+        assert conn.execute(text('SELECT conflict_reason FROM bookmark_bindings')).scalar()=='shared_row_other_origin'
+
+
+def test_mirror_deleted_resource_reclaims_owned_files_but_preserves_shared_paths(seeded,monkeypatch,tmp_path):
+    seed=seeded();enable_mirror(seed,monkeypatch,tmp_path)
+    own=tmp_path/'content'/'text'/seed.rid/'old.txt';own.parent.mkdir(parents=True);own.write_text('owned')
+    external=tmp_path/'external.txt';external.write_text('external')
+    seed.nodes.clear();write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    assert not own.exists()
+    assert external.exists()
+
+
+def test_mirror_cli_enables_full_profile_without_backup_and_reports_schema(seeded,monkeypatch,tmp_path):
+    from scripts.chrome_mirror import main
+    from src.file_handler.thumbnails.store import ThumbnailStore
+    seed=seeded()
+    store=ThumbnailStore(str(tmp_path/'cli-cache.db'),str(tmp_path/'cli-thumbs'))
+    monkeypatch.setattr('scripts.chrome_mirror.get_thumbnail_store',lambda:store)
+    monkeypatch.setattr('src.file_handler.thumbnails.store.get_thumbnail_store',lambda:store)
+    monkeypatch.setattr('src.flowinone.resource_library.database.backup_database',lambda *a:pytest.fail('No backup requested'))
+    output=tmp_path/'status.json'
+    monkeypatch.setattr('sys.argv',['chrome_mirror.py','enable','--database',str(seed.db.path),'--bookmarks',str(seed.path),'--output',str(output),
+                                  '--cache-database',store.db_path,'--cache-dir',store.cache_dir])
+    assert main()==0
+    report=json.loads(output.read_text())
+    assert report['exact_node_match'] and report['db_nodes']==report['chrome_nodes']==1
+    assert report['source']['sync_mode']=='mirror'
+    assert report['schema']['chrome_bookmark_nodes'] and report['schema']['cache.thumbnails']
+    assert not (tmp_path/'backups').exists()
+
+
+def test_deleted_resource_running_fetch_does_not_leave_late_files(seeded,monkeypatch,tmp_path):
+    from src.flowinone.resource_library.worker import ResourceWorker
+    seed=seeded();enable_mirror(seed,monkeypatch,tmp_path)
+    late=tmp_path/'content'/'text'/seed.rid/'late.txt'
+    def fetch(_job):
+        seed.nodes.clear();write_nodes(seed)
+        assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+        late.parent.mkdir(parents=True,exist_ok=True);late.write_text('late fetch')
+    worker=ResourceWorker(seed.db)
+    monkeypatch.setattr(worker.enrichment,'process_job',fetch)
+    worker._process({'id':'deleted-job','job_type':'fetch_metadata','resource_id':seed.rid})
+    assert not late.exists()
+
+
+def test_later_independent_json_import_is_not_retired_as_legacy_chrome(seeded,monkeypatch,tmp_path):
+    from src.flowinone.resource_library.importers import BookmarkRecord
+    seed=seeded();enable_mirror(seed,monkeypatch,tmp_path)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    seed.service.import_records([BookmarkRecord(url='https://example.com/old',title='Independent export',source_key='file:other.json')],enqueue=False)
+    seed.nodes.clear();write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT id FROM resources')).scalar()==seed.rid
+        assert conn.execute(text('SELECT source_key FROM resource_origins')).scalar()=='file:other.json'
+
+
+def test_mirror_sqlite_deletion_reclaims_disk_pages(seeded,monkeypatch,tmp_path):
+    from pathlib import Path
+    from src.flowinone.bookmarks.mirror import configure_mirror_storage,reclaim_mirror_storage
+    seed=seeded();store=enable_mirror(seed,monkeypatch,tmp_path)
+    configure_mirror_storage(seed.db.path,Path(store.db_path))
+    with sqlite3.connect(seed.db.path) as conn:
+        assert conn.execute('PRAGMA auto_vacuum').fetchone()[0]==2
+        conn.execute('CREATE TABLE vacuum_probe(data BLOB)')
+        conn.executemany('INSERT INTO vacuum_probe VALUES(?)',[(b'x'*8192,)]*256)
+        conn.commit();conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        size=seed.db.path.stat().st_size
+        conn.execute('DELETE FROM vacuum_probe');conn.commit()
+    result=reclaim_mirror_storage(seed.db.path,Path(store.db_path))
+    assert result[seed.db.path.name]['incremental_vacuum']
+    assert seed.db.path.stat().st_size<size//2
+
+
+def test_new_chrome_source_revives_a_previously_deleted_catalog_projection(seeded,monkeypatch,tmp_path):
+    seed=seeded(('https://example.com/keep','https://example.com/revive'),selected={0})
+    enable_mirror(seed,monkeypatch,tmp_path)
+    with seed.db.write_transaction() as conn:
+        conn.execute(text('UPDATE catalog_items SET is_deleted=1 WHERE id!=:id'),{'id':seed.cid})
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status']=='complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT sum(is_deleted) FROM catalog_items')).scalar()==0
+        assert conn.execute(text("SELECT count(*) FROM bookmark_bindings WHERE status='matched'")).scalar()==2

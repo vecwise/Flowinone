@@ -61,6 +61,44 @@ def test_migration_preserves_legacy_thumbnail(tmp_path):
         }
 
 
+def test_prune_preserves_shared_image_until_last_reference_and_cancels_jobs(tmp_path):
+    store=ThumbnailStore(str(tmp_path/'gc.db'),str(tmp_path/'thumbs'))
+    first=store.register_bookmark('https://example.com/one','one')
+    second=store.register_bookmark('https://example.com/two','two')
+    image=tmp_path/'thumbs'/'shared.webp';image.write_bytes(b'image')
+    store.record_thumbnail(first.media_id,str(image),provider='metadata',source_url=None,width=1,height=1)
+    assert store.reuse_thumbnail(first.media_id,second.media_id)
+    assert store.prune_bookmarks({second.media_id})['deleted_media']==1
+    assert image.exists()
+    with store.connect() as conn:
+        assert conn.execute('SELECT count(*) FROM thumbnail_jobs WHERE media_id=?',(first.media_id,)).fetchone()[0]==0
+    assert store.prune_bookmarks(set())['deleted_files']==1
+    assert not image.exists()
+
+
+def test_prune_never_deletes_external_files_and_late_fetch_cannot_resurrect(tmp_path):
+    store=ThumbnailStore(str(tmp_path/'gc.db'),str(tmp_path/'thumbs'))
+    lookup=store.register_bookmark('https://example.com/one','one')
+    external=tmp_path/'external.webp';external.write_bytes(b'keep')
+    store.record_thumbnail(lookup.media_id,str(external),provider='metadata',source_url=None,width=1,height=1)
+    store.prune_bookmarks(set())
+    assert external.exists()
+    late=tmp_path/'thumbs'/'late.webp';late.write_bytes(b'late')
+    store.record_thumbnail(lookup.media_id,str(late),provider='metadata',source_url=None,width=1,height=1)
+    assert not late.exists()
+    with store.connect() as conn:
+        assert conn.execute('SELECT count(*) FROM media_items').fetchone()[0]==0
+        assert conn.execute('SELECT count(*) FROM thumbnails').fetchone()[0]==0
+
+
+def test_prune_keeps_inflight_file_for_a_live_media_item(tmp_path):
+    store=ThumbnailStore(str(tmp_path/'gc.db'),str(tmp_path/'thumbs'))
+    lookup=store.register_bookmark('https://example.com/live','live')
+    image=tmp_path/'thumbs'/(lookup.media_id+'.webp');image.write_bytes(b'in flight')
+    assert store.prune_bookmarks({lookup.media_id})['deleted_files']==0
+    assert image.exists()
+
+
 def test_thumbnail_providers_only_include_existing_cached_files(tmp_path):
     store = ThumbnailStore(str(tmp_path / "cache.db"), str(tmp_path / "thumbnails"))
     tile = store.register_bookmark("https://tile.example/article", "Tile")

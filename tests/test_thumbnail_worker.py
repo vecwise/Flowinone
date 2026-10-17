@@ -104,6 +104,19 @@ def test_permission_denied_keeps_worker_alive_and_processes_existing_jobs(chrome
     assert worker.store.acquire_runtime_lease("thumbnail-worker", "test:next-worker")
 
 
+def test_scan_does_not_create_cache_for_non_web_bookmarks(chrome_worker):
+    worker,path=chrome_worker
+    payload=json.loads(path.read_text())
+    payload['roots']['bookmark_bar']['children'].extend([
+        {'type':'url','name':'New tab','url':'chrome://newtab/'},
+        {'type':'url','name':'Action','url':'javascript:void(0)'},
+    ])
+    path.write_text(json.dumps(payload))
+    worker._scan_chrome_bookmarks_if_changed()
+    with worker.store.connect() as conn:
+        assert conn.execute('SELECT count(*) FROM media_items').fetchone()[0]==1
+
+
 def test_failed_refresh_preserves_content_cover(chrome_worker, monkeypatch, tmp_path):
     worker, _ = chrome_worker
     lookup = worker.store.register_bookmark("https://example.com/article", "Article")

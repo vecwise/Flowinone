@@ -347,6 +347,8 @@ class ThumbnailWorker:
         initial_scan = previous is None
         priority = PRIORITY_MISSING if initial_scan else PRIORITY_BOOKMARK_CHANGE
         for bookmark in bookmarks:
+            if urlsplit(bookmark['url']).scheme.lower() not in {'http','https'}:
+                continue
             self.store.register_bookmark(
                 bookmark["url"],
                 bookmark["title"],

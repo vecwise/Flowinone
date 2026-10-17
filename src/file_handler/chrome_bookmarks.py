@@ -227,9 +227,16 @@ def _load_chrome_bookmarks():
     if not os.path.exists(CHROME_BOOKMARK_PATH):
         raise BookmarkNotFound(f"Chrome bookmark file missing: {CHROME_BOOKMARK_PATH}")
     try:
+        before = os.stat(CHROME_BOOKMARK_PATH)
         with open(CHROME_BOOKMARK_PATH, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except (json.JSONDecodeError, OSError) as exc:
+            payload = json.load(fh)
+        after = os.stat(CHROME_BOOKMARK_PATH)
+        if (before.st_ino,before.st_mtime_ns,before.st_size)!=(after.st_ino,after.st_mtime_ns,after.st_size):
+            raise ValueError('Chrome bookmark file changed while reading')
+        from src.flowinone.bookmarks.backfill import validate_chrome_tree
+        validate_chrome_tree(payload)
+        return payload
+    except (ValueError, OSError) as exc:
         raise BookmarkError(f"Failed to read Chrome bookmarks data: {exc}") from exc
 
 

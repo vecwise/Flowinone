@@ -71,6 +71,7 @@ class ResourceService:
         *,
         enqueue: bool = True,
         link_thumbnails: Optional[bool] = None,
+        source_path: str = "",
     ) -> ImportSummary:
         should_link_thumbnails = (
             self.link_thumbnail_cache if link_thumbnails is None else link_thumbnails
@@ -79,7 +80,7 @@ class ResourceService:
         records = list(records)
         with self.database.session(write=True) as session:
             observations = [record_dict(record) for record in records]
-            source_path = next((r["source_path"] for r in observations if r.get("source_path")), "")
+            source_path = source_path or next((r["source_path"] for r in observations if r.get("source_path")), "")
             if source_path and registry_exists(session.connection()) and session.execute(
                 text("SELECT 1 FROM bookmark_sources WHERE bookmark_path=:path"), {"path": source_path}
             ).scalar():
@@ -132,6 +133,9 @@ class ResourceService:
                     summary.failed += 1
                     if len(summary.errors or []) < 50:
                         summary.errors.append({"url": record.url, "error": str(exc)})
+        if source_path and should_link_thumbnails:
+            from src.flowinone.bookmarks.mirror import maintain_mirror_cache
+            maintain_mirror_cache(self.database,deleted_content=bool(reconciled.get('deleted_catalog') or reconciled.get('deleted_resources')))
         return summary
 
     def import_file(
@@ -142,7 +146,7 @@ class ResourceService:
         enqueue: bool = True,
     ) -> ImportSummary:
         records = load_bookmarks(path, format_hint)
-        summary = self.import_records(records, enqueue=enqueue)
+        summary = self.import_records(records, enqueue=enqueue, source_path=str(path.expanduser().resolve()))
         stat = path.expanduser().stat()
         with self.database.session(write=True) as session:
             key = f"import:{path.expanduser().resolve()}"

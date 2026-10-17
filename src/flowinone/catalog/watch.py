@@ -176,8 +176,12 @@ class CatalogSourceWatcher:
                 {"component": CATALOG_SOURCE_WATCH_COMPONENT},
             ).scalar_one_or_none()
         state = self._parse_metadata(raw)
+        from src.flowinone.bookmarks.mirror import mirror_enabled
+        with self.database.engine.connect() as conn:
+            mirror = mirror_enabled(conn)
+        state['_auto_mirror'] = 'enabled' not in state and mirror
         state["enabled"] = bool(
-            state.get("enabled", _enabled_from_environment())
+            state.get("enabled", _enabled_from_environment() or mirror)
         )
         state["sources"] = (
             state.get("sources") if isinstance(state.get("sources"), dict) else {}
@@ -200,7 +204,7 @@ class CatalogSourceWatcher:
                 {
                     "component": CATALOG_SOURCE_WATCH_COMPONENT,
                     "now": timestamp,
-                    "metadata": json.dumps(state, ensure_ascii=False, sort_keys=True),
+                    "metadata": json.dumps({k:v for k,v in state.items() if k!='_auto_mirror' and not(k=='enabled' and state.get('_auto_mirror'))}, ensure_ascii=False, sort_keys=True),
                 },
             )
 
@@ -218,6 +222,7 @@ class CatalogSourceWatcher:
 
     def set_enabled(self, enabled: bool) -> dict[str, Any]:
         state = self._state()
+        state['_auto_mirror'] = False
         state["enabled"] = bool(enabled)
         state["updated_at"] = utc_now_text()
         self._store_state(state, now=state["updated_at"])
@@ -254,6 +259,8 @@ class CatalogSourceWatcher:
         now_text = now.isoformat()
         sources = state["sources"]
         for source, provider in self.signatures.items():
+            if state.get('_auto_mirror') and source!='bookmarks':
+                continue
             previous = dict(sources.get(source) or {})
             try:
                 signature = provider()
@@ -278,6 +285,9 @@ class CatalogSourceWatcher:
                     "state": "watching",
                     "observed_at": now_text,
                 }
+                if source=='bookmarks' and state.get('_auto_mirror'):
+                    job = self._queue_source(source,signature)
+                    sources[source].update(state='queued',job_id=job['id'],queued_at=now_text)
                 continue
             if previous.get("signature") != signature:
                 previous = {
