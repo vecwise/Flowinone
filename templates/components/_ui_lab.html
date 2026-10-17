@@ -1,0 +1,39 @@
+<section class="ui-lab-intro" aria-label="比較方式">
+  <p>保留目前基準，再比較三套方向。每套都涵蓋 <strong>瀏覽、詳情、管理</strong>；下方同一欄位會開啟相同條件或樣本，只改變 UI。</p>
+  <div class="action-row">
+    <a class="action-button primary" href="{{ lab_return_url|ui_href }}" data-ui-lab-return>返回剛才的頁面</a>
+    <a class="action-button" href="{{ url_for('local.route_guide') }}">查看全部 route 與模板</a>
+  </div>
+</section>
+<section class="ui-lab-grid" aria-label="四套 UI 比較">
+  {% for variant in ui_variants %}
+  <article class="ui-lab-card" data-ui-candidate="{{ variant.key }}">
+    <div class="ui-lab-swatch" data-scheme="{{ variant.key }}" aria-hidden="true">
+      <span class="ui-lab-swatch-nav"></span><span class="ui-lab-swatch-title"></span>
+      <div class="ui-lab-swatch-items"><i></i><i></i><i></i><i></i></div>
+      <span class="ui-lab-swatch-line"></span>
+    </div>
+    <div class="ui-lab-card-body">
+      <p class="ui-lab-eyebrow">{{ variant.number }} / {{ variant.tagline }}</p>
+      <h2>{{ variant.label }} <span class="ui-lab-current" data-ui-current="{{ variant.key }}" {% if ui_key != variant.key %}hidden{% endif %}>使用中</span></h2>
+      <p>{{ variant.description }}</p>
+      <dl class="ui-lab-layouts">
+        {% for scenario in lab_scenarios %}<div><dt>{{ scenario.label }} <code>{{ scenario.template }}</code></dt><dd>{{ variant.layouts[loop.index0] }}</dd></div>{% endfor %}
+      </dl>
+      <button type="button" class="action-button primary" data-ui-apply="{{ variant.key }}">在此預覽{{ variant.label }}</button>
+      <div class="ui-lab-links" aria-label="{{ variant.label }}測試入口">
+        {% for scenario in lab_scenarios %}
+        <a class="action-button" data-ui-fixed data-ui-scenario="{{ scenario.family }}" href="{{ scenario.url|ui_href(variant.key) }}" target="_blank" rel="noopener">{{ scenario.label if scenario.ready else '準備詳情樣本' }} ↗</a>
+        {% endfor %}
+      </div>
+      <a class="ui-lab-try-current" data-ui-fixed href="{{ lab_return_url|ui_href(variant.key) }}">用這套 UI 開啟剛才的頁面 →</a>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+<section class="ui-lab-checklist" aria-labelledby="ui-lab-tasks">
+  <h2 id="ui-lab-tasks">比較時，試著完成同一件事</h2>
+  <ol><li>瀏覽：搜尋、篩選來源，找出想收藏的項目。</li><li>詳情：讀摘要或檢查影像，再返回原來的結果。</li><li>管理：找到來源狀態或新增入口，試填表單後切換 UI。</li></ol>
+  <p>切換只改變呈現，已輸入的文字、勾選、預覽與播放狀態會留在頁面。各分頁由網址中的 <code>ui</code> 獨立選擇，可並排比較。</p>
+  {% if not lab_scenarios[1].ready %}<p role="status">目前沒有可用詳情樣本。先新增一筆收藏或同步本機素材，再回來比較詳情模板。</p>{% endif %}
+</section>

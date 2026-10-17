@@ -140,6 +140,7 @@ def build_route_guide(database):
         entry("resource_library.resource_index", "新增與匯入", "manage.html"),
         entry("local.view_item_db", "本機索引", "manage.html", feature="db"),
         entry("local.route_guide", "頁面測試導覽（本頁）", "manage.html"),
+        entry("local.ui_lab", "UI Lab 風格比較", "manage.html", note="4 套 UI 共用瀏覽、詳情、管理三種模板。"),
         entry("catalog.duplicate_review_page", "重複圖片檢閱", "manage.html"),
     ]
     legacy = [

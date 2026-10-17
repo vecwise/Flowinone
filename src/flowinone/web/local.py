@@ -114,6 +114,13 @@ def content_library():
     )
 
 
+@bp.get("/ui-lab/")
+def ui_lab():
+    from .ui_variants import render_ui_lab
+
+    return render_ui_lab(request_database())
+
+
 @bp.get("/route-guide/")
 def route_guide():
     from .route_guide import build_route_guide

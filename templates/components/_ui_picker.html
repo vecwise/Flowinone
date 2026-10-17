@@ -1,0 +1,6 @@
+<div class="ui-picker">
+  <label for="{{ picker_id|default('ui-choice') }}">{{ picker_label|default('介面') }}</label>
+  <select id="{{ picker_id|default('ui-choice') }}" data-ui-select>
+    {% for variant in ui_variants %}<option value="{{ variant.key }}" {% if ui_key == variant.key %}selected{% endif %}>{{ variant.label }}</option>{% endfor %}
+  </select>
+</div>

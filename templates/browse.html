@@ -7,6 +7,8 @@
 <main id="main-content" class="container gallery-page browse-page{% if browse.kind == 'catalog' %} navigator-page{% endif %}" data-page-family="browse"
 {% if browse.kind == 'catalog' %}data-navigator-query="{{ query.signature() }}" data-navigator-query-payload='{{ query.public_dict()|tojson }}' data-resume-scroll="{{ resume_scroll|int if resume_scroll else '' }}"{% endif %}>
   {% with page_heading=browse.heading, page_description=browse.description, page_links=browse.links %}{% include 'components/_page_header.html' %}{% endwith %}
+  {% if browse.kind == 'catalog' %}{% include '_current_context.html' %}{% endif %}
+  <div class="browse-controls">
   {% if browse.error %}
     <section class="gallery-empty" role="alert"><h2>無法載入來源</h2><p>{{ browse.error }}</p><a class="action-button primary" href="{{ request.full_path.rstrip('?') }}">重試載入</a><a class="action-button" href="{{ url_for('local.content_library') }}">檢查來源與同步</a></section>
   {% elif browse.kind == 'catalog' %}
@@ -19,7 +21,9 @@
       <button class="action-button" type="button" data-browse-sort data-direction="asc">依名稱排序</button>
     </div>
   {% endif %}
-  {% if not browse.error %}<section aria-labelledby="navigator-results-heading">
+  </div>
+  <div class="browse-content">
+  {% if not browse.error %}<section class="browse-results" aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
       <h2 id="navigator-results-heading">{{ '這批 ' if browse.batch_only else '' }}{{ browse.total }} 個項目</h2>
       {% if browse['items'] %}<div class="navigator-view-switch" role="group" aria-label="結果檢視方式">
@@ -37,6 +41,7 @@
     {% if browse.previous_url %}<a class="action-button" data-browse-link href="{{ browse.previous_url }}">上一批</a>{% endif %}
     {% if browse.next_url %}<a class="action-button primary" data-browse-link href="{{ browse.next_url }}">載入下一批</a>{% endif %}
   </nav>{% endif %}
+  </div>
   <p id="thumbnailSyncStatus" class="sr-only" aria-live="polite"></p>
 {% if browse.kind == 'catalog' %}
 {% if recent_sessions %}

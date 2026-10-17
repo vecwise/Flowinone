@@ -156,7 +156,7 @@ def test_navigation_exposes_all_enabled_source_views(ui_client, monkeypatch):
         "eagle": True, "chrome": True, "youtube": True, "db": True,
     })
     page = BeautifulSoup(ui_client.get("/library/").data, "html.parser")
-    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏", "頁面測試"]
+    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏", "頁面測試", "UI Lab"]
     assert page.select_one('.nav-links a[aria-current="page"]')["href"] == "/library/"
     expected = {"/folders/", "/chrome/", "/chrome_youtube/", "/EAGLE_folders/", "/EAGLE_tags/",
                 "/EAGLE_smart_folders/", "/EAGLE_stream/", "/resources/", "/item_db", "/catalog/duplicate-review/"}

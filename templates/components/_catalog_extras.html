@@ -61,8 +61,10 @@
         <button class="action-button" type="button" data-gallery-detail-back hidden>返回上個項目</button>
         <span class="eyebrow">收藏預覽</span>
       </div>
+      {% with picker_id='ui-choice-preview', picker_label='預覽介面' %}{% include 'components/_ui_picker.html' %}{% endwith %}
       <button class="navigator-dialog-close" type="button" data-gallery-detail-close aria-label="關閉詳情">關閉</button>
     </header>
+    <span class="sr-only" data-ui-status role="status"></span>
     <p class="navigator-detail-status" data-gallery-detail-status role="status"></p>
     {% with preview=true, detail={} %}{% include 'components/_detail_content.html' %}{% endwith %}
   </div>

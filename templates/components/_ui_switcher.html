@@ -1,0 +1,6 @@
+<div class="ui-toolbar" role="group" aria-label="介面風格">
+  {% include 'components/_ui_picker.html' %}
+  <span id="ui-choice-hint">即時切換，保留目前條件與輸入</span>
+  <span class="sr-only" role="status" data-ui-status></span>
+  <noscript><span>啟用 JavaScript 可即時切換；也可由 <a href="{{ url_for('local.ui_lab') }}">UI Lab</a> 開啟各套方案。</span></noscript>
+</div>

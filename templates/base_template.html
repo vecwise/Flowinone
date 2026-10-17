@@ -1,6 +1,6 @@
 <!-- templates/base_template.html -->
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-ui="{{ ui_key }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,12 +12,15 @@
 
     {% block custom_style %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ui_pages.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui_variants.css') }}">
 
 </head>
 
 <body>
     <a class="skip-link" href="#main-content">跳到主要內容</a>
     {% include '_navbar.html' %}
+    {% include 'components/_ui_switcher.html' %}
     {% block page_content %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/ui_switcher.js') }}"></script>
 </body>
 </html>

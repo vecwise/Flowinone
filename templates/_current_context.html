@@ -8,7 +8,7 @@
   <details class="current-context-options">
     <summary>更多操作</summary>
     <div class="current-context-controls">
-      <label class="current-context-share"><span class="sr-only">目前條件的連結</span><input data-context-share-url value="{{ current_context.share_url }}" readonly></label>
+      <label class="current-context-share"><span class="sr-only">目前條件的連結</span><input data-context-share-url value="{{ current_context.share_url|ui_href }}" readonly></label>
       <button class="action-button" type="button" data-copy-context>複製連結</button>
       <a class="action-button" href="{{ current_context.clear_url }}">清除條件</a>
     </div>
