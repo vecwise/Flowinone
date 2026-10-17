@@ -279,3 +279,28 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 ## License
 
 Distributed under the [MIT License](LICENSE).
+
+## 書籤縮圖：共用流程與本機擴充
+
+新增 Chrome 書籤由 Thumbnail Worker 每 60 秒檢查並排入持久佇列；批次補圖也使用同一個 Worker、下載器、圖片驗證與快取。Web 與 Worker 需一起啟動。
+
+```bash
+conda run -n py3.11 flask --app run thumbnails-sync --missing
+conda run -n py3.11 flask --app run thumbnails-sync --missing --retry-failed --limit 20
+```
+
+`--missing` 也包含網站佔位圖。`--retry-failed` 立即重試缺圖項目並保留好封面；`--force` 則連已有封面也更新。已有 Worker 執行時，批次只排隊，由該 Worker 使用相同流程處理；命令的 `processed` 只計算當次執行的工作。
+
+Git 追蹤通用 metadata 解析、佇列、下載邊界、圖片處理與擴充介面。網域特例、個人資料來源與對應測試放在 Git 忽略的 `.flowinone_local/`，預設載入 `.flowinone_local/thumbnail_provider.py`；也可用 `FLOWINONE_LOCAL_THUMBNAIL_PROVIDER` 指定本機檔案。沒有該檔案時仍可解析標準頁面 metadata。
+
+本機擴充可提供以下 hooks（均非必填）：
+
+- `classify_url(url)`：回傳來源分類，無匹配時回傳 `None`。
+- `canonicalize_url(url)`：提供來源專用的穩定網址；遷移既有來源時需維持原有正規化結果，以沿用縮圖 ID。
+- `resolve(url, fetch_html)`：回傳 `ProviderResult`，包含候選圖片網址、最小寬度與快取期限。
+- `resolve_sources(url, media_id, store)`：回傳本機素材或既有 metadata 的候選 `ProviderResult`；來源路徑與索引只在本機擴充內處理。
+- `fetch_image(url, page_url, client)`：選擇本機連線策略；使用傳入的 `client.fetch_bytes(...)`，可指定 `headers` 與 `session_factory`，仍共用每網域限流、逐次 redirect 檢查和 byte 上限。無覆寫時回傳 `None`。
+
+`ProviderResult(provider, image_urls=(), local_paths=(), min_width=80, ttl_days=30)` 是共用資料介面；原有只提供 `provider` 和 `image_urls` 的擴充仍可使用。素材重用或圖片下載失敗後會嘗試下一候選；更新失敗保留既有好封面，並依佇列規則退避重試。
+
+本機擴充在 Worker 啟動時載入，修改規則後需重新啟動 Worker。公開測試使用假網域與臨時擴充檔，會隔離開發者本機規則與個人資料。

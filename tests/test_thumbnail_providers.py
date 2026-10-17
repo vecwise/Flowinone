@@ -16,11 +16,8 @@ def test_structured_metadata_order_and_no_arbitrary_image():
     assert "https://ads.example.com/do-not-use.jpg" not in urls
 
 
-def test_youtube_provider_does_not_fetch_html():
-    def fail_fetch(_):
-        raise AssertionError("YouTube provider should not request page HTML")
-
-    result = providers.provider_for_url("https://youtube.com/shorts/abcdefghijk", fail_fetch)
-    assert result.provider == "youtube"
-    assert result.image_urls[0].endswith("/maxresdefault.jpg")
-    assert result.image_urls[-1].endswith("/hqdefault.jpg")
+def test_without_local_rules_only_explicit_metadata_is_used():
+    html = '<img src="/advert.jpg"><meta property="og:image" content="/cover.jpg">'
+    result = providers.provider_for_url("https://example.com/article", lambda _: html)
+    assert result.provider == "metadata"
+    assert result.image_urls == ("https://example.com/cover.jpg",)

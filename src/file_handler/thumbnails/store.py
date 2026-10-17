@@ -346,6 +346,7 @@ class ThumbnailStore:
         excluded_domains: Optional[set[str]] = None,
         lease_seconds: int = 90,
         domain_filter: Optional[str] = None,
+        media_ids: Optional[Iterable[str]] = None,
     ) -> list[dict]:
         if limit <= 0:
             return []
@@ -355,6 +356,19 @@ class ThumbnailStore:
         lease_until = _timestamp(now + timedelta(seconds=lease_seconds))
         normalized_filter = (domain_filter or "").lower().strip().lstrip(".")
         claimed: list[dict] = []
+        filters = []
+        parameters = [now_text, now_text]
+        if normalized_filter:
+            filters.append("(domain=? OR substr(domain, -length(?)-1)='.' || ?)")
+            parameters.extend([normalized_filter] * 3)
+        if media_ids is not None:
+            filters.append("media_id IN (SELECT value FROM json_each(?))")
+            parameters.append(json.dumps(list(media_ids)))
+        excluded = set(excluded)
+        if excluded:
+            filters.append("domain NOT IN (SELECT value FROM json_each(?))")
+            parameters.append(json.dumps(sorted(excluded)))
+        extra = " AND " + " AND ".join(filters) if filters else ""
 
         conn = self.connect()
         try:
@@ -366,10 +380,11 @@ class ThumbnailStore:
                     (status IN ('queued', 'retry', 'paused') AND next_attempt_at <= ?)
                     OR (status='processing' AND lease_expires_at <= ?)
                 )
+                """ + extra + """
                 ORDER BY priority ASC, next_attempt_at ASC, created_at ASC
                 LIMIT 100
                 """,
-                (now_text, now_text),
+                parameters,
             ).fetchall()
             chosen_domains = set(excluded)
             for row in rows:
@@ -567,7 +582,7 @@ class ThumbnailStore:
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT m.id, m.canonical_url, m.original_url, t.local_path
+                SELECT m.id, m.canonical_url, m.original_url, t.local_path, t.source
                 FROM media_items m
                 LEFT JOIN thumbnails t ON t.media_id=m.id
                 WHERE m.source='bookmark'
@@ -582,7 +597,7 @@ class ThumbnailStore:
             if normalized_domain and host != normalized_domain and not host.endswith(f".{normalized_domain}"):
                 continue
             local_path = str(row["local_path"] or "")
-            if not force and local_path and os.path.isfile(local_path):
+            if not force and local_path and os.path.isfile(local_path) and row["source"] != "site-tile":
                 continue
             considered += 1
             if self.enqueue_job(str(row["id"]), priority=PRIORITY_MISSING, force=force):

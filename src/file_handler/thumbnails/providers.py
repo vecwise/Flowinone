@@ -1,4 +1,4 @@
-"""YouTube and structured-metadata thumbnail providers."""
+"""Standard page metadata and the optional machine-local provider contract."""
 
 from __future__ import annotations
 
@@ -10,13 +10,25 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from .extensions import resolve_local_provider
-from .urls import extract_youtube_id
 
 
 @dataclass(frozen=True)
 class ProviderResult:
     provider: str
-    image_urls: tuple[str, ...]
+    image_urls: tuple[str, ...] = ()
+    local_paths: tuple[str, ...] = ()
+    min_width: int = 80
+    ttl_days: int = 30
+
+
+def normalize_result(value) -> ProviderResult:
+    """Accept the original two-field extension contract as well as new hints."""
+    return ProviderResult(
+        str(value.provider), tuple(value.image_urls),
+        tuple(getattr(value, "local_paths", ())),
+        max(1, int(getattr(value, "min_width", 80))),
+        max(1, int(getattr(value, "ttl_days", 30))),
+    )
 
 
 def _iter_json_thumbnail_values(value) -> Iterable[str]:
@@ -89,17 +101,9 @@ def extract_structured_image_urls(html_text: str, page_url: str) -> tuple[str, .
 
 def provider_for_url(url: str, fetch_html: Callable[[str], str]) -> ProviderResult:
     """Resolve ordered candidate image URLs for one bookmark."""
-    video_id = extract_youtube_id(url)
-    if video_id:
-        base = f"https://i.ytimg.com/vi/{video_id}"
-        return ProviderResult(
-            "youtube",
-            (f"{base}/maxresdefault.jpg", f"{base}/sddefault.jpg", f"{base}/hqdefault.jpg"),
-        )
-
     local_result = resolve_local_provider(url, fetch_html)
     if local_result is not None:
-        return ProviderResult(str(local_result.provider), tuple(local_result.image_urls))
+        return normalize_result(local_result)
 
     html_text = fetch_html(url)
     return ProviderResult("metadata", extract_structured_image_urls(html_text, url))

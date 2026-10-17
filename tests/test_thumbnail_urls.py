@@ -5,30 +5,18 @@ import pytest
 from src.file_handler.thumbnails.urls import (
     UnsafeURLError,
     canonicalize_url,
-    extract_youtube_id,
     provider_name_for_url,
     validate_public_http_url,
 )
 
 
-@pytest.mark.parametrize(
-    ("url", "video_id"),
-    [
-        ("https://www.youtube.com/watch?v=abcdefghijk&t=20", "abcdefghijk"),
-        ("https://youtube.com/shorts/abcdefghijk?feature=share", "abcdefghijk"),
-        ("https://www.youtube.com/live/abcdefghijk", "abcdefghijk"),
-        ("https://youtu.be/abcdefghijk?si=tracking", "abcdefghijk"),
-    ],
-)
-def test_extract_youtube_variants(url, video_id):
-    assert extract_youtube_id(url) == video_id
-    assert canonicalize_url(url) == f"https://www.youtube.com/watch?v={video_id}"
+def test_generic_normalization_retains_content_queries():
+    assert canonicalize_url("HTTPS://Example.COM/article?item=1&utm_source=test#section") == "https://example.com/article?item=1"
 
 
 @pytest.mark.parametrize(
     ("url", "provider"),
     [
-        ("https://www.youtube.com/watch?v=abcdefghijk", "youtube"),
         ("https://example.com/article", "metadata"),
     ],
 )

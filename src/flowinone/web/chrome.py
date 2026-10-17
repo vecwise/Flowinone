@@ -20,7 +20,7 @@ from src.file_handler.thumbnails.store import (
     PRIORITY_VISIBLE,
     get_thumbnail_store,
 )
-from src.file_handler.thumbnails.worker import ThumbnailWorker
+from src.file_handler.thumbnails.batch import run_thumbnail_batch
 
 from .ui import render_source_browse, render_source_error
 
@@ -132,9 +132,10 @@ def register_commands(app) -> None:
     @app.cli.command("thumbnails-sync")
     @click.option("--missing", is_flag=True, help="Queue bookmarks without a local thumbnail.")
     @click.option("--force", is_flag=True, help="Refresh thumbnails even when a cache entry exists.")
+    @click.option("--retry-failed", is_flag=True, help="Retry missing covers immediately while retaining good covers.")
     @click.option("--domain", help="Only process one hostname or parent domain.")
     @click.option("--limit", type=click.IntRange(min=1), help="Maximum bookmarks to process.")
-    def thumbnails_sync(missing, force, domain, limit):
+    def thumbnails_sync(missing, force, retry_failed, domain, limit):
         store = get_thumbnail_store()
         registered = 0
         for bookmark in iter_chrome_bookmark_records():
@@ -145,16 +146,14 @@ def register_commands(app) -> None:
                 enqueue_missing=False,
             )
             registered += 1
-        queue_result = store.sync_missing(force=force, domain=domain, limit=limit)
-        processed = ThumbnailWorker(
-            store=store, domain_filter=domain
-        ).run_until_idle(max_jobs=limit)
+        queue_result = run_thumbnail_batch(store=store, force=force, retry_failed=retry_failed,
+                                          domain=domain, limit=limit)
+        queue_result.pop("items")
         click.echo(
             json.dumps(
                 {
                     "registered": registered,
                     "missing_only": bool(missing or not force),
-                    "processed": processed,
                     **queue_result,
                 },
                 ensure_ascii=False,

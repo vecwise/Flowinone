@@ -28,11 +28,11 @@ def _old_database(path, media_id, image_path):
         """
     )
     conn.execute(
-        "INSERT INTO media_items(id, source, original_url, title, media_type, sub_type) VALUES (?, 'bookmark', ?, 'Old', 'bookmark', 'youtube')",
-        (media_id, "https://www.youtube.com/watch?v=abcdefghijk"),
+        "INSERT INTO media_items(id, source, original_url, title, media_type, sub_type) VALUES (?, 'bookmark', ?, 'Old', 'bookmark', 'legacy-provider')",
+        (media_id, "https://example.com/legacy-video"),
     )
     conn.execute(
-        "INSERT INTO thumbnails(media_id, local_path, source) VALUES (?, ?, 'youtube')",
+        "INSERT INTO thumbnails(media_id, local_path, source) VALUES (?, ?, 'legacy-provider')",
         (media_id, str(image_path)),
     )
     conn.commit()
@@ -118,10 +118,10 @@ def test_thumbnail_providers_only_include_existing_cached_files(tmp_path):
     assert store.get_thumbnail_providers([tile.media_id, image.media_id]) == {tile.media_id: "site-tile"}
 
 
-def test_queue_deduplicates_canonical_youtube_urls(tmp_path):
+def test_queue_deduplicates_canonical_urls(tmp_path):
     store = ThumbnailStore(str(tmp_path / "cache.db"), str(tmp_path / "thumbs"))
-    first = store.register_bookmark("https://youtu.be/abcdefghijk?si=one", "First")
-    second = store.register_bookmark("https://youtube.com/shorts/abcdefghijk", "Second")
+    first = store.register_bookmark("https://example.com/article?utm_source=one", "First")
+    second = store.register_bookmark("https://example.com/article#section", "Second")
 
     assert first.media_id == second.media_id
     with store.connect() as conn:

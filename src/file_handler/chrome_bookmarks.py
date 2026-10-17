@@ -10,7 +10,7 @@ from src.flowinone.config import CHROME_BOOKMARK_PATH
 from .media_cache import lookup_thumbnail_for_bookmark
 from .models import BookmarkError, BookmarkNotFound, MediaEntry, PageMetadata
 from .paths import DEFAULT_THUMBNAIL_ROUTE
-from .thumbnails.urls import extract_youtube_id
+from .thumbnails.urls import provider_name_for_url
 
 
 FOCUS_MODES_FILE = Path("data") / "focus_modes.json"
@@ -520,8 +520,7 @@ def get_chrome_youtube_bookmarks():
                 _walk(child, new_path)
         elif node_type == "url":
             url = node.get("url")
-            video_id = extract_youtube_id(url)
-            if not video_id:
+            if provider_name_for_url(url) != "youtube":
                 return
             label = node.get("name") or url
             folder_meta = {"folder_path": " / ".join(filter(None, path_labels))}

@@ -38,3 +38,18 @@ def resolve(url, fetch_html):
         assert result.image_urls == ("https://cdn.example.com/cover.jpg",)
     finally:
         extensions.load_local_provider.cache_clear()
+
+
+def test_local_normalization_preserves_cache_identity(monkeypatch, tmp_path):
+    from src.file_handler.thumbnails.store import ThumbnailStore
+    from src.file_handler.thumbnails.urls import canonicalize_url
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(extensions, "load_local_provider", lambda: SimpleNamespace(
+        canonicalize_url=lambda url: "https://canonical.example/item/123" if "/alias/" in url else None
+    ))
+    store = ThumbnailStore(str(tmp_path / "cache.db"), str(tmp_path / "thumbs"))
+    one = store.register_bookmark("https://example.com/alias/123", "One")
+    two = store.register_bookmark("https://canonical.example/item/123", "Two")
+    assert one.media_id == two.media_id
+    assert canonicalize_url("https://other.example/page?utm_source=one") == "https://other.example/page"

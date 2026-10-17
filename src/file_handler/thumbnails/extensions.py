@@ -59,10 +59,38 @@ def resolve_local_provider(url: str, fetch_html: Callable[[str], str]):
     return hook(url, fetch_html)
 
 
+def canonicalize_local_url(url: str) -> Optional[str]:
+    module = load_local_provider()
+    hook = getattr(module, "canonicalize_url", None) if module else None
+    if not callable(hook):
+        return None
+    try:
+        value = hook(url)
+        return str(value) if value else None
+    except Exception:
+        LOGGER.exception("Machine-local URL normalization failed")
+        return None
+
+
+def resolve_local_sources(url: str, media_id: str, store):
+    module = load_local_provider()
+    hook = getattr(module, "resolve_sources", None) if module else None
+    return hook(url, media_id, store) if callable(hook) else None
+
+
+def fetch_local_image(url: str, page_url: str, client):
+    module = load_local_provider()
+    hook = getattr(module, "fetch_image", None) if module else None
+    return hook(url, page_url, client) if callable(hook) else None
+
+
 __all__ = [
     "DEFAULT_LOCAL_PROVIDER_PATH",
     "LOCAL_PROVIDER_ENV",
     "classify_local_url",
     "load_local_provider",
     "resolve_local_provider",
+    "canonicalize_local_url",
+    "resolve_local_sources",
+    "fetch_local_image",
 ]
