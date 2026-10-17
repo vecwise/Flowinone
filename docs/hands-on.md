@@ -299,7 +299,7 @@ rg -n 'def update_item_db_route|def update_item_database|def _sync_local|def cat
 | D | 開 `/navigator/?scope=all&source=bookmarks&sort=title&view=list&limit=12`；搜尋一個確定存在的詞，選一個有結果的類型，按「套用」，再點主題 | URL 保留 `scope=all`、`source=bookmarks`、`q`、`type`、`sort=title`、`view=list`、`limit=12`；來源不擴大，搜尋框與類型不清空，閱讀模式不改變。收藏、尚未瀏覽、資料夾、日期、影片長度條件若原本存在也保留。若沒有主題可點，先放寬篩選。 |
 | E | Eagle 離線時開 `/navigator/?scope=all&source=bookmarks&source=eagle&sort=random&seed=23&view=list`，點任一有結果的主題，再展開「更多篩選」 | 兩個 `source`、`sort=random`、`seed=23`、`view=list` 都保留，Eagle 仍被勾選；實際結果暫時略過離線 Eagle，沒有偷偷取消來源。若原本已有同一個主題的「常用條件」，重點該主題仍保留 `context`；切換不同主題則移除不再相符的命名脈絡。 |
 | F | 開 `/navigator/?scope=all&limit=1`，點第一張主題卡的第 2 或第 3 個預覽項目 | URL 可把 `limit` 提高到 `3`，目標 `#item-...` 卡片確實存在。 |
-| G | 回到 F 的原網址，往下點「載入下一批」 | URL 有 `cursor`，保留主題入口但沒有預覽。再點主題時 cursor 清除，進入該主題第一批。 |
+| G | 回到 F 的原網址，往下點「載入下一批」 | URL 有 `cursor`，來源勾選（包括離線 Eagle）與其他篩選保留；主題入口仍在，但沒有預覽。再點主題時 cursor 清除，進入該主題第一批。 |
 
 **數量與空結果：** 主題筆數依目前條件計算；沒有已同步標籤、被隱藏／刪除、只有失效 origin，或候選主題皆不符篩選時，不應顯示那些主題。只檢查前 6 個候選，因此沒有主題不一定代表整個 Catalog 都沒有標籤。
 

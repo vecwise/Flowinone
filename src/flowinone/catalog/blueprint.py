@@ -329,7 +329,7 @@ def navigator_page():
         payload["total_estimate"] = len(payload["items"])
     next_url = None
     if payload["next_cursor"]:
-        next_url = _navigator_url(effective_query, cursor=payload["next_cursor"])
+        next_url = _navigator_url(query, cursor=payload["next_cursor"])
     scope_sources = NAVIGATOR_SCOPE_SOURCES[query.scope]
     folder_children = service.folder_children(query.folder)
     folder_crumbs = []

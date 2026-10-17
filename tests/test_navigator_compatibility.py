@@ -205,6 +205,27 @@ def test_same_topic_keeps_named_context_when_eagle_is_offline(client, topic_cata
             assert "context" not in parse_qs(urlsplit(link["href"]).query)
 
 
+def test_paging_and_following_topics_keep_offline_source_selection(client, topic_catalog):
+    path = (
+        "/navigator/?scope=all&source=local&source=eagle&q=Design&type=image"
+        "&sort=random&seed=23&view=list&limit=1"
+    )
+    for _ in range(2):
+        soup = BeautifulSoup(client.get(path).data, "html.parser")
+        assert soup.select_one('input[name="source"][value="eagle"][checked]') is not None
+        links = [soup.select_one(".gallery-pagination a"), *_topic_links(soup)]
+        assert links and links[0] is not None
+        for link in links:
+            params = parse_qs(urlsplit(link["href"]).query)
+            assert params["source"] == ["local", "eagle"]
+            assert params["q"] == ["Design"]
+            assert params["type"] == ["image"]
+            assert params["sort"] == ["random"]
+            assert params["seed"] == ["23"]
+            assert params["view"] == ["list"]
+        path = links[0]["href"]
+
+
 def test_topic_previews_are_stable_and_do_not_repeat_on_next_batch(client, topic_catalog):
     _database, ids = topic_catalog
     path = "/navigator/?scope=gallery&source=local&limit=1"
