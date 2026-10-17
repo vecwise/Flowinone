@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Iterator, Optional
@@ -24,6 +24,11 @@ class BookmarkRecord:
     captured_at: str = ""
     source_key: Optional[str] = None
     source: str = "chrome_json"
+    guid: str = ""
+    chrome_id: str = ""
+    date_added: str = ""
+    folder_guids: tuple[str, ...] = ()
+    source_path: str = ""
 
     def normalized_capture_time(self) -> str:
         return self.captured_at or utc_now_text()
@@ -50,14 +55,15 @@ def iter_chrome_json_bookmarks(payload: dict) -> Iterator[BookmarkRecord]:
     if not isinstance(roots, dict):
         raise ValueError("Chrome JSON 缺少 roots 物件")
 
-    def walk(node: dict, labels: list[str]) -> Iterator[BookmarkRecord]:
+    def walk(node: dict, labels: list[str], guids: tuple[str, ...]) -> Iterator[BookmarkRecord]:
         node_type = node.get("type")
         if node_type == "folder":
             label = str(node.get("name") or "(未命名資料夾)").strip()
             next_labels = labels + ([label] if label else [])
+            next_guids = guids + (str(node.get("guid") or ""),)
             for child in node.get("children") or []:
                 if isinstance(child, dict):
-                    yield from walk(child, next_labels)
+                    yield from walk(child, next_labels, next_guids)
             return
         if node_type == "url" and node.get("url"):
             url = str(node["url"])
@@ -68,6 +74,10 @@ def iter_chrome_json_bookmarks(payload: dict) -> Iterator[BookmarkRecord]:
                 captured_at=chrome_time_to_iso(node.get("date_added")),
                 source_key=str(node.get("guid") or node.get("id") or "") or None,
                 source="chrome_json",
+                guid=str(node.get("guid") or ""),
+                chrome_id=str(node.get("id") or ""),
+                date_added=str(node.get("date_added") or ""),
+                folder_guids=guids,
             )
 
     for key in ("bookmark_bar", "other", "synced", "mobile"):
@@ -77,7 +87,7 @@ def iter_chrome_json_bookmarks(payload: dict) -> Iterator[BookmarkRecord]:
         root_label = str(root.get("name") or key.replace("_", " ").title()).strip()
         for child in root.get("children") or []:
             if isinstance(child, dict):
-                yield from walk(child, [root_label])
+                yield from walk(child, [root_label], (str(root.get("guid") or ""),))
 
 
 def _unix_seconds_to_iso(raw: object) -> str:
@@ -140,7 +150,8 @@ def load_bookmarks(path: Path, format_hint: Optional[str] = None) -> Iterable[Bo
     if selected in {"html", "htm"}:
         return list(iter_netscape_bookmark_html(raw))
     payload = json.loads(raw)
-    return list(iter_chrome_json_bookmarks(payload))
+    return [replace(record, source_path=str(path.expanduser().resolve()))
+            for record in iter_chrome_json_bookmarks(payload)]
 
 
 __all__ = [

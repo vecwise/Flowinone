@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from collections import Counter
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -15,6 +16,8 @@ from .jobs import JobQueue
 from .models import AppState, utc_now_text
 from .projection import refresh_all_resource_catalog, refresh_resource_catalog
 from .repository import ResourceRepository
+from src.flowinone.bookmarks.identity import record_dict, reconcile_bound_bookmarks, registry_exists
+from sqlalchemy import text
 
 
 @dataclass
@@ -22,6 +25,8 @@ class ImportSummary:
     total: int = 0
     created: int = 0
     duplicates: int = 0
+    skipped: int = 0
+    conflicts: int = 0
     failed: int = 0
     jobs_queued: int = 0
     errors: list[dict] | None = None
@@ -71,9 +76,30 @@ class ResourceService:
             self.link_thumbnail_cache if link_thumbnails is None else link_thumbnails
         )
         summary = ImportSummary(errors=[])
+        records = list(records)
         with self.database.session(write=True) as session:
-            for record in records:
+            observations = [record_dict(record) for record in records]
+            source_path = next((r["source_path"] for r in observations if r.get("source_path")), "")
+            if source_path and registry_exists(session.connection()) and session.execute(
+                text("SELECT 1 FROM bookmark_sources WHERE bookmark_path=:path"), {"path": source_path}
+            ).scalar():
+                from src.flowinone.bookmarks.backfill import read_bookmarks
+                complete, _ = read_bookmarks(Path(source_path))
+                def identities(items):
+                    return Counter((r.get("guid"), r.get("chrome_id"), r["url"], r["folder_path"])
+                                   for r in items)
+                if identities(complete) != identities(observations):
+                    raise ValueError("Bound bookmark import needs the unchanged, complete source snapshot")
+            reconciled = reconcile_bound_bookmarks(session.connection(), observations, source_path)
+            summary.duplicates += reconciled["matched"]
+            summary.conflicts += reconciled["conflicts"]
+            summary.skipped += len(reconciled["handled"]) - reconciled["matched"] - reconciled["conflicts"]
+            for index, record in enumerate(records):
                 summary.total += 1
+                if index in reconciled["handled"]:
+                    # The approved registry alone owns these imports. Held and
+                    # excluded nodes cannot fall through to URL-based inserts.
+                    continue
                 try:
                     created = False
                     queued_for_record = 0

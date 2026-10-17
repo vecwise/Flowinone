@@ -238,13 +238,14 @@ def iter_chrome_bookmark_records():
     bookmarks = _load_chrome_bookmarks()
     roots = bookmarks.get("roots", {})
 
-    def _walk(node: dict, path_labels: List[str]):
+    def _walk(node: dict, path_labels: List[str], folder_guids: List[str]):
         node_type = node.get("type")
         if node_type == "folder":
             label = node.get("name") or "(未命名資料夾)"
             current_path = path_labels + [label]
+            current_guids = folder_guids + [str(node.get("guid") or "")]
             for child in node.get("children", []) or []:
-                yield from _walk(child, current_path)
+                yield from _walk(child, current_path, current_guids)
         elif node_type == "url" and node.get("url"):
             url = str(node["url"])
             meta_info = node.get("meta_info") if isinstance(node.get("meta_info"), dict) else {}
@@ -253,12 +254,17 @@ def iter_chrome_bookmark_records():
                 "title": node.get("name") or url,
                 "folder_path": " / ".join(path_labels),
                 "description": node.get("description") or meta_info.get("description") or "",
+                "guid": str(node.get("guid") or ""),
+                "chrome_id": str(node.get("id") or ""),
+                "date_added": str(node.get("date_added") or ""),
+                "folder_guids": folder_guids,
+                "source_path": str(Path(CHROME_BOOKMARK_PATH).expanduser().resolve()),
             }
 
     for key in ("bookmark_bar", "other", "synced", "mobile"):
         root = roots.get(key)
         if root:
-            yield from _walk(root, [])
+            yield from _walk(root, [], [])
 
 
 def _find_chrome_node(bookmarks_root, path_parts):

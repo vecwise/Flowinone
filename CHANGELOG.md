@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-18
+
+### Added
+
+- Scoped Chrome guid/id bindings that retain existing Catalog and Resources IDs when bookmark URLs change. Shared rows with diverging URLs or an occupied destination are held for review without automatic splitting or merging.
+- Standalone read-only backfill previews, explicit plan-digest confirmation, backup before migration, and transactional application. Source changes or edited previews require revalidation.
+
+
 ## 2026-10-04
 
 ### Fixed

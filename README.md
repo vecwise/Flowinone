@@ -127,6 +127,34 @@ Web 不會自動啟動 worker。只開 A 可以讀取已有資料，但排隊工
 
 Chrome 來源預設讀平台的 Default profile `Bookmarks` 檔；若它不存在，會讀同資料夾的 `AccountBookmarks` JSON，不會使用備份或加密檔。Resources 匯入、Chrome 瀏覽、Catalog 同步與背景偵測共用這個路徑。要固定使用其他 profile 或書籤檔，可在 `config.json` 加入 `"CHROME_BOOKMARK_PATH": "/完整路徑/AccountBookmarks"`，或設定優先於它的 `FLOWINONE_CHROME_BOOKMARK_PATH` 環境變數；修改後重新啟動 Web 與 Worker。若 `Bookmarks` 和 `AccountBookmarks` 都存在，預設保留 `Bookmarks`；可用上述設定指定帳戶書籤。若只要把其他書籤檔匯入 **Resources**，可用 `resources-sync --path`，不會改變 Chrome 來源路徑。Eagle 來源需要 Eagle app 正在執行。此服務只設計給本機 loopback 使用，沒有多使用者認證，請勿透過 LAN／proxy／tunnel 對外開放。
 
+### Chrome guid/id 對應與回填
+
+書籤身分對應採用 Chrome profile、local/account 儲存區和 guid（id 作為備援），保留既有 Catalog／Resources 主鍵。這是明確啟用的功能：migration 本身不回填資料，只有已檢閱的名單會建立 binding。已登記範圍內不在名單的書籤先略過；共用 row 網址分歧、目標網址已有其他 row、切換 profile／儲存區或有擷取任務正在執行時，會保留既有資料並記錄衝突，不會拆分或合併。資料夾位置更新不會刪除原標籤。`catalog-sync` 回傳 `identity_matched`、`identity_conflicts`、`identity_excluded`；Resources 匯入回傳 `conflicts` 和 `skipped`。
+
+先用唯讀預檢報告的 `all-bookmarks.json` 作為基準；其中只有 `classification=matched` 的書籤會列入回填。獨立預覽指令不啟動 Flask、不升級資料庫、不排入網路工作，也不寫 Chrome 書籤。它將資料庫和已提交 WAL 讀入記憶體，查詢只發生在記憶體副本：
+
+```bash
+conda run -n py3.11 python -B scripts/bookmark_bindings.py preview \
+  --database /path/to/flowinone.sqlite3 \
+  --bookmarks /path/to/Default/AccountBookmarks \
+  --baseline /path/to/all-bookmarks.json \
+  --output /path/to/new-preview.json
+```
+
+檢閱預覽中的 counts、bindings、conflicts 與 approval_digest。正式套用前停止 Web／Worker，避免舊同步程序同時寫入。**只有確認寫入後**才使用以下命令；它會先再次驗證預覽，建立資料庫備份、升級 schema，再於單一寫入交易中回填。來源檔、既有 row、收藏、標籤或來源關聯若已改變，必須重新預覽；修改 JSON 也會使核對失敗。
+
+```bash
+conda run -n py3.11 python -B scripts/bookmark_bindings.py apply \
+  --database /path/to/flowinone.sqlite3 \
+  --bookmarks /path/to/Default/AccountBookmarks \
+  --baseline /path/to/all-bookmarks.json \
+  --plan /path/to/new-preview.json --confirm-plan DIGEST_FROM_REVIEWED_PREVIEW
+```
+
+套用時只新增來源登記、binding 與來源紀錄，將已被取代的舊書籤來源標為歷史；不刪除或重建內容 row，不改內容網址、收藏或標籤。成功後可重新啟動 Web／Worker。重跑先產生新預覽，已綁定的書籤不會再次新增。往後網址變更會更新原 row 並保存歷史；Resources 首次收錄的 original_url 保留，canonical_url 反映目前網址。綁定中的網址不會被背景 metadata 抓取自行改寫，舊待處理工作會在網址更新時取消。
+
+migration 0013 尚未套用時，新版 Web／Worker 仍會遵循既有 schema 檢查；不要在檢閱回填前以啟動程式代替 migration。需要復原已回填的資料時使用套用前備份，migration 不允許直接丟棄已有 binding 的表。
+
 ### 第一次開起來沒有素材？
 
 1. 到 `/item_db` 按「同步索引」，把本機檔案寫進 `item_db.db`。

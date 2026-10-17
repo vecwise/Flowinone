@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import fitz
 from PIL import Image
 from sqlalchemy import select, update
+from sqlalchemy import text
 
 from src.file_handler.thumbnails.store import get_thumbnail_store
 from src.file_handler.thumbnails.worker import DomainRateLimiter, SafeHTTPClient
@@ -179,6 +180,10 @@ class EnrichmentService:
             stored = session.get(Resource, resource_id)
             if stored is None:
                 raise ResourceNotFound(resource_id)
+            if stored.canonical_url != resource.canonical_url:
+                # The bookmark moved while this request was in flight. Discard
+                # metadata from the old URL rather than reverting the binding.
+                return metadata
             if metadata.canonical_url:
                 try:
                     canonical = normalize_resource_url(metadata.canonical_url)
@@ -189,7 +194,12 @@ class EnrichmentService:
                             Resource.id != resource_id,
                         )
                     )
-                    if collision is None:
+                    from src.flowinone.bookmarks.identity import registry_exists
+                    bound = registry_exists(session.connection()) and session.execute(
+                        text("SELECT 1 FROM bookmark_bindings WHERE resource_id=:id LIMIT 1"),
+                        {"id": resource_id},
+                    ).scalar()
+                    if collision is None and not bound:
                         stored.canonical_url = canonical
                         stored.url_hash = candidate_hash
                         stored.domain = (urlsplit(canonical).hostname or stored.domain or "").lower()

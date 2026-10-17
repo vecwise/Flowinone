@@ -246,6 +246,8 @@ class ResourceVersionDiffOutput(ApiOutput):
 class ImportSummaryOutput(ApiOutput):
     created: int = 0
     duplicates: int = 0
+    skipped: int = 0
+    conflicts: int = 0
     failed: int = 0
     jobs_queued: int = 0
     errors: list[dict[str, Any]] = []

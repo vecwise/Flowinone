@@ -25,6 +25,7 @@ from .browse import CatalogService
 from .eagle_sync import EagleSyncMixin
 from .locking import database_is_locked
 from .query import CATALOG_SOURCES, _normalize_tag
+from src.flowinone.bookmarks.identity import reconcile_bound_bookmarks, registry_exists
 
 LOGGER = logging.getLogger(__name__)
 CATALOG_LOCK_MAX_RETRIES = 3
@@ -230,8 +231,19 @@ class CatalogSyncService(EagleSyncMixin):
             {"resource_id": resource_id} if resource_id else {},
         ).mappings()
         count = 0
+        bound_resources = {}
+        if registry_exists(conn):
+            bound_resources = {row["resource_id"]: dict(row) for row in conn.execute(text(
+                "SELECT b.resource_id,b.canonical_url,i.identity_key FROM bookmark_bindings b "
+                "JOIN catalog_items i ON i.id=b.catalog_item_id"
+            )).mappings()}
         for row in rows:
             identity, canonical = self._url_identity(row["canonical_url"])
+            # Bound Resources and their Catalog rows move together. A stale
+            # enrichment result must never create a second URL projection.
+            bound = bound_resources.get(row["id"])
+            if bound and (canonical != bound["canonical_url"] or identity != bound["identity_key"]):
+                raise ValueError("Bound resource URL must be reconciled through its bookmark identity")
             tags = [(tag, "resource") for tag in str(row["tag_names"] or "").split(",") if tag]
             extracted = ""
             if row["latest_content_path"]:
@@ -259,8 +271,21 @@ class CatalogSyncService(EagleSyncMixin):
         return count
 
     def _sync_bookmarks(self, conn) -> int:
-        count = 0
-        for record in iter_chrome_bookmark_records():
+        records = list(iter_chrome_bookmark_records())
+        source_path = next((str(r.get("source_path")) for r in records if r.get("source_path")), "")
+        if not source_path:
+            from src.file_handler.chrome_bookmarks import CHROME_BOOKMARK_PATH
+            source_path = CHROME_BOOKMARK_PATH
+        reconciled = reconcile_bound_bookmarks(conn, records, source_path)
+        self._bookmark_identity_counts = {
+            "identity_matched": reconciled["matched"],
+            "identity_conflicts": reconciled["conflicts"],
+            "identity_excluded": len(reconciled["handled"]) - reconciled["matched"] - reconciled["conflicts"],
+        }
+        count = reconciled["matched"] + reconciled["conflicts"]
+        for index, record in enumerate(records):
+            if index in reconciled["handled"]:
+                continue
             url = str(record.get("url") or "")
             if not url:
                 continue
@@ -442,6 +467,8 @@ class CatalogSyncService(EagleSyncMixin):
                             if key not in {"count", "synced_at"}
                         },
                     }
+                    if source == "bookmarks":
+                        completed.update(getattr(self, "_bookmark_identity_counts", {}))
                     self._publish_status(source, **completed)
                     result[source] = {
                         key: value
