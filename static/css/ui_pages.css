@@ -1,4 +1,4 @@
-/* Shared rules for browse, detail, manage and compare. Source modules inherit these tokens. */
+/* Shared rules for browse, detail and manage. Source modules inherit these tokens. */
 [hidden] { display: none !important; }
 [data-page-family] { min-width: 0; }
 [data-page-family] h1, [data-page-family] h2, [data-page-family] h3 { overflow-wrap: anywhere; }
@@ -38,8 +38,32 @@
 .gallery-grid[data-gallery-view="list"] .gallery-card-description { -webkit-line-clamp: 6; }
 .resource-reader, .resource-code { max-width: 100%; overflow-wrap: anywhere; }
 .data-table-wrap { max-width: 100%; overflow-x: auto; }
-.compare-page .resource-version-form { flex-wrap: wrap; }
+.resource-versions-page .resource-version-form { flex-wrap: wrap; }
+.route-guide-intro p { margin: 0 0 12px; color: var(--fo-muted-text); line-height: 1.65; }
+.route-guide-intro strong { color: var(--fo-text); }
+.route-guide-jumps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.route-guide-jumps span { margin-left: 8px; font-variant-numeric: tabular-nums; }
+.route-guide-group, #local-maintenance { scroll-margin-top: 112px; }
+.route-guide-group-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
+.route-guide-group-heading h2 { margin: 0; font-size: 1.2rem; }
+.route-guide-group-heading > code { color: var(--fo-muted-text); }
+.route-guide-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--fo-border); border-radius: 12px; background: var(--fo-surface); overflow: hidden; }
+.route-guide-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 20px; }
+.route-guide-row + .route-guide-row { border-top: 1px solid var(--fo-border); }
+.route-guide-description { min-width: 0; }
+.route-guide-description h3 { margin: 0 0 8px; font-size: 1rem; }
+.route-guide-path, .route-guide-template, .route-guide-note { margin: 6px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.route-guide-path code { font-size: .9rem; }
+.route-guide-method { display: inline-block; margin-right: 6px; font-family: monospace; font-size: .78rem; font-weight: 700; color: var(--fo-primary); }
+.route-guide-template, .route-guide-note { font-size: .88rem; color: var(--fo-muted-text); }
+.route-guide-actions { display: grid; justify-items: end; gap: 12px; }
+.route-guide-actions .action-row { justify-content: end; }
+.route-guide-status { padding: 4px 8px; border: 1px solid var(--fo-border); border-radius: 6px; color: var(--fo-muted-text); background: var(--fo-muted); font-size: .8rem; }
+.route-guide-status.is-ready { color: var(--fo-success); background: var(--fo-surface); }
 @media (max-width: 760px) {
+  .route-guide-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .route-guide-actions { justify-items: start; }
+  .route-guide-actions .action-row { justify-content: start; }
   .ui-page-header { align-items: start; flex-direction: column; gap: 12px; padding: 14px; }
   .ui-page-header .action-row { width: 100%; }
   .ui-detail-layout { grid-template-columns: minmax(0, 1fr); }
@@ -50,10 +74,10 @@
   .catalog-sync-status li, .catalog-watch-status li { grid-template-columns: minmax(0, 1fr) auto; }
   .catalog-sync-status li small, .catalog-watch-status li small { grid-column: 1 / -1; overflow-wrap: anywhere; }
   .resource-version-form select { width: 100%; min-width: 0; }
-  .compare-page .resource-version-form { grid-template-columns: minmax(0, 1fr); }
-  .compare-page .resource-version-form > label,
-  .compare-page .resource-version-form > select,
-  .compare-page .resource-version-form > button { grid-column: 1; grid-row: auto; }
+  .resource-versions-page .resource-version-form { grid-template-columns: minmax(0, 1fr); }
+  .resource-versions-page .resource-version-form > label,
+  .resource-versions-page .resource-version-form > select,
+  .resource-versions-page .resource-version-form > button { grid-column: 1; grid-row: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

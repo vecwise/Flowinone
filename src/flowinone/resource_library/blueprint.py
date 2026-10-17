@@ -239,7 +239,7 @@ def resource_versions(resource_id: str):
             comparison_error = str(exc)
     current_context = _resource_current_context(resource_id)
     return render_template(
-        "compare.html", comparison_kind="versions",
+        "detail.html", detail_view="versions", current_context=current_context,
         title=f"內容版本 · {resource['title']} · Flowinone",
         resource=resource,
         versions=versions,

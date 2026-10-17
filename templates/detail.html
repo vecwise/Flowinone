@@ -1,17 +1,28 @@
 {% extends 'base_template.html' %}
+{% set showing_versions = detail_view == 'versions' %}
 {% block custom_style %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/resource_library.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/current_context.css') }}">
 {% endblock %}
 {% block page_content %}
-<main id="main-content" class="container gallery-page detail-page resource-page" data-page-family="detail">
+<main id="main-content" class="container gallery-page detail-page resource-page{% if showing_versions %} resource-versions-page{% endif %}" data-page-family="detail">
   {% if notice %}<div class="resource-alert is-success" role="status">{{ notice }}</div>{% endif %}
   {% if error %}<div class="resource-alert is-error" role="alert">{{ error }}</div>{% endif %}
-  {% with page_heading=detail.title, page_description=detail.source_label, page_links=[] if current_context else [{'label': '返回收藏', 'url': detail.parent_url}] %}{% include 'components/_page_header.html' %}{% endwith %}
+  {% with page_heading='內容版本與差異' if showing_versions else detail.title, page_description=resource.title if showing_versions else detail.source_label, page_links=[{'label': '返回資源', 'url': detail_return_url}] if showing_versions else ([] if current_context else [{'label': '返回收藏', 'url': detail.parent_url}]) %}{% include 'components/_page_header.html' %}{% endwith %}
   {% include '_current_context.html' %}
-  {% with preview=false %}{% include 'components/_detail_content.html' %}{% endwith %}
-  {% if detail.kind == 'resource' %}{% include 'components/_detail_resource_tools.html' %}{% endif %}
+  {% if showing_versions or detail.kind == 'resource' %}
+  <nav class="mode-tabs" aria-label="資源詳情檢視">
+    <a class="mode-pill{% if not showing_versions %} is-active{% endif %}" href="{{ url_for('resource_library.resource_detail', resource_id=resource.id, return_to=current_context.return_url if current_context else none) }}" {% if not showing_versions %}aria-current="page"{% endif %}>內容</a>
+    <a class="mode-pill{% if showing_versions %} is-active{% endif %}" href="{{ url_for('resource_library.resource_versions', resource_id=resource.id, return_to=current_context.return_url if current_context else none) }}" {% if showing_versions %}aria-current="page"{% endif %}>版本差異</a>
+  </nav>
+  {% endif %}
+  {% if showing_versions %}
+    {% include 'components/_version_comparison.html' %}
+  {% else %}
+    {% with preview=false %}{% include 'components/_detail_content.html' %}{% endwith %}
+    {% if detail.kind == 'resource' %}{% include 'components/_detail_resource_tools.html' %}{% endif %}
+  {% endif %}
 </main>
 <script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
 {% endblock %}

@@ -38,7 +38,23 @@
     {% if browse.next_url %}<a class="action-button primary" data-browse-link href="{{ browse.next_url }}">載入下一批</a>{% endif %}
   </nav>{% endif %}
   <p id="thumbnailSyncStatus" class="sr-only" aria-live="polite"></p>
-{% if browse.kind == 'catalog' %}{% include 'components/_recent_sessions.html' %}{% endif %}
+{% if browse.kind == 'catalog' %}
+{% if recent_sessions %}
+  <section class="navigator-sessions" aria-labelledby="navigator-sessions-heading">
+    <div class="gallery-results-heading"><div><h2 id="navigator-sessions-heading">接著逛</h2></div></div>
+    <div class="navigator-session-grid">
+      {% for session in recent_sessions %}
+      <a class="navigator-session-card" href="{{ session.url }}">
+        <span class="navigator-session-meta">{{ session.updated_display }}</span>
+        <h3>{{ session.query.q or '篩選瀏覽' }}</h3>
+        {% if session.focused_title %}<p>上次看到：{{ session.focused_title }}</p>{% endif %}
+        <p>{{ session.summary }}</p>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+{% endif %}
 </main>
 {% if browse.kind == 'catalog' %}{% include 'components/_catalog_extras.html' %}{% endif %}
 {% if browse.kind != 'catalog' %}<script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>{% endif %}

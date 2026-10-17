@@ -1,9 +1,11 @@
-{% set managing = request.endpoint in ['local.content_library', 'local.view_item_db', 'local.update_item_db_route', 'local.update_thumbnails_route', 'local.clear_thumbnails_route', 'resource_library.resource_index', 'resource_library.resource_versions', 'catalog.duplicate_review_page'] %}
+{% set managing = request.endpoint in ['local.content_library', 'local.view_item_db', 'local.update_item_db_route', 'local.update_thumbnails_route', 'local.clear_thumbnails_route', 'resource_library.resource_index', 'catalog.duplicate_review_page'] %}
+{% set testing_routes = request.endpoint == 'local.route_guide' %}
 <nav class="app-nav" aria-label="主要導覽">
   <a class="app-brand" href="{{ url_for('catalog.navigator_page', scope='all') }}" aria-label="Flowinone 我的收藏"><span class="app-brand-mark" aria-hidden="true">F</span><span><strong>Flowinone</strong><small>自己的收藏，接著逛</small></span></a>
   <div class="nav-links">
-    <a class="{{ 'is-active' if not managing else '' }}" href="{{ url_for('catalog.navigator_page', scope='all') }}" {% if not managing %}aria-current="page"{% endif %}>我的收藏</a>
+    <a class="{{ 'is-active' if not managing and not testing_routes else '' }}" href="{{ url_for('catalog.navigator_page', scope='all') }}" {% if not managing and not testing_routes %}aria-current="page"{% endif %}>我的收藏</a>
     <a class="{{ 'is-active' if managing else '' }}" href="{{ url_for('local.content_library') }}" {% if managing %}aria-current="page"{% endif %}>管理收藏</a>
+    <a class="{{ 'is-active' if testing_routes else '' }}" href="{{ url_for('local.route_guide') }}" {% if testing_routes %}aria-current="page"{% endif %}>頁面測試</a>
   </div>
   {% if request.endpoint != 'catalog.navigator_page' %}
   <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="get" role="search"><label class="sr-only" for="globalSearch">搜尋全部收藏</label><input id="globalSearch" type="search" placeholder="搜尋我的收藏" name="q"><input type="hidden" name="scope" value="all"><button type="submit">搜尋</button></form>

@@ -428,7 +428,7 @@ def duplicate_review_page():
     """Review every current exact duplicate group in the Local image library."""
     review = CatalogSimilarityService(_database()).duplicate_review()
     return render_template(
-        "compare.html", comparison_kind="duplicates",
+        "manage.html", management="duplicates",
         title="重複圖片檢閱 · Flowinone",
         review=review,
     )

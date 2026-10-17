@@ -1,0 +1,28 @@
+<section class="route-guide-intro" aria-label="測試方式">
+  <p>正式頁面共用 <strong>3 種模板</strong>：瀏覽、詳情、管理。版本差異使用 <code>detail.html</code>，重複圖片使用 <code>manage.html</code>；每列顯示註冊的路由格式與測試入口。</p>
+  <p>連結使用目前網站位址，樣本取自現有資料。來源未連線或沒有樣本時會標示原因；狀態依來源與資料判斷，並非逐頁 HTTP 檢查。</p>
+  <nav class="route-guide-jumps" aria-label="頁型快速導覽">
+    {% for group in route_groups %}<a class="mode-pill" href="#routes-{{ group.id }}">{{ group.label }} <span>{{ group.rows|length }}</span></a>{% endfor %}
+  </nav>
+</section>
+{% for group in route_groups %}
+<section id="routes-{{ group.id }}" class="route-guide-group" aria-labelledby="routes-{{ group.id }}-heading">
+  <header class="route-guide-group-heading"><h2 id="routes-{{ group.id }}-heading">{{ group.label }}</h2><code>{{ group.template }}</code></header>
+  <ul class="route-guide-list">
+    {% for row in group.rows %}
+    <li class="route-guide-row" data-route-endpoint="{{ row.endpoint }}" data-route-method="{{ row.method }}">
+      <div class="route-guide-description">
+        <h3>{{ row.label }}</h3>
+        <p class="route-guide-path"><span class="route-guide-method">{{ row.method }}</span> <code>{{ row.route }}</code></p>
+        <p class="route-guide-template">模板：<code>{{ row.template }}</code></p>
+        {% if row.note %}<p class="route-guide-note">{{ row.note }}</p>{% endif %}
+      </div>
+      <div class="route-guide-actions">
+        <span class="route-guide-status{% if row.status == '可測試' %} is-ready{% endif %}">{{ row.status }}</span>
+        <div class="action-row">{% for link in row.links %}<a class="action-button" href="{{ link.url }}" aria-label="{{ row.label }}：{{ link.label }}">{{ link.label }}</a>{% endfor %}</div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}

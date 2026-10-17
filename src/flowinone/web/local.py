@@ -114,6 +114,16 @@ def content_library():
     )
 
 
+@bp.get("/route-guide/")
+def route_guide():
+    from .route_guide import build_route_guide
+
+    return render_template(
+        "manage.html", title="頁面測試導覽 · Flowinone", management="routes",
+        route_groups=build_route_guide(request_database()),
+    )
+
+
 @bp.post("/open_path/")
 def open_filesystem_path():
     raw_path = request.form.get("path")

@@ -50,7 +50,7 @@ Chrome Bookmarks ────────┤
 | 本機索引、圖片／影片 viewer | `/item_db` 按「同步索引」或「補縮圖」；從卡片開啟 viewer | 顯示本機索引與媒體詳情；索引更新後還要同步 Catalog |
 | 可攜 metadata（sidecar） | 用下方維護指令 audit／export／import `.flowinone.json` | metadata 隨本機素材保存；import／export 預設 dry-run |
 
-正式 UI 現在共用四個頁面模板：`browse.html`（瀏覽）、`detail.html`（詳情）、`manage.html`（管理）、`compare.html`（比對）。日常瀏覽只有「視覺／閱讀」兩個呈現模式；主導覽為「我的收藏／管理收藏」。
+正式 UI 現在共用三個頁面模板：`browse.html`（瀏覽）、`detail.html`（詳情，包含 Resource 版本差異）、`manage.html`（管理，包含重複圖片檢閱）。日常瀏覽只有「視覺／閱讀」兩個呈現模式；主導覽為「我的收藏／管理收藏」，另有「頁面測試」入口。`/route-guide/` 沿用管理模板，按頁型列出前端 route、模板與使用現有資料的測試連結，標示來源離線或缺少樣本；維護 POST 僅導向原本操作頁。頁型與路由見 [共用頁型說明](docs/ui-consolidation.md)。
 
 Navigator 的頁內搜尋保留目前條件；其他頁面導覽列的搜尋會進全部收藏。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。橫向與知識模式已整併；舊 `view=shelf` 對應視覺，`view=knowledge`／`reader`／`single`／`linear` 對應閱讀，連結和瀏覽偏好保留原本查詢條件。Resource 詳情先顯示摘要與全文，標籤編輯、擷取狀態與版本差異收在「資源管理」。
 

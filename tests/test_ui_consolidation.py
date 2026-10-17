@@ -1,4 +1,4 @@
-"""Compatibility contracts for the four shared UI page families."""
+"""Compatibility contracts for the three shared UI page families."""
 
 from urllib.parse import parse_qs, urlsplit
 
@@ -129,7 +129,7 @@ def test_management_moves_controls_and_preserves_legacy_return_context(ui_client
     assert management.find("a", href=return_to)
 
 
-def test_resource_detail_and_comparison_share_page_families(ui_client):
+def test_version_comparison_belongs_to_detail_and_duplicate_review_to_management(ui_client):
     created = ui_client.post("/api/resources", json={
         "url": "https://example.com/shared-detail", "title": "Shared detail", "enqueue": False,
     }).get_json()["resource"]
@@ -138,10 +138,16 @@ def test_resource_detail_and_comparison_share_page_families(ui_client):
     assert detail.select_one('.ui-detail-related')
     assert detail.select_one('a[href="https://example.com/shared-detail"]')
     versions = BeautifulSoup(ui_client.get(created["detail_url"] + "versions/").data, "html.parser")
-    assert versions.select_one('[data-page-family="compare"]')
+    assert versions.select_one('[data-page-family="detail"].resource-versions-page')
     assert versions.select_one('#version-from')
+    assert versions.select_one('.nav-links a[aria-current="page"]')["href"] == "/navigator/?scope=all"
+    assert versions.select_one('nav[aria-label="資源詳情檢視"] a[aria-current="page"]').get_text() == "版本差異"
+    assert versions.select_one('.ui-detail-main') is None
     duplicates = BeautifulSoup(ui_client.get("/catalog/duplicate-review/").data, "html.parser")
-    assert duplicates.select_one('[data-page-family="compare"][data-duplicate-review]')
+    assert duplicates.select_one('[data-page-family="manage"][data-duplicate-review]')
+    assert duplicates.select_one('.nav-links a[aria-current="page"]')["href"] == "/library/"
+    assert duplicates.select_one('.mode-tabs a[aria-current="page"]')["href"] == "/catalog/duplicate-review/"
+    assert duplicates.select_one('script[src="/static/js/duplicate_review.js"]')
     assert duplicates.select_one('a[href="/library/#catalog-similarity-rebuild"]')
 
 
@@ -150,7 +156,7 @@ def test_navigation_exposes_all_enabled_source_views(ui_client, monkeypatch):
         "eagle": True, "chrome": True, "youtube": True, "db": True,
     })
     page = BeautifulSoup(ui_client.get("/library/").data, "html.parser")
-    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏"]
+    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏", "頁面測試"]
     assert page.select_one('.nav-links a[aria-current="page"]')["href"] == "/library/"
     expected = {"/folders/", "/chrome/", "/chrome_youtube/", "/EAGLE_folders/", "/EAGLE_tags/",
                 "/EAGLE_smart_folders/", "/EAGLE_stream/", "/resources/", "/item_db", "/catalog/duplicate-review/"}
@@ -203,6 +209,8 @@ def test_resource_tools_and_versions_keep_return_context(ui_client):
     versions = BeautifulSoup(ui_client.get(versions_link).data, "html.parser")
     assert versions.select_one('form input[name="return_to"]')["value"] == return_to
     assert parse_qs(urlsplit(versions.find('a', string='返回資源')["href"]).query)["return_to"] == [return_to]
+    for tab in versions.select('nav[aria-label="資源詳情檢視"] a'):
+        assert parse_qs(urlsplit(tab["href"]).query)["return_to"] == [return_to]
     form = page.select_one(f'form[action="/resources/{resource["id"]}/tags"]')
     response = ui_client.post(form["action"], data={
         "csrf_token": form.select_one('[name="csrf_token"]')["value"], "tags": "design", "return_to": return_to,
