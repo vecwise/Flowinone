@@ -21,3 +21,27 @@ def test_without_local_rules_only_explicit_metadata_is_used():
     result = providers.provider_for_url("https://example.com/article", lambda _: html)
     assert result.provider == "metadata"
     assert result.image_urls == ("https://example.com/cover.jpg",)
+
+
+def test_standard_image_objects_and_video_posters_are_content_candidates():
+    html = '''
+      <meta property="og:image:url" content="/og.jpg">
+      <meta itemprop="image" content="/microdata.jpg">
+      <script type="application/ld+json">{"@type":"Article","image":{"@type":"ImageObject","url":"/article.jpg"}}</script>
+      <script type="application/ld+json">{"image":[{"contentUrl":"/gallery.jpg"}]}</script>
+      <video poster="/video.jpg"></video><img src="/advert.jpg">
+    '''
+    urls = providers.extract_structured_image_urls(html, "https://example.com/page")
+    assert urls == tuple("https://example.com/" + name + ".jpg" for name in
+                        ("og", "microdata", "article", "gallery", "video"))
+
+
+def test_author_avatar_cannot_replace_content_cover():
+    html = '''<script type="application/ld+json">{"author":{"image":"/avatar.jpg"},"image":"/cover.jpg"}</script>'''
+    assert providers.extract_structured_image_urls(html, "https://example.com/page") == ("https://example.com/cover.jpg",)
+
+
+def test_empty_poster_or_json_image_never_downloads_the_page_as_an_image():
+    html = '''<video poster=""></video><video poster="  "></video>
+      <script type="application/ld+json">{"image":"","thumbnailUrl":[" "]}</script>'''
+    assert providers.extract_structured_image_urls(html, "https://example.com/page") == ()

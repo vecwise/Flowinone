@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from src.file_handler.thumbnails.store import get_thumbnail_store
+from src.file_handler.thumbnails.retry import resolve_bookmark_ids
 
 from .browse import CatalogService
 from .query import CatalogQuery
@@ -70,10 +71,18 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
         item["resource_detail_uri"] = (available.get("resources") or {}).get("detail_uri")
         item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
         item["thumbnail_is_fallback"] = source == "bookmarks" and not item["thumbnail_ref"]
+        thumbnail_id = None
         if source == "bookmarks" and item["thumbnail_ref"]:
             match = BOOKMARK_THUMBNAIL_ROUTE.fullmatch(str(item["thumbnail_ref"]))
             if match:
-                bookmark_thumbnails.append((item, match.group(1)))
+                thumbnail_id = match.group(1)
+        if source == 'bookmarks' and not thumbnail_id:
+            ids = resolve_bookmark_ids(get_thumbnail_store(), [{'url': item['launch_uri'], 'title': item['title'],
+                'folder_path': metadata.get('folder_path') or ''}])
+            if ids:
+                thumbnail_id = ids[0]
+        if thumbnail_id:
+            bookmark_thumbnails.append((item, thumbnail_id))
         item["folder_path"] = metadata.get("folder_path") or ""
         item["target_blank"] = source == "bookmarks"
         item["card_description"] = _card_description(item.get("description"), item["folder_path"])
@@ -101,11 +110,17 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
         ][:2]
         visible_items.append(item)
     if bookmark_thumbnails:
-        providers = get_thumbnail_store().get_thumbnail_providers(
+        statuses = {status['id']: status for status in get_thumbnail_store().get_statuses(
             media_id for _, media_id in bookmark_thumbnails
-        )
+        )}
         for item, media_id in bookmark_thumbnails:
-            item["thumbnail_is_fallback"] = providers.get(media_id) in {None, "site-tile"}
+            state = statuses[media_id]
+            item['thumbnail_id'] = media_id
+            item['thumbnail_status'] = state['status']
+            item['thumbnail_provider'] = state.get('provider')
+            item["thumbnail_is_fallback"] = not state.get('thumbnail_url') or state.get('provider') == 'site-tile'
+            if state.get('thumbnail_url'):
+                item['thumbnail_ref'] = state['thumbnail_url']
     return visible_items
 
 

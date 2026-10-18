@@ -52,6 +52,11 @@ class BookmarkThumbnailEnqueueRequest(ApiInput):
     priority: StrictInt | None = None
 
 
+class BookmarkThumbnailRetryRequest(ApiInput):
+    scope: Literal['page', 'all'] = 'page'
+    ids: list[StrictStr] = Field(default_factory=list, max_length=10000)
+
+
 class CatalogEventRequest(ApiInput):
     event_type: Literal["open", "view", "favorite", "unfavorite", "hide", "unhide"]
     event_value: StrictFloat | StrictInt | None = None
@@ -285,6 +290,8 @@ class ThumbnailStatusOutput(ApiOutput):
     thumbnail_url: str | None = None
     provider: str | None = None
     error: str | None = None
+    title: str | None = None
+    image_version: str | None = None
 
 
 class ThumbnailStatusesOutput(ApiOutput):

@@ -279,6 +279,9 @@ class ThumbnailStore:
     def enqueue_job(self, media_id: str, *, priority: int = PRIORITY_MISSING, force: bool = False) -> bool:
         now = _timestamp()
         with self.connect() as conn:
+            # Queueing and claiming must agree on ownership, including forced
+            # refreshes from another tab while a worker is downloading.
+            conn.execute("BEGIN IMMEDIATE")
             media = conn.execute(
                 "SELECT canonical_url, original_url, thumbnail_status FROM media_items WHERE id=?",
                 (media_id,),
@@ -296,6 +299,14 @@ class ThumbnailStore:
                 return False
 
             existing = conn.execute("SELECT * FROM thumbnail_jobs WHERE media_id=?", (media_id,)).fetchone()
+            if existing and existing["status"] == "processing":
+                expiry = _parse_timestamp(existing["lease_expires_at"])
+                if expiry is None or expiry > _utcnow():
+                    return False
+            if existing and force and existing["status"] == "queued":
+                conn.execute("UPDATE thumbnail_jobs SET priority=MIN(priority,?),updated_at=? WHERE media_id=?",
+                             (priority, now, media_id))
+                return False
             if existing and not force:
                 status = str(existing["status"])
                 if status == "paused":
@@ -533,32 +544,39 @@ class ThumbnailStore:
         return path if path and os.path.isfile(path) else None
 
     def get_status(self, media_id: str) -> dict:
-        with self.connect() as conn:
-            row = conn.execute(
-                """
-                SELECT m.id, m.thumbnail_status, m.sub_type, m.last_error,
-                       t.local_path, t.source
-                FROM media_items m
-                LEFT JOIN thumbnails t ON t.media_id=m.id
-                WHERE m.id=?
-                """,
-                (media_id,),
-            ).fetchone()
+        return self.get_statuses([media_id])[0]
+
+    def _status_payload(self, media_id: str, row) -> dict:
         if not row:
             return {"id": media_id, "status": "unknown", "thumbnail_url": None}
         local_path = str(row["local_path"] or "")
-        has_thumbnail = bool(local_path and os.path.isfile(local_path))
+        try:
+            image_version = str(os.stat(local_path).st_mtime_ns) if os.path.isfile(local_path) else None
+        except OSError:
+            image_version = None
         return {
             "id": media_id,
             "status": str(row["thumbnail_status"] or "missing"),
             "provider": str(row["source"] or row["sub_type"] or "metadata"),
-            "thumbnail_url": self.thumbnail_route(media_id) if has_thumbnail else None,
+            "thumbnail_url": self.thumbnail_route(media_id) if image_version else None,
+            "image_version": image_version,
+            "title": str(row["title"] or row["original_url"] or media_id),
             "error": row["last_error"],
         }
 
     def get_statuses(self, media_ids: Iterable[str]) -> list[dict]:
         unique_ids = list(dict.fromkeys(str(value) for value in media_ids if value))[:200]
-        return [self.get_status(media_id) for media_id in unique_ids]
+        if not unique_ids:
+            return []
+        with self.connect() as conn:
+            rows = conn.execute("""
+                SELECT m.id,m.title,m.original_url,m.thumbnail_status,m.sub_type,m.last_error,
+                       t.local_path,t.source FROM media_items m
+                LEFT JOIN thumbnails t ON t.media_id=m.id
+                WHERE m.id IN (SELECT value FROM json_each(?))
+                """, (json.dumps(unique_ids),)).fetchall()
+        by_id = {row["id"]: row for row in rows}
+        return [self._status_payload(media_id, by_id.get(media_id)) for media_id in unique_ids]
 
     def get_thumbnail_providers(self, media_ids: Iterable[str]) -> dict[str, str]:
         """Read visual providers for one page of bookmark cards in one query."""

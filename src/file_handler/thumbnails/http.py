@@ -59,7 +59,8 @@ class SafeHTTPClient:
         self.limiter = limiter or DomainRateLimiter()
 
     def fetch_bytes(self, url: str, *, max_bytes: int, accept: str, timeout: int = 15,
-                    headers: Optional[dict] = None, session_factory=None) -> tuple[bytes, str, str]:
+                    headers: Optional[dict] = None, session_factory=None,
+                    allow_truncated: bool = False) -> tuple[bytes, str, str]:
         current_url = url
         session = session_factory() if session_factory else requests.Session()
         session.trust_env = False
@@ -86,13 +87,13 @@ class SafeHTTPClient:
                                 raise FetchError("redirect had no Location header")
                             current_url = urljoin(current_url, location)
                             continue
-                        if response.status_code != 200:
+                        if response.status_code not in {200, 203}:
                             raise FetchError(f"HTTP {response.status_code}")
 
                         content_length = response.headers.get("Content-Length")
                         if content_length:
                             try:
-                                if int(content_length) > max_bytes:
+                                if int(content_length) > max_bytes and not allow_truncated:
                                     raise FetchError(f"response exceeds {max_bytes} bytes")
                             except ValueError:
                                 pass
@@ -102,10 +103,14 @@ class SafeHTTPClient:
                         for chunk in response.iter_content(chunk_size=64 * 1024):
                             if not chunk:
                                 continue
+                            if allow_truncated:
+                                chunk = chunk[:max_bytes - size]
                             size += len(chunk)
                             if size > max_bytes:
                                 raise FetchError(f"response exceeds {max_bytes} bytes")
                             chunks.append(chunk)
+                            if allow_truncated and size >= max_bytes:
+                                break
                         if not chunks:
                             raise FetchError("empty response")
                         return b"".join(chunks), response.headers.get("Content-Type", ""), current_url
@@ -122,6 +127,9 @@ class SafeHTTPClient:
             url,
             max_bytes=MAX_HTML_BYTES,
             accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+            # Keep usable metadata when the page has a large script or body.
+            # The response still closes at the original HTML byte budget.
+            allow_truncated=True,
         )
         charset = "utf-8"
         if "charset=" in content_type.lower():

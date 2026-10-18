@@ -33,10 +33,19 @@ def normalize_result(value) -> ProviderResult:
 
 def _iter_json_thumbnail_values(value) -> Iterable[str]:
     if isinstance(value, dict):
-        for key, child in value.items():
-            if key.lower() == "thumbnailurl":
+        # Main content images outrank nested objects. Author/publisher logos
+        # are metadata too, but cannot stand in for the bookmarked content.
+        for image_key in ("thumbnailurl", "image"):
+            for key, child in value.items():
+                if key.lower() != image_key:
+                    continue
                 if isinstance(child, str):
                     yield child
+                elif isinstance(child, dict):
+                    for candidate_key in ("url", "contentUrl"):
+                        candidate = child.get(candidate_key)
+                        if isinstance(candidate, str):
+                            yield candidate
                 elif isinstance(child, list):
                     for item in child:
                         if isinstance(item, str):
@@ -46,7 +55,9 @@ def _iter_json_thumbnail_values(value) -> Iterable[str]:
                                 candidate = item.get(candidate_key)
                                 if isinstance(candidate, str):
                                     yield candidate
-            yield from _iter_json_thumbnail_values(child)
+        for key, child in value.items():
+            if key.lower() not in {"thumbnailurl", "image", "author", "creator", "publisher", "logo", "breadcrumb", "comment", "review"}:
+                yield from _iter_json_thumbnail_values(child)
     elif isinstance(value, list):
         for child in value:
             yield from _iter_json_thumbnail_values(child)
@@ -59,16 +70,19 @@ def extract_structured_image_urls(html_text: str, page_url: str) -> tuple[str, .
     meta_values: dict[str, list[str]] = {}
 
     for tag in soup.find_all("meta"):
-        key = str(tag.get("property") or tag.get("name") or "").strip().lower()
+        key = str(tag.get("property") or tag.get("name") or tag.get("itemprop") or "").strip().lower()
         content = str(tag.get("content") or "").strip()
         if key and content:
             meta_values.setdefault(key, []).append(content)
 
     for key in (
         "og:image:secure_url",
+        "og:image:url",
         "og:image",
         "twitter:image:src",
         "twitter:image",
+        "image",
+        "thumbnailurl",
     ):
         candidates.extend(meta_values.get(key, []))
 
@@ -89,10 +103,16 @@ def extract_structured_image_urls(html_text: str, page_url: str) -> tuple[str, .
         if "image_src" in rel_values and href:
             candidates.append(str(href))
 
+    for video in soup.find_all("video", poster=True):
+        candidates.append(str(video["poster"]))
+
     normalized: list[str] = []
     seen: set[str] = set()
     for candidate in candidates:
-        absolute = urljoin(page_url, candidate.strip())
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        absolute = urljoin(page_url, candidate)
         if absolute.startswith(("http://", "https://")) and absolute not in seen:
             seen.add(absolute)
             normalized.append(absolute)

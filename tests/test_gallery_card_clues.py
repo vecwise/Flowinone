@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from routes import register_routes
 from src.file_handler import chrome_bookmarks
+from src.file_handler.thumbnails.store import ThumbnailStore
 from src.flowinone.catalog import presentation
 from src.flowinone.catalog import sync as catalog_sync
 from src.flowinone.catalog.service import CatalogService, CatalogSyncService
@@ -20,8 +21,13 @@ from src.flowinone.resource_library.database import get_resource_database
 def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(monkeypatch, tmp_path: Path):
     database = get_resource_database(tmp_path / "catalog.db")
     sync = CatalogSyncService(database)
-    site_tile_id = "a" * 40
-    real_image_id = "b" * 40
+    thumbnail_store = ThumbnailStore(str(tmp_path/'cache.db'), str(tmp_path/'thumbs'))
+    site_tile_id = thumbnail_store.register_bookmark('https://tile.example/article', 'Site tile').media_id
+    real_image_id = thumbnail_store.register_bookmark('https://photo.example/article', 'Real preview').media_id
+    for mid, provider in ((site_tile_id, 'site-tile'), (real_image_id, 'metadata')):
+        image = tmp_path / (mid + '.webp')
+        image.write_bytes(b'cached image')
+        thumbnail_store.record_thumbnail(mid, str(image), provider=provider, source_url=None, width=640, height=420)
     with database.engine.begin() as conn:
         bookmark_id = sync._upsert(
             conn, identity_key="url:reference", source_kind="bookmarks",
@@ -58,9 +64,7 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(monkeypatch
     CatalogService(database).record_event(bookmark_id, "open")
     monkeypatch.setattr(
         presentation, "get_thumbnail_store",
-        lambda: SimpleNamespace(get_thumbnail_providers=lambda _ids: {
-            site_tile_id: "site-tile", real_image_id: "metadata",
-        }),
+        lambda: thumbnail_store,
     )
     app = Flask(
         "gallery-card-clues",
@@ -88,6 +92,8 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(monkeypatch
     assert "開啟 1 次" in bookmark.get_text()
     assert bookmark.select_one(".navigator-favorite").get_text(strip=True) == "加入最愛"
     assert bookmark.select_one(".navigator-favorite")["aria-label"] == "加入我的最愛：Type reference"
+    assert bookmark.select_one('[data-thumbnail-retry]') is not None
+    assert bookmark['data-thumbnail-status'] == 'missing'
 
     assert cards["Site tile"].select_one(".gallery-card-media.is-site-fallback") is not None
     assert cards["Site tile"].select_one(".gallery-card-media img") is None

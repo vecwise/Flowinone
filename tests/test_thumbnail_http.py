@@ -57,3 +57,32 @@ def test_custom_transport_still_enforces_byte_budget(monkeypatch):
     with pytest.raises(http.FetchError, match="exceeds"):
         http.SafeHTTPClient().fetch_bytes("https://example.com/cover", max_bytes=3, accept="image/*", session_factory=lambda:session)
     assert response.closed
+
+
+@pytest.mark.parametrize('status,accepted',[(203,True),(202,False)])
+def test_non_authoritative_success_can_supply_content_but_pending_cannot(monkeypatch,status,accepted):
+    monkeypatch.setattr(http,'validate_public_http_url',lambda url:url)
+    response=Response(status=status)
+    session=type('Session',(),{'get':lambda self,*a,**kw:response,'close':lambda self:None})()
+    client=http.SafeHTTPClient()
+    if accepted:
+        assert client.fetch_bytes('https://example.com/cover',max_bytes=8,accept='image/*',session_factory=lambda:session)[0]==b'cover'
+    else:
+        with pytest.raises(http.FetchError,match='HTTP 202'):
+            client.fetch_bytes('https://example.com/cover',max_bytes=8,accept='image/*',session_factory=lambda:session)
+    assert response.closed
+
+
+def test_large_html_keeps_metadata_prefix_without_reading_body(monkeypatch):
+    monkeypatch.setattr(http, "validate_public_http_url", lambda url: url)
+    prefix = b'<meta property="og:image" content="/cover.jpg">'
+    monkeypatch.setattr(http, "MAX_HTML_BYTES", len(prefix))
+    response = Response(headers={"Content-Length": "9000000"})
+    def chunks(chunk_size):
+        yield prefix + b'padding'
+        pytest.fail("The HTML body was read after reaching the byte budget")
+    response.iter_content = chunks
+    session = type("Session", (), {"get":lambda self,*a,**kw:response,"close":lambda self:None})()
+    monkeypatch.setattr(http.requests, "Session", lambda:session)
+    assert http.SafeHTTPClient().fetch_html("https://example.com/large") == prefix.decode()
+    assert response.closed

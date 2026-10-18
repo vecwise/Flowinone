@@ -21,6 +21,7 @@ from src.file_handler.thumbnails.store import (
     get_thumbnail_store,
 )
 from src.file_handler.thumbnails.batch import run_thumbnail_batch
+from src.file_handler.thumbnails.retry import resolve_bookmark_ids, retry_unsuccessful
 
 from .ui import render_source_browse, render_source_error
 
@@ -29,6 +30,7 @@ from .api import parse_json, parse_query, validated_json
 from .schemas import (
     BookmarkThumbnailStatusQuery,
     BookmarkThumbnailEnqueueRequest,
+    BookmarkThumbnailRetryRequest,
     ThumbnailEnqueueOutput,
     ThumbnailStatusesOutput,
 )
@@ -83,6 +85,23 @@ def serve_bookmark_thumbnail(media_id: str):
     if not path:
         abort(404)
     return send_file(path, conditional=True, max_age=3600)
+
+
+@bp.post('/api/bookmark-thumbnails/retry')
+@require_feature('chrome')
+def retry_bookmark_thumbnails():
+    payload = parse_json(BookmarkThumbnailRetryRequest)
+    store = get_thumbnail_store()
+    if payload.scope == 'all':
+        if payload.ids:
+            abort(400, description='All-bookmark retries do not accept page IDs')
+        try:
+            ids = resolve_bookmark_ids(store, list(iter_chrome_bookmark_records()))
+        except BookmarkError as exc:
+            abort(503, description=str(exc))
+    else:
+        ids = payload.ids
+    return validated_json(retry_unsuccessful(store, ids), ThumbnailEnqueueOutput)
 
 
 @bp.get("/chrome/")

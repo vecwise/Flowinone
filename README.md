@@ -310,6 +310,10 @@ Distributed under the [MIT License](LICENSE).
 
 新增 Chrome 書籤由 Thumbnail Worker 每 60 秒檢查並排入持久佇列；批次補圖也使用同一個 Worker、下載器、圖片驗證與快取。Web 與 Worker 需一起啟動。
 
+Chrome 來源頁與「我的收藏」的 Chrome 書籤卡片提供「強制重爬縮圖」，可更新單筆已有或失敗的封面。頁面上方「Chrome 書籤縮圖」可選「這一頁」或「全部 Chrome 書籤」，批次重試失敗、未爬、待重試與只有網站佔位圖的項目；全部範圍只讀目前 Chrome 書籤，不包含已刪除書籤的舊快取。
+
+工具列顯示本輪完成、成功、失敗、排隊與處理中數量，展開結果可看逐筆原因。每筆完成一次嘗試便計入本輪結果；之後的自動重試由背景 Worker 處理。進度與結果在同一瀏覽器保存 24 小時，重整或回到瀏覽頁可接續查看。重爬期間保留原封面；新圖片使用版本網址立即更新，已排隊或正在處理的工作不會重複建立。
+
 ```bash
 conda run -n py3.11 flask --app run thumbnails-sync --missing
 conda run -n py3.11 flask --app run thumbnails-sync --missing --retry-failed --limit 20

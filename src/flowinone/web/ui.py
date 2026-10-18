@@ -47,6 +47,7 @@ def source_cards(data: list[dict], source: str) -> list[dict]:
             "collection_label": path.rsplit(" / ", 1)[-1] if path else "",
             "thumbnail_id": item.get("id") if kind == "bookmark" else None,
             "thumbnail_status": item.get("thumbnail_status"), "sources": [],
+            "thumbnail_provider": item.get("thumbnail_provider"),
         })
     return cards
 

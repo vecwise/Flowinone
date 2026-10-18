@@ -1,4 +1,4 @@
-<article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
+<article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}" data-thumbnail-provider="{{ item.thumbnail_provider or '' }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
         <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
           {% if item.thumbnail_is_fallback %}
           <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
@@ -42,6 +42,11 @@
             </details>
             {% endif %}
           </div>{% endif %}
-          {% if item.thumbnail_status and item.thumbnail_status != 'ready' %}<small data-thumbnail-state>{{ item.thumbnail_status }}</small>{% endif %}
+          {% if item.thumbnail_id %}
+          <div class="thumbnail-card-tools">
+            <button class="action-button" type="button" data-thumbnail-retry="{{ item.thumbnail_id }}" aria-label="強制重爬縮圖：{{ item.title }}">強制重爬縮圖</button>
+            <small data-thumbnail-state role="status">{{ {'ready':'縮圖已就緒','queued':'排隊中','fetching':'重爬中','retry':'待重試','failed':'上次重爬失敗','missing':'尚未爬取'}.get(item.thumbnail_status, '尚未爬取') }}</small>
+          </div>
+          {% endif %}
         </div>
       </article>
