@@ -151,6 +151,32 @@ conda run -n py3.11 python -B scripts/chrome_mirror.py enable --compact
 
 來源讀取失敗、JSON 結構不完整、GUID/id 重複、或來源在同步期間改變時不套用刪除。縮圖清理只刪 Flowinone 自己管理且無引用的檔案，不刪外部原圖。
 
+### 已核准的網址擁有者衝突整併
+
+一般同步仍不合併衝突。針對已逐組檢閱、兩個 Chrome GUID 現在指向同一 canonical URL 的衝突，可明確整併到目標網址既有的 Catalog／Resource row。選擇檔需列明保留與退役的 row ID、兩個 binding／GUID／Chrome id、網址、資料夾、標籤聯集及描述；不能只提供網址清單。先建立唯讀計畫：
+
+```bash
+conda run -n py3.11 python -B scripts/bookmark_consolidate.py preview \
+  --database /path/to/flowinone.sqlite3 \
+  --bookmarks /path/to/Default/AccountBookmarks \
+  --selection /path/to/proposed-plan.json --output /path/to/new-consolidation-plan.json
+```
+
+核准後先停止 Web／Worker，再以該計畫的 `approval_digest` 明確套用；不升級 schema、不建立備份，也不改寫 Chrome：
+
+```bash
+conda run -n py3.11 python -B scripts/bookmark_consolidate.py apply \
+  --database /path/to/flowinone.sqlite3 \
+  --bookmarks /path/to/Default/AccountBookmarks \
+  --plan /path/to/new-consolidation-plan.json --confirm-plan DIGEST \
+  --cache-database /path/to/cache.db --cache-dir /path/to/thumbnails \
+  --output /path/to/new-consolidation-result.json
+```
+
+指令在 `BEGIN IMMEDIATE` 交易內重查計畫；資料、來源或 Chrome 在執行前／期間改變，整批拒絕或回滾。只支援互不重疊、各有一個 Chrome binding 的 row 對，若有個人狀態／瀏覽事件、獨立來源、內容擷取、工作或人工關聯，需另外規劃，不會自行取捨。保留雙方 binding、來源 ID、資料夾與既有網址歷程，追加一次已接受的網址修改；標籤取聯集、資料夾標籤依兩個現存位置重建，不同非空描述保留雙方內容。目標 row 的 Chrome 標題作為主標題，另一來源標題仍保留；若主 GUID 日後被刪，會使用剩下的來源標題。
+
+資料交易提交後重算自動推薦，再依全 DB 與現存 Chrome 網址引用清理縮圖。回報的 `data_committed` 區分資料整併是否已完成；若後續清理失敗，不應重套已提交的 row 整併，可重跑正常 mirror 同步回收快取。仍被任一書籤或其他內容引用的圖片會保留，因此內容 row 減少不一定同時減少縮圖檔案。
+
 ### 已檢閱名單回填模式
 
 先用唯讀預檢報告的 `all-bookmarks.json` 作為基準；其中只有 `classification=matched` 的書籤會列入回填。獨立預覽指令不啟動 Flask、不升級資料庫、不排入網路工作，也不寫 Chrome 書籤。它將資料庫和已提交 WAL 讀入記憶體，查詢只發生在記憶體副本：

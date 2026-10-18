@@ -7,6 +7,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -383,6 +384,203 @@ def enable_mirror(seed, monkeypatch, tmp_path):
     with seed.db.write_transaction() as conn:
         conn.execute(text("UPDATE bookmark_sources SET sync_mode='mirror'"))
     return store
+
+
+def consolidation_selection(seed, pairs):
+    """Express the same explicit row/GUID/tag selection as the review artifact."""
+    from src.flowinone.bookmarks.consolidate import _capture
+    from src.flowinone.resource_library.canonical import normalize_resource_url
+    cases = []
+    with seed.db.engine.connect() as conn:
+        for old_index, keep_index in pairs:
+            old_base, keep_base = seed.baseline['bookmarks'][old_index], seed.baseline['bookmarks'][keep_index]
+            old = _capture(conn, old_base['catalog_id'], old_base['resource_id'])
+            keep = _capture(conn, keep_base['catalog_id'], keep_base['resource_id'])
+            ob, kb = old['bindings'][0], keep['bindings'][0]
+            cases.append(dict(
+                retire_catalog_item_id=old_base['catalog_id'], retire_resource_id=old_base['resource_id'],
+                keep_catalog_item_id=keep_base['catalog_id'], keep_resource_id=keep_base['resource_id'],
+                keep_bindings=[ob['id'], kb['id']], rebind_binding_id=ob['id'],
+                keep_guids=[ob['guid'], kb['guid']], keep_chrome_ids=[ob['chrome_id'], kb['chrome_id']],
+                old_applied_url=ob['applied_url'], canonical_url_after=normalize_resource_url(seed.nodes[keep_index]['url']),
+                raw_chrome_urls_unchanged={seed.nodes[i]['guid']:seed.nodes[i]['url'] for i in (old_index, keep_index)},
+                current_folder_paths_after=sorted({ob['folder_path'], kb['folder_path']}),
+                catalog_tags_after=old['catalog_tags']+keep['catalog_tags'],
+                resource_tags_after=old['resource_tags']+keep['resource_tags'],
+                description_nonempty_to_preserve=list(dict.fromkeys(v for v in
+                    (keep['catalog'][0]['description'], old['catalog'][0]['description']) if v))))
+    return {'cases':cases}
+
+
+def ready_consolidation(seeded, monkeypatch, tmp_path, *, multiple=False):
+    urls = ('https://example.com/old', 'https://example.com/target')
+    if multiple:
+        urls += ('https://example.com/old2', 'https://example.com/target2')
+    seed = seeded(urls)
+    store = enable_mirror(seed, monkeypatch, tmp_path)
+    with seed.db.write_transaction() as conn:
+        conn.execute(text('DELETE FROM item_user_state'))
+        conn.execute(text('DELETE FROM catalog_events'))
+    # Current GUIDs converge, without modifying the target owner's identity.
+    for i in range(0, len(urls), 2):
+        seed.nodes[i]['url'] = seed.nodes[i+1]['url']
+    write_nodes(seed)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['identity_conflicts'] == len(urls)//2
+    pairs = [(i, i+1) for i in range(0, len(urls), 2)]
+    return seed, store, consolidation_selection(seed, pairs)
+
+
+def apply_consolidation(seed, plan):
+    from src.flowinone.bookmarks.consolidate import apply_plan as consolidate
+    with seed.db.engine.connect() as conn:
+        conn.exec_driver_sql('BEGIN IMMEDIATE')
+        try:
+            result = consolidate(conn, plan, seed.path)
+            conn.commit()
+            return result
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def test_reviewed_consolidation_keeps_owner_guids_tags_histories_and_images(seeded, monkeypatch, tmp_path):
+    from src.flowinone.bookmarks.consolidate import build_plan as consolidate_preview
+    from src.flowinone.bookmarks.mirror import maintain_mirror_cache
+    seed, store, selection = ready_consolidation(seeded, monkeypatch, tmp_path)
+    old_c, old_r = seed.cid, seed.rid
+    keep_c, keep_r = selection['cases'][0]['keep_catalog_item_id'], selection['cases'][0]['keep_resource_id']
+    # Preserve multiple placements and both title aliases across later syncs.
+    folder = seed.payload['roots']['bookmark_bar']['children'][0]
+    folder['children'] = [{'type':'folder','name':'Moved','guid':str(uuid.uuid4()),'children':[seed.nodes[0]]}, seed.nodes[1]]
+    write_nodes(seed)
+    seed.sync.sync(('bookmarks',))
+    selection = consolidation_selection(seed, [(0,1)])
+    before_chrome = seed.path.read_bytes()
+    with seed.db.write_transaction() as conn:
+        bid = selection['cases'][0]['keep_bindings'][1]
+        conn.execute(text('UPDATE bookmark_bindings SET url_revision=1 WHERE id=:id'), {'id':bid})
+        conn.execute(text("""INSERT INTO bookmark_url_history(id,binding_id,old_url,new_url,revision,changed_at)
+            VALUES(:id,:bid,'https://example.com/prior','https://example.com/target',1,'2026-01-01')"""),
+            {'id':uuid.uuid4().hex,'bid':bid})
+    with seed.db.engine.connect() as conn:
+        before = {b['id']:dict(b) for b in conn.execute(text('SELECT * FROM bookmark_bindings')).mappings()}
+        histories = [dict(x) for x in conn.execute(text('SELECT * FROM bookmark_url_history')).mappings()]
+        source_origins = [dict(x) for x in conn.execute(text('SELECT * FROM resource_origins')).mappings()]
+        plan = consolidate_preview(conn, seed.path, selection)
+    image = tmp_path/'mirror-thumbs'/'target.webp';image.write_bytes(b'retain image')
+    target = store.register_bookmark(seed.nodes[1]['url'], 'target')
+    store.record_thumbnail(target.media_id, str(image), provider='metadata', source_url=None, width=10, height=10)
+    stale = store.register_bookmark('https://example.com/old','old')
+    stale_image = tmp_path/'mirror-thumbs'/'stale.webp';stale_image.write_bytes(b'obsolete')
+    store.record_thumbnail(stale.media_id, str(stale_image), provider='metadata', source_url=None, width=10, height=10)
+    result = apply_consolidation(seed, plan)
+    assert result['consolidated_pairs'] == 1
+    cleanup = maintain_mirror_cache(seed.db, store, deleted_content=True)
+    assert cleanup['deleted_media'] >= 1 and not cleanup['errors']
+    assert image.read_bytes() == b'retain image' and not stale_image.exists()
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT id FROM catalog_items')).scalars().all() == [keep_c]
+        assert conn.execute(text('SELECT id FROM resources')).scalars().all() == [keep_r]
+        after = {b['id']:dict(b) for b in conn.execute(text('SELECT * FROM bookmark_bindings')).mappings()}
+        assert set(before) == set(after)
+        for bid, b in before.items():
+            assert all(b[k] == after[bid][k] for k in ('guid','chrome_id','date_added','folder_path','title'))
+            assert after[bid]['status'] == 'matched' and after[bid]['catalog_item_id'] == keep_c
+        assert {x['resource_id'] for x in conn.execute(text('SELECT * FROM chrome_bookmark_nodes')).mappings()} == {keep_r}
+        after_history = [dict(x) for x in conn.execute(text('SELECT * FROM bookmark_url_history')).mappings()]
+        assert all(h in after_history for h in histories) and len(after_history) == len(histories)+1
+        origins = {x['id']:dict(x) for x in conn.execute(text('SELECT * FROM resource_origins')).mappings()}
+        for o in source_origins:
+            assert origins[o['id']] == {**o, 'resource_id':keep_r}
+        for table, col in (('catalog_item_tags','catalog_item_id'),('resource_tags','resource_id')):
+            actual={(r['tag_id'],r['source']) for r in conn.execute(text(f'SELECT * FROM {table}')).mappings()}
+            expected={(r.get('tag_id',r.get('id')),r['source']) for r in selection['cases'][0][('catalog' if col=='catalog_item_id' else 'resource')+'_tags_after']}
+            assert actual == expected
+        assert not conn.execute(text('SELECT 1 FROM catalog_fts WHERE catalog_item_id=:id'),{'id':old_c}).first()
+        assert not conn.execute(text('SELECT 1 FROM resource_fts WHERE resource_id=:id'),{'id':old_r}).first()
+        assert not conn.exec_driver_sql('PRAGMA foreign_key_check').all()
+    assert seed.path.read_bytes() == before_chrome
+    seed.sync.sync(('bookmarks',))
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT title FROM catalog_items')).scalar() == seed.nodes[1]['name']
+        assert conn.execute(text('SELECT COUNT(*) FROM bookmark_url_history')).scalar() == len(histories)+1
+        raw = conn.execute(text("SELECT metadata_json FROM catalog_origins WHERE source_kind='bookmarks' AND source_key=:key"),
+                           {'key':'chrome-bookmark:'+selection['cases'][0]['rebind_binding_id']}).scalar()
+        assert json.loads(raw)['consolidated_from'] == {
+            'catalog_item_id':old_c, 'resource_id':old_r, 'resource_original_url':'https://example.com/old'}
+    # Removing one GUID keeps the owner; removing the final one deletes it.
+    folder['children'] = [seed.nodes[1]];write_nodes(seed)
+    seed.sync.sync(('bookmarks',))
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT id FROM catalog_items')).scalar() == keep_c
+    folder['children'] = [];write_nodes(seed)
+    seed.sync.sync(('bookmarks',))
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT COUNT(*) FROM catalog_items')).scalar() == 0
+    assert not image.exists()
+
+
+def test_consolidation_preview_rejects_changes_and_never_writes(seeded, monkeypatch, tmp_path):
+    from scripts.bookmark_consolidate import preview as consolidate_preview
+    seed, store, selection = ready_consolidation(seeded, monkeypatch, tmp_path)
+    files = [seed.db.path, Path(str(seed.db.path)+'-wal'), Path(str(seed.db.path)+'-shm'), seed.path]
+    before = {p:p.read_bytes() for p in files if p.exists()}
+    plan = consolidate_preview(seed.db.path, seed.path, selection)
+    assert all(p.read_bytes() == data for p,data in before.items())
+    edited = copy.deepcopy(plan);edited['cases'][0]['description_after'] = 'edited'
+    with pytest.raises(ValueError, match='edited'):
+        apply_consolidation(seed, edited)
+    with seed.db.write_transaction() as conn:
+        conn.execute(text('UPDATE catalog_items SET description=\'new description\' WHERE id=:id'),{'id':seed.cid})
+    with pytest.raises(ValueError, match='descriptions changed'):
+        apply_consolidation(seed, plan)
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT COUNT(*) FROM catalog_items')).scalar() == 2
+
+
+@pytest.mark.parametrize('change', ('favorite','independent_origin','new_tag','new_chrome_url'))
+def test_consolidation_refuses_unreviewed_state_or_identity(seeded, monkeypatch, tmp_path, change):
+    from src.flowinone.bookmarks.consolidate import build_plan as consolidate_preview
+    seed, store, selection = ready_consolidation(seeded, monkeypatch, tmp_path)
+    with seed.db.engine.connect() as conn:
+        plan = consolidate_preview(conn, seed.path, selection)
+    if change == 'favorite':
+        CatalogService(seed.db).record_event(seed.cid, 'favorite')
+    elif change == 'independent_origin':
+        with seed.db.write_transaction() as conn:
+            conn.execute(text("UPDATE resource_origins SET source='manual' WHERE resource_id=:id"),{'id':seed.rid})
+    elif change == 'new_tag':
+        seed.service.replace_tags(seed.rid, ['new unreviewed tag'])
+    else:
+        seed.nodes[0]['url']='https://example.com/changed';write_nodes(seed)
+    with pytest.raises(ValueError):
+        apply_consolidation(seed, plan)
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT COUNT(*) FROM resources')).scalar() == 2
+        assert conn.execute(text("SELECT COUNT(*) FROM bookmark_bindings WHERE status='conflict'")).scalar() == 1
+
+
+def test_consolidation_late_chrome_change_rolls_back_the_whole_batch(seeded, monkeypatch, tmp_path):
+    import src.flowinone.bookmarks.consolidate as consolidation
+    seed, store, selection = ready_consolidation(seeded, monkeypatch, tmp_path, multiple=True)
+    with seed.db.engine.connect() as conn:
+        plan = consolidation.build_plan(conn, seed.path, selection)
+    real_read = consolidation.read_bookmarks
+    calls = 0
+    def change_after_writes(path):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            seed.nodes[0]['name']='Changed during consolidation';write_nodes(seed)
+        return real_read(path)
+    monkeypatch.setattr(consolidation, 'read_bookmarks', change_after_writes)
+    with pytest.raises(ValueError, match='Chrome changed'):
+        apply_consolidation(seed, plan)
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT COUNT(*) FROM catalog_items')).scalar() == 4
+        assert conn.execute(text('SELECT COUNT(*) FROM resources')).scalar() == 4
+        assert conn.execute(text("SELECT COUNT(*) FROM bookmark_bindings WHERE status='conflict'")).scalar() == 2
+        assert conn.execute(text('SELECT COUNT(*) FROM bookmark_url_history')).scalar() == 0
 
 
 def test_mirror_delete_last_source_cascades_state_search_and_cache(seeded,monkeypatch,tmp_path):

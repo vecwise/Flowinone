@@ -61,7 +61,7 @@ def write_origins(conn, binding: dict, *, now: str) -> None:
     existing_metadata = json.loads(old_metadata or "{}")
     thumbnail = conn.execute(text("SELECT thumbnail_ref FROM catalog_items WHERE id=:id"),
                              {"id": binding["catalog_item_id"]}).scalar()
-    metadata = json.dumps({"folder_path": binding["folder_path"],
+    metadata = json.dumps({**existing_metadata, "folder_path": binding["folder_path"],
                            "bookmark_binding_id": binding["id"],
                            "thumbnail_ref": existing_metadata.get("thumbnail_ref") or thumbnail or "",
                            "thumbnail_sub_type": existing_metadata.get("thumbnail_sub_type") or ""}, ensure_ascii=False)

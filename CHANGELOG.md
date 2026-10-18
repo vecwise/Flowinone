@@ -4,8 +4,14 @@
 
 ### Added
 
+- Explicit, digest-checked consolidation of reviewed Chrome URL-owner conflicts. Preserve the existing target row, both GUID bindings/origins, folder placements, tag unions, descriptions and URL histories; reject changed previews or pairs with unreviewed user data, independent origins or work. Normal sync still does not merge conflicts.
 - Scoped Chrome guid/id bindings that retain existing Catalog and Resources IDs when bookmark URLs change. Shared rows with diverging URLs or an occupied destination are held for review without automatic splitting or merging.
 - Standalone read-only backfill previews, explicit plan-digest confirmation, backup before migration, and transactional application. Source changes or edited previews require revalidation.
+
+### Fixed
+
+- Retain extra bookmark-origin metadata across regular synchronization, including retired-row and original-URL provenance. Preserve the selected target GUID's display title while it survives.
+- Refresh Chrome folder placements and source titles even while an accepted content URL is held by a collision.
 
 
 ## 2026-10-04

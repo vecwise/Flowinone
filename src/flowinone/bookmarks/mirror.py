@@ -118,12 +118,15 @@ def _refresh_titles_tags(conn, bindings, records, now):
     for b in bindings:
         grouped[(b['catalog_item_id'],b['resource_id'])].append(by_guid[b['guid']])
     for (cid,rid), nodes in grouped.items():
+        raw_metadata = conn.execute(text("SELECT metadata_json FROM catalog_items WHERE id=:id"), {'id':cid}).scalar()
+        primary_guid = json.loads(raw_metadata or '{}').get('chrome_primary_guid')
+        primary = next((n for n in nodes if n['guid'] == primary_guid), nodes[0])
         independent = conn.execute(text("""SELECT 1 FROM catalog_origins WHERE catalog_item_id=:id AND stale=0
             AND source_kind NOT IN ('bookmarks','resources') LIMIT 1"""), {'id':cid}).scalar()
         if not independent:
-            conn.execute(text("UPDATE catalog_items SET title=:title,indexed_at=:now WHERE id=:id AND title IS NOT :title"), {'title':nodes[0]['title'],'now':now,'id':cid})
-            conn.execute(text("UPDATE resources SET title=:title WHERE id=:id AND title IS NOT :title"), {'title':nodes[0]['title'],'id':rid})
-            conn.execute(text("UPDATE resource_fts SET title=:title WHERE resource_id=:id AND title IS NOT :title"), {'title':nodes[0]['title'],'id':rid})
+            conn.execute(text("UPDATE catalog_items SET title=:title,indexed_at=:now WHERE id=:id AND title IS NOT :title"), {'title':primary['title'],'now':now,'id':cid})
+            conn.execute(text("UPDATE resources SET title=:title WHERE id=:id AND title IS NOT :title"), {'title':primary['title'],'id':rid})
+            conn.execute(text("UPDATE resource_fts SET title=:title WHERE resource_id=:id AND title IS NOT :title"), {'title':primary['title'],'id':rid})
         # Folder tags reflect all active placements, including other sources.
         folders = [r['folder_path'] for r in _rows(conn, "SELECT folder_path FROM bookmark_bindings WHERE catalog_item_id=:id", {'id':cid})]
         conn.execute(text("DELETE FROM catalog_item_tags WHERE catalog_item_id=:id AND source='folder'"), {'id':cid})
@@ -214,6 +217,14 @@ def reconcile_mirror(conn, records, source):
     deleted_c, deleted_r = _remove_unreferenced(conn,candidate_c,candidate_r)
     reconciled = reconcile_bound_bookmarks(conn,records,source['bookmark_path'],_mirror_dispatch=False)
     bindings = _rows(conn,"SELECT * FROM bookmark_bindings WHERE source_id=:id",source)
+    for b in bindings:
+        record = by_guid[b['guid']]
+        # A held URL collision must not freeze its current Chrome placement or
+        # per-source title. Only the accepted content URL remains on hold.
+        if (b['folder_path'], b['title']) != (record['folder_path'], record['title']):
+            b.update(folder_path=record['folder_path'], title=record['title'])
+            conn.execute(text("UPDATE bookmark_bindings SET folder_path=:folder_path,title=:title WHERE id=:id"), b)
+            write_origins(conn, b, now=now)
     _refresh_titles_tags(conn,bindings,records,now)
     conn.execute(text("DELETE FROM chrome_bookmark_nodes WHERE source_id=:id"), source)
     by_guid_binding = {b['guid']:b for b in bindings}
