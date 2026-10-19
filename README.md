@@ -5,7 +5,7 @@ Flowinone 把 **本機圖片／影片、Eagle、Chrome 書籤、Flowinone 匯入
 這份 README 的目標：讓你快速知道 **有什麼能用、如何驗證、結果由哪段程式造成、要改哪裡**。完成第一輪後，你應該能自己追完一個「操作 → route → 資料 → 畫面」的流程。
 
 - 第一次讀：本頁 → [現行架構](docs/architecture.md) → [動手接手練習](docs/hands-on.md)。先認識四個來源，再看資料流和 Web／Worker，最後用一個操作驗證。
-- 要安裝、日常使用或排錯：查 [使用手冊](docs/renderer-architecture.md)；要驗證程式行為：看本頁 [測試](#測試) 與 [從結果追原因](#從結果追原因)。
+- 要安裝、日常使用或排錯：查 [使用手冊](docs/renderer-architecture.md)；測試與排錯見本頁對應章節。
 
 ## 四個資料來源，一份 Catalog
 
@@ -50,17 +50,11 @@ Chrome Bookmarks ────────┤
 | 本機索引、圖片／影片 viewer | `/item_db` 按「同步索引」或「補縮圖」；從卡片開啟 viewer | 顯示本機索引與媒體詳情；索引更新後還要同步 Catalog |
 | 可攜 metadata（sidecar） | 用下方維護指令 audit／export／import `.flowinone.json` | metadata 隨本機素材保存；import／export 預設 dry-run |
 
-正式 UI 現在共用三個頁面模板：`browse.html`（瀏覽）、`detail.html`（詳情，包含 Resource 版本差異）、`manage.html`（管理，包含重複圖片檢閱）。日常瀏覽只有「網格／連續」兩個呈現模式；主導覽為「我的收藏／管理收藏」，「設定」內提供外觀、頁面測試與 UI Lab。`/route-guide/` 沿用管理模板，按頁型列出前端 route、模板與使用現有資料的測試連結，標示來源離線或缺少樣本；維護 POST 僅導向原本操作頁。頁型與路由見 [共用頁型說明](docs/ui-consolidation.md)。
+日常導覽為「我的收藏／管理收藏」，外觀、頁面測試與 UI Lab 位於設定。正式頁面共用瀏覽、詳情、管理三種模板，見 [頁型與路由](docs/ui-consolidation.md)；三套桌面外觀與分類／比例設定見 [UI Lab](docs/ui-lab.md)。
 
-Navigator 的頁內搜尋保留目前條件；其他頁面導覽列的搜尋會在所選來源中搜尋。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。橫向與知識模式已整併；舊 `view=shelf` 對應網格，`view=knowledge`／`reader`／`single`／`linear` 及 `continuous` 對應連續，URL 與儲存偏好沿用 `view=list` 相容值。連結和瀏覽偏好保留原本查詢條件。Resource 詳情先顯示摘要與全文，標籤編輯、擷取狀態與版本差異收在「資源管理」。
+網格以圖片為主，可切換名稱與縮圖比例；連續模式以 900px 同寬呈現原圖與影片，接近底部自動追加，並保留詳情返回位置。Eagle 圖集可混排同資料夾的圖片與影片；一般書籤提供封面與原站入口。完整行為見 [網格與連續模式](docs/gallery-reading.md)。
 
-網格移除卡片外框與陰影，自動比例下的單張圖片使用完整原比例排列；影片、圖集保留精簡名稱。結果右上「⋯」的「名稱」可切換自動／全部顯示／全部隱藏，來源頁也提供相同選項。連續模式將本機與 Eagle 原圖、影片以 900px 置中同寬呈現，長圖不限制高度，不顯示名稱或操作列；影片保留原生播放器控制。接近底部自動追加下一批，失敗時可手動重試；切回網格仍保留已追加項目，完整詳情返回後恢復批次與位置。Eagle 圖集內不再固定篩選圖片，因此可讀取同資料夾影片。一般網頁書籤仍是封面與原站入口，未新增遠端圖集擷取能力。桌面驗證記錄見 [Gallery 閱讀模式](docs/gallery-reading.md)。
-
-首頁 `/` 轉到 `/navigator/?scope=all`，實際讀取路徑是 `CatalogQuery` → `CatalogService.list()` → `browse.html`；預設按最近加入排序，「隨機探索」才使用有 seed 的隨機排序。「今天想看什麼」沿用 Catalog tag facets，最多檢查 6 個候選主題，依目前來源、搜尋、類型、資料夾與瀏覽狀態等條件排除空主題，顯示符合條件的筆數。無搜尋、類型、標籤等條件且按最近加入排列的第一批，在「主題／常用」選單最多預覽 3 個主題、每個 3 筆；主題與預覽連結保留 Navigator 條件，預覽項目會進入該主題並定位到卡片。搜尋、篩選或載入下一批後只在選單保留主題入口；探索主題列與接著逛只出現在無條件首頁。排序在結果右上角選完立即生效，保留已套用條件並回到第一批，不會送出搜尋草稿。
-
-單標籤查詢使用既有 tag/item 索引；只有要顯示的 3 個主題讀取預覽，其餘入口只讀取符合條件的筆數並沿用 browse metadata 快取。離線 Eagle 只在內容查詢時略過，主題連結仍保留使用者勾選的來源。點主題會切換標籤並清除 cursor；預覽連結必要時把批次大小提高到 3，確保目標卡片可見。手工驗證見 [主題探索操作流程](docs/hands-on.md#9-主題探索如何驗證)。
-
-這是標籤式探索，沒有語意分類、個人化模型或新資料表。候選順序沿用全 Catalog 的標籤筆數，優先略過覆蓋九成以上項目的通用標籤；若全部都是通用標籤則保留它們。只檢查前 6 個候選，因此符合目前條件的冷門標籤可能未出現；未標記或尚未同步的內容仍由原本的結果列表瀏覽，同一項目也可能出現在多個主題。
+首頁預設按最近加入排列，主題探索沿用既有標籤與目前條件，並非語意分類或個人化模型；「隨機探索」使用 seed 維持分頁順序。搜尋、篩選與排序保留來源選擇，舊檢視值對應網格或連續模式。主題探索的限制與手動流程見 [操作練習](docs/hands-on.md#9-主題探索如何驗證)。
 
 OCR／人物資料有基礎介面，尚不是完整的日常瀏覽功能。舊筆記／專案工作流與筆記匯出功能已移除；目前也沒有跨裝置同步。
 
@@ -199,7 +193,7 @@ conda run -n py3.11 python -B scripts/bookmark_bindings.py preview \
   --output /path/to/new-preview.json
 ```
 
-檢閱預覽中的 counts、bindings、conflicts 與 approval_digest。正式套用前停止 Web／Worker，避免舊同步程序同時寫入。**只有確認寫入後**才使用以下命令；它會先再次驗證預覽，建立資料庫備份、升級 schema，再於單一寫入交易中回填。來源檔、既有 row、收藏、標籤或來源關聯若已改變，必須重新預覽；修改 JSON 也會使核對失敗。
+可加 `--expected-count N` 核對自行檢閱的候選數量。檢閱預覽中的 counts、bindings、conflicts 與 approval_digest。正式套用前停止 Web／Worker，避免舊同步程序同時寫入。**只有確認寫入後**才使用以下命令；它會先再次驗證預覽，建立資料庫備份、升級 schema，再於單一寫入交易中回填。來源檔、既有 row、收藏、標籤或來源關聯若已改變，必須重新預覽；修改 JSON 也會使核對失敗。
 
 ```bash
 conda run -n py3.11 python -B scripts/bookmark_bindings.py apply \
@@ -223,58 +217,26 @@ migration 0013 尚未套用時，新版 Web／Worker 仍會遵循既有 schema �
 
 ## 測試
 
-### 先跑一組能看懂的基線
-
-```bash
-conda run -n py3.11 pytest -q tests/test_app_architecture.py tests/test_resource_library_core.py
-```
-
-這組檢查 app factory／API 輸入輸出，以及 Resource 去重、匯入、標籤與 job 行為。測試使用臨時資料庫或替代依賴，不需要先啟動 Web／Worker。看到 `passed` 表示這些案例成立；不代表你機器上的 Eagle、Chrome 路徑與真實網路一定正常。
-
-### 一次只追一個行為
-
-```bash
-conda run -n py3.11 pytest -vv tests/test_security_and_runtime.py::test_catalog_sync_can_run_as_a_durable_worker_job
-```
-
-打開 [這個測試](tests/test_security_and_runtime.py)，先看三件事：準備了什麼資料、呼叫了什麼函式、最後的 `assert` 預期什麼。再追到 [ResourceWorker._process](src/flowinone/resource_library/worker.py)。用 `-vv` 看案例名稱，失敗時沿 traceback 找到第一個屬於本 repo 的位置。
-
-| 想驗證的功能 | 對應測試檔（接在 `pytest -q` 後面） |
-| --- | --- |
-| 啟動、API 格式、安全、worker 分離 | `tests/test_app_architecture.py`、`tests/test_security_and_runtime.py` |
-| Catalog 搜尋、合併來源、收藏、session、saved search、sidecar | `tests/test_catalog_next_phase.py` |
-| Eagle client 與增量同步 | `tests/test_eagle_api_v2.py`、`tests/test_eagle_catalog_sync.py` |
-| 自動偵測來源 | `tests/test_catalog_source_watch.py` |
-| 相同／相似圖片、重複檢閱 | `tests/test_catalog_similarity.py` |
-| Resource 匯入、頁面、內容擷取與版本 | `tests/test_resource_library_core.py`、`tests/test_resource_routes.py`、`tests/test_resource_enrichment.py` |
-| 縮圖、安全 URL、provider、Chrome 不在 request 抓網路 | `tests/test_thumbnail_store.py`、`tests/test_thumbnail_urls.py`、`tests/test_thumbnail_providers.py`、`tests/test_thumbnail_extensions.py`、`tests/test_chrome_no_network.py` |
-| Navigator 路徑、同步按鈕重試 | `tests/test_navigator_compatibility.py`、`tests/test_navigator_sync_browser.py` |
-
-較完整的本機回歸（排除顯式標記的 public-site smoke 與效能測試）：
+使用既有 Conda `py3.11`，測試以臨時資料庫、合成資料與替代來源隔離個人收藏及本機擴充。
 
 ```bash
 conda run -n py3.11 pytest -q -m "not online and not performance"
+node --test tests/browser/*.mjs
 ```
 
-重構時先固定以下行為：首頁／Navigator／Catalog JSON 用 `test_app_architecture.py`、`test_navigator_compatibility.py`；Resource 頁面與 API 用 `test_resource_routes.py`；Eagle 增量續傳與故障恢復用 `test_eagle_catalog_sync.py`；同步工作狀態與重試用 `test_catalog_next_phase.py`、`test_security_and_runtime.py`。這些測試都在上面的本機回歸內。
-
-效能基線獨立執行，避免一般回歸每次建立 10 萬筆資料：
+效能測試獨立執行，會建立較大量的合成資料：
 
 ```bash
 conda run --no-capture-output -n py3.11 pytest -q -s -m performance
 ```
 
-`test_navigator_home_100k_topics_query_contract` 另外量測含 6 個候選主題的完整首頁 request，檢查只載入 3 組預覽、快取後不重算 exact totals；同樣使用首次 `2.5s`、快取後 `0.75s` 的門檻。這組使用合成資料，不包含真實來源連線延遲。
-
-`test_navigator_sync_browser.py` 需要 Node.js，缺少時會 skip；它用模擬 DOM／fetch 驗證 JavaScript 控制流程，並未開真正瀏覽器。因此畫面布局與真實來源仍需做上面的手動實驗。
-
-需要驗證實際公開網站縮圖時才跑：
+僅在需要驗證公開網站縮圖時執行連網測試；結果會受網站及網路影響：
 
 ```bash
 FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 ```
 
-這會連外，結果受網站與網路影響。測試失敗先區分「程式行為不符」與「外部來源不可用」。
+以 `pytest -vv tests/<檔名>.py::<案例>` 追查個別行為。`tests/browser/*.mjs` 使用模擬 DOM／fetch，不能取代真實瀏覽器布局檢查；桌面以 1280×900、1440×900 驗證。追碼與操作練習見 [動手接手](docs/hands-on.md)。
 
 ## 從結果追原因
 
@@ -283,7 +245,7 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 | 現象 | 先看什麼證據 | 往哪裡追／下一步 |
 | --- | --- | --- |
 | Navigator 沒本機素材 | `/item_db` 是否有該檔案？來源同步有沒有完成？ | 無索引：`item_db.py`；有索引沒卡片：`CatalogSyncService._sync_local()`、scope／filter |
-| 新 Resource 在舊連結搜不到 | URL 是否為 `scope=gallery`？ | 回我的收藏或使用篩選面板的「包含所有收藏」；舊素材範圍不含 Resources |
+| 新 Resource 在舊連結搜不到 | URL 是否為 `scope=gallery`？目前選了哪些來源？ | 在「篩選 → 來源」加入新增網址或按「全選」 |
 | 匯入成功但沒全文／縮圖 | Resource 詳情 jobs 是 pending、running、retry 還是 failed？ | pending 查 worker；failed 查 error、`enrichment.py`／`extractors.py`；縮圖另有 `ThumbnailWorker` |
 | 同步按下去收到 202 | response 的 job id，再看 `/api/catalog/sync/jobs/<job_id>` | 202 只代表接受排程；配合 `/api/catalog/sync/status` 查看來源進度 |
 | Eagle 卡片消失／同步失敗 | Eagle app 與 local API 是否可用？ | `eagle_integration.py` → `eagle_api/client.py`；Navigator 會略過目前不可用的 Eagle 來源 |
@@ -316,7 +278,7 @@ FLOWINONE_ONLINE_SMOKE=1 conda run -n py3.11 pytest -q -m online
 
 Distributed under the [MIT License](LICENSE).
 
-## 書籤縮圖：共用流程與本機擴充
+## 書籤縮圖與本機擴充
 
 新增 Chrome 書籤由 Thumbnail Worker 每 60 秒檢查並排入持久佇列；批次補圖也使用同一個 Worker、下載器、圖片驗證與快取。Web 與 Worker 需一起啟動。
 
@@ -335,6 +297,7 @@ Git 追蹤通用 metadata 解析、佇列、下載邊界、圖片處理與擴充
 
 本機擴充可提供以下 hooks（均非必填）：
 
+- `media_url_rules()`：回傳影片／圖片／圖集的本機網址規則，例如 `{"album": (("gallery.example", "/albums/%"),)}`。鍵限 `video`、`image`、`album`；host 精確匹配，path 使用 `%`／`_` 萬用字元。卡片與 SQL 篩選共用規則，無擴充時只套用內建分類。
 - `classify_url(url)`：回傳來源分類，無匹配時回傳 `None`。
 - `canonicalize_url(url)`：提供來源專用的穩定網址；遷移既有來源時需維持原有正規化結果，以沿用縮圖 ID。
 - `resolve(url, fetch_html)`：回傳 `ProviderResult`，包含候選圖片網址、最小寬度與快取期限。
@@ -343,4 +306,4 @@ Git 追蹤通用 metadata 解析、佇列、下載邊界、圖片處理與擴充
 
 `ProviderResult(provider, image_urls=(), local_paths=(), min_width=80, ttl_days=30)` 是共用資料介面；原有只提供 `provider` 和 `image_urls` 的擴充仍可使用。素材重用或圖片下載失敗後會嘗試下一候選；更新失敗保留既有好封面，並依佇列規則退避重試。
 
-本機擴充在 Worker 啟動時載入，修改規則後需重新啟動 Worker。公開測試使用假網域與臨時擴充檔，會隔離開發者本機規則與個人資料。
+本機擴充由 Web 與 Worker 各自載入並快取，修改規則後需重新啟動兩者。公開測試使用假網域與臨時擴充檔，會隔離開發者本機規則與個人資料。

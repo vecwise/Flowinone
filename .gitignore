@@ -8,12 +8,23 @@ data/
 data/**
 *.db
 config.json
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.sqlite*-wal
+*.sqlite*-shm
+*.db-wal
+*.db-shm
+*.log
 docs/
 !docs/
 docs/*
 !docs/architecture.md
 !docs/renderer-architecture.md
 !docs/hands-on.md
+!docs/ui-consolidation.md
 !docs/ui-lab.md
 !docs/gallery-reading.md
 

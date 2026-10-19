@@ -112,6 +112,8 @@ Chrome mirror 保留完整來源驗證與同一交易內的刪除／投影；來
 
 `ResourceWorker` 遇到 SQLite BUSY／LOCKED 會等待 0.75 秒後重新領取；完成與失敗狀態的寫入也可重試，並不重新執行已完成的工作或重複累計失敗次數。等待可被 stop event 結束。其他資料庫錯誤不套用這個重試規則。
 
+大型原子同步仍可能短暫延遲其他寫入；WAL 不會讓 SQLite 同時接受多個 writer。效能回歸以合成資料與獨立 writer 測試，避免依賴個人收藏庫。
+
 回歸測試：`tests/test_worker_sqlite_contention.py` 使用真正的獨立 SQLite writer，涵蓋領取、停止、完成／失敗確認與非鎖錯誤；`tests/test_bookmark_bindings.py` 驗證 FTS 更新、全文與收藏保留、來源變動回滾及跨 DB 的交易邊界；`tests/test_catalog_performance.py` 在 75,000 筆既有全文索引上投影 1,000 筆書籤，限制為一次 FTS 掃描。
 
 ## 3. 資料架構：權威、投影與儲存位置

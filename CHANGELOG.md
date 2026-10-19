@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Shared desktop browse, detail and management templates with three UI variants.
+- Persistent source filters, media categories, thumbnail shapes and continuous image/video browsing.
+- Searchable Eagle folder albums, primary-library protection and previewed catalog cleanup.
+- Bookmark thumbnail retries with progress reporting and shared cache processing.
+
+### Changed
+
+- Keep site-specific media rules in optional machine-local extensions.
+- Streamline documentation around current behavior and maintenance commands.
+
+### Fixed
+
+- Reduce SQLite writer contention and recover background jobs after transient locks.
+- Preserve source context, cached covers and browse position across navigation.
+
 ## 2026-10-18
 
 ### Added
@@ -12,7 +31,6 @@
 
 - Retain extra bookmark-origin metadata across regular synchronization, including retired-row and original-URL provenance. Preserve the selected target GUID's display title while it survives.
 - Refresh Chrome folder placements and source titles even while an accepted content URL is held by a collision.
-
 
 ## 2026-10-04
 
