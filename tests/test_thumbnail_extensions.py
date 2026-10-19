@@ -1,3 +1,5 @@
+import pytest
+
 from src.file_handler.thumbnails import extensions
 from src.file_handler.thumbnails.providers import provider_for_url
 from src.file_handler.thumbnails.urls import provider_name_for_url
@@ -8,6 +10,7 @@ def test_missing_local_extension_keeps_generic_pipeline(monkeypatch, tmp_path):
     extensions.load_local_provider.cache_clear()
     try:
         assert provider_name_for_url("https://example.com/article") == "metadata"
+        assert extensions.local_media_url_rules() == {}
     finally:
         extensions.load_local_provider.cache_clear()
 
@@ -36,8 +39,34 @@ def resolve(url, fetch_html):
         result = provider_for_url(url, lambda _: "")
         assert result.provider == "custom"
         assert result.image_urls == ("https://cdn.example.com/cover.jpg",)
+        assert extensions.local_media_url_rules() == {}
     finally:
         extensions.load_local_provider.cache_clear()
+
+
+@pytest.mark.parametrize("rules", [
+    None,
+    {"unknown": (("custom.example", "/article/%"),)},
+    {"video": (("%.example", "/video/%"),)},
+    {"video": (("custom.example:443", "/video/%"),)},
+    {"video": (("custom.example", "video/%"),)},
+    {"video": ("malformed",)},
+])
+def test_invalid_local_media_rules_fall_back_to_generic(monkeypatch, rules):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(extensions, "load_local_provider", lambda: SimpleNamespace(media_url_rules=lambda: rules))
+    assert extensions.local_media_url_rules() == {}
+
+
+def test_failing_local_media_hook_falls_back_to_generic(monkeypatch):
+    from types import SimpleNamespace
+
+    def broken_rules():
+        raise RuntimeError("extension failed")
+
+    monkeypatch.setattr(extensions, "load_local_provider", lambda: SimpleNamespace(media_url_rules=broken_rules))
+    assert extensions.local_media_url_rules() == {}
 
 
 def test_local_normalization_preserves_cache_identity(monkeypatch, tmp_path):

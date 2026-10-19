@@ -47,20 +47,30 @@
   {% if not browse.error %}<section class="browse-results" aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
       <h2 id="navigator-results-heading">{{ '這批 ' if browse.batch_only else '' }}{{ browse.total }} 個項目</h2>
+      <div class="browse-display-controls">
+      <span class="browse-media-hint" data-gallery-shape-hint role="status"></span>
+      <label class="browse-shape-control" for="browse-shape" title="依內容：混合 4:3、影片 16:9、圖片與圖集 3:4。切換比例不會篩掉項目；圖片完整顯示，影片與圖集封面可能裁切。">縮圖
+        <select id="browse-shape" data-gallery-shape-option>
+          {% for key, label in [('auto','依內容'),('landscape','橫式 16:9'),('portrait','直式 3:4'),('square','方形 1:1')] %}
+          <option value="{{ key }}" {% if request.args.get('shape', 'auto') == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
       {% if browse['items'] %}<div class="navigator-view-switch" role="group" aria-label="結果檢視方式">
         <button type="button" data-gallery-view-option="grid" aria-pressed="{{ 'true' if view == 'grid' else 'false' }}">網格</button>
         <button type="button" data-gallery-view-option="list" aria-pressed="{{ 'true' if view == 'list' else 'false' }}">清單</button>
       </div>{% endif %}
+      </div>
     </div>
-    <div class="gallery-grid" data-gallery-view="{{ view }}">
+    <div class="gallery-grid" data-gallery-view="{{ view }}" data-gallery-shape="{{ request.args.get('shape', 'auto') if request.args.get('shape', 'auto') in ['auto','landscape','portrait','square'] else 'auto' }}" data-media-scope="{{ media_scope }}">
       {% for item in browse['items'] %}{% include 'components/_item_card.html' %}{% endfor %}
     </div>
     {% if not browse['items'] %}<section class="gallery-empty"><h3>目前沒有符合的項目</h3><p>可調整篩選或切換來源資料夾。</p>{% if reset_url %}<a class="action-button" href="{{ reset_url }}">清除篩選</a>{% endif %}</section>{% endif %}
     <p data-browse-empty hidden role="status">這批項目沒有符合的結果。</p>
   </section>{% endif %}
   {% if browse.previous_url or browse.next_url %}<nav class="gallery-pagination" aria-label="批次載入">
-    {% if browse.previous_url %}<a class="action-button" data-browse-link href="{{ browse.previous_url }}">上一批</a>{% endif %}
-    {% if browse.next_url %}<a class="action-button primary" data-browse-link href="{{ browse.next_url }}">載入下一批</a>{% endif %}
+    {% if browse.previous_url %}<a class="action-button" data-browse-link href="{{ browse.previous_url|ui_href }}">上一批</a>{% endif %}
+    {% if browse.next_url %}<a class="action-button primary" data-browse-link href="{{ browse.next_url|ui_href }}">載入下一批</a>{% endif %}
   </nav>{% endif %}
   </div>
 {% if browse.kind == 'catalog' %}
@@ -84,5 +94,6 @@
 {% if browse.kind == 'catalog' %}{% include 'components/_catalog_extras.html' %}{% endif %}
 {% if browse.kind != 'catalog' %}<script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/browse_controls.js') }}"></script>
+<script src="{{ url_for('static', filename='js/browse_presentation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/browse_thumbnails.js') }}"></script>
 {% endblock %}

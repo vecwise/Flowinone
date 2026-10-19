@@ -1,10 +1,11 @@
-"""Load an optional machine-local thumbnail provider outside the package."""
+"""Load optional machine-local media and thumbnail rules outside the package."""
 
 from __future__ import annotations
 
 import importlib.util
 import logging
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
@@ -51,6 +52,32 @@ def classify_local_url(url: str) -> Optional[str]:
     return str(result) if result else None
 
 
+def local_media_url_rules() -> dict[str, tuple[tuple[str, str], ...]]:
+    """Read optional browse rules as (exact host, SQL-LIKE path) pairs."""
+    module = load_local_provider()
+    hook = getattr(module, "media_url_rules", None) if module else None
+    if not callable(hook):
+        return {}
+    try:
+        rules = hook()
+        result = {}
+        for category, pairs in rules.items():
+            if category not in {"video", "image", "album"}:
+                raise ValueError("Unsupported local media category")
+            validated = []
+            for host, path in pairs:
+                if not isinstance(host, str) or not re.fullmatch(r"[a-zA-Z0-9]+(?:[.-][a-zA-Z0-9]+)*", host):
+                    raise ValueError("Local media rules require exact hostnames")
+                if not isinstance(path, str) or not path.startswith("/"):
+                    raise ValueError("Local media rules require absolute URL paths")
+                validated.append((host.lower(), path.lower()))
+            result[category] = tuple(validated)
+        return result
+    except Exception:
+        LOGGER.exception("Could not load machine-local media rules")
+        return {}
+
+
 def resolve_local_provider(url: str, fetch_html: Callable[[str], str]):
     module = load_local_provider()
     hook = getattr(module, "resolve", None) if module else None
@@ -89,6 +116,7 @@ __all__ = [
     "LOCAL_PROVIDER_ENV",
     "classify_local_url",
     "load_local_provider",
+    "local_media_url_rules",
     "resolve_local_provider",
     "canonicalize_local_url",
     "resolve_local_sources",

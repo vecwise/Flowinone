@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .media import MEDIA_LABELS
+
 CATALOG_SOURCES = ("local", "eagle", "bookmarks", "resources")
 CATALOG_SORTS = (
     "newest", "recently_added", "relevance", "title", "random",
@@ -40,6 +42,7 @@ class CatalogQuery:
     scope: str = "all"
     sources: tuple[str, ...] = CATALOG_SOURCES
     item_type: str = ""
+    media: str = ""
     folder: str = ""
     tags: tuple[str, ...] = ()
     tag_mode: str = "any"
@@ -96,11 +99,13 @@ class CatalogQuery:
                 return None
 
         scope = str(values.get("scope") or "all").strip().lower()
+        media = str(values.get("media") or "").strip().lower()
         return cls(
             q=str(values.get("q") or "").strip()[:300],
             scope=scope if scope in {"all", "gallery", "resources"} else "all",
             sources=sources,
             item_type=str(values.get("item_type") or values.get("type") or "").strip().lower()[:40],
+            media=media if media in MEDIA_LABELS else "",
             folder=str(values.get("folder") or "").strip()[:500],
             tags=tags,
             tag_mode="all" if str(values.get("tag_mode") or "any").lower() == "all" else "any",
@@ -143,6 +148,7 @@ class CatalogQuery:
             "scope": self.scope,
             "sources": list(self.sources),
             "type": self.item_type or None,
+            **({"media": self.media} if self.media else {}),
             "folder": self.folder or None,
             "tags": list(self.tags),
             "tag_mode": self.tag_mode,

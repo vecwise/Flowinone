@@ -17,6 +17,7 @@ from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .eagle_sync import EAGLE_SYNC_CURSOR_VERSION
 from .locking import database_is_locked
+from .media import media_category, media_category_sql
 from .query import CatalogQuery, _fts_query, _json
 
 CATALOG_BROWSE_CACHE_MAX_ENTRIES = 128
@@ -240,6 +241,7 @@ class CatalogService:
     @staticmethod
     def _row(row: Any) -> dict[str, Any]:
         result = dict(row)
+        result["media_category"] = media_category(result.get("item_type"), result.get("original_url"))
         match_reason = None
         for field, label, key in _MATCH_REASON_FIELDS:
             value = str(result.pop(key, "") or "")
@@ -296,6 +298,9 @@ class CatalogService:
                 params[f"source_{index}"] = source
                 placeholders.append(f":source_{index}")
             conditions.append(f"EXISTS (SELECT 1 FROM catalog_origins so WHERE so.catalog_item_id=i.id AND so.stale=0 AND so.source_kind IN ({','.join(placeholders)}))")
+        if query.media:
+            params["media"] = query.media
+            conditions.append(f"({media_category_sql()})=:media")
         if query.item_type:
             params["item_type"] = query.item_type
             if query.item_type == "bookmark":

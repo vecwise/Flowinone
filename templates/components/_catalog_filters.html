@@ -1,27 +1,23 @@
   <form class="gallery-query navigator-query" method="get" role="search" aria-label="收藏搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
     <input type="hidden" name="view" value="{{ 'list' if view == 'list' else '' }}">
+    <input type="hidden" name="shape" value="{{ request.args.get('shape', 'auto') }}" data-shape-input>
     {% if current_context and current_context.named %}<input type="hidden" name="context" value="{{ request.args.get('context') }}">{% endif %}
     {% if query.folder %}<input type="hidden" name="folder" value="{{ query.folder }}">{% endif %}
     <input type="hidden" name="limit" value="{{ query.limit }}">
     {% if query.added_from %}<input type="hidden" name="added_from" value="{{ query.added_from }}">{% endif %}
     {% if query.added_to %}<input type="hidden" name="added_to" value="{{ query.added_to }}">{% endif %}
+    <fieldset class="browse-media-filter">
+      <legend>內容</legend>
+      {% for key, label in media_labels.items() %}
+      <label><input type="radio" name="media" value="{{ key }}" {% if query.media == key %}checked{% endif %} data-media-filter><span>{{ label }}</span></label>
+      {% endfor %}
+    </fieldset>
     <div class="gallery-search-field">
       <label for="navigator-q">搜尋</label>
       <input id="navigator-q" type="search" name="q" value="{{ query.q }}" placeholder="搜尋目前主題或收藏">
     </div>
 
-    <div class="gallery-select-field">
-      <label for="navigator-type">類型</label>
-      <select id="navigator-type" name="type">
-        <option value="">全部類型</option>
-        {% for item_type, count in payload.facets.types.items() %}
-        {% if item_type != 'bookmark' %}
-        <option value="{{ item_type }}" {% if query.item_type == item_type %}selected{% endif %}>{{ item_type_labels.get(item_type, item_type) }} ({{ count }})</option>
-        {% endif %}
-        {% endfor %}
-      </select>
-    </div>
     <div class="gallery-select-field">
       <label for="navigator-sort">排序</label>
       <select id="navigator-sort" name="sort">
@@ -41,8 +37,17 @@
       <a class="action-button" href="{{ reset_url }}">重設</a>
     </div>
     <details class="navigator-advanced">
-      <summary>更多篩選{% if query.sources != scope_sources or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
+      <summary>更多篩選{% if query.sources != scope_sources or query.item_type or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
       <div class="navigator-advanced-grid">
+        <div class="gallery-select-field">
+          <label for="navigator-type">精確類型</label>
+          <select id="navigator-type" name="type">
+            <option value="">全部類型</option>
+            {% for item_type, count in payload.facets.types.items() if item_type != 'bookmark' %}
+            <option value="{{ item_type }}" {% if query.item_type == item_type %}selected{% endif %}>{{ item_type_labels.get(item_type, item_type) }} ({{ count }})</option>
+            {% endfor %}
+          </select>
+        </div>
         {% if query.scope == 'gallery' %}<p class="navigator-scope-note">目前連結只包含本機、Eagle 與書籤。<a href="{{ all_sources_url }}">包含所有收藏</a></p>{% endif %}
         <fieldset class="gallery-source-filter">
           <legend>來源</legend>

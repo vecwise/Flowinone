@@ -20,6 +20,7 @@ from .commands import register_catalog_commands
 from .http import bp, _database
 from .presentation import SOURCE_LABELS, bookmark_source_health as _bookmark_source_health, visible_items
 from .query import CATALOG_SOURCES, CatalogQuery
+from .media import MEDIA_LABELS
 from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
 
@@ -60,6 +61,7 @@ def _navigator_query() -> CatalogQuery:
     return CatalogQuery.create(
         q=request.args.get("q"), scope=scope, sources=sources,
         item_type=item_type,
+        media=request.args.get("media"),
         folder=request.args.get("folder"),
         tags=request.args.getlist("tags") or request.args.get("tags"),
         tag_mode=request.args.get("tag_mode"), favorite=request.args.get("favorite"),
@@ -78,6 +80,8 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
     pairs.extend(("source", source) for source in query.sources)
     if query.item_type:
         pairs.append(("type", query.item_type))
+    if query.media:
+        pairs.append(("media", query.media))
     if query.folder:
         pairs.append(("folder", query.folder))
     if query.tags:
@@ -111,6 +115,8 @@ def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
     pairs = _navigator_query_pairs(query, cursor=cursor)
     if _navigator_view() == "list":
         pairs.append(("view", "list"))
+    if request.args.get("shape") in {"landscape", "portrait", "square"}:
+        pairs.append(("shape", request.args["shape"]))
     context = getattr(g, "navigator_context", None)
     if context and CatalogQuery.create(**context["query"]).signature() == query.signature():
         pairs.append(("context", context["id"]))
@@ -185,6 +191,7 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
         meaningful = bool(
             session_query.q
             or session_query.item_type
+            or session_query.media
             or session_query.tags
             or session_query.favorite
             or session_query.unviewed
@@ -233,6 +240,8 @@ def _saved_search_summary(query: CatalogQuery) -> str:
         details.append("尚未瀏覽")
     if query.item_type:
         details.append(ITEM_TYPE_LABELS.get(query.item_type, query.item_type))
+    if query.media:
+        details.append(MEDIA_LABELS[query.media])
     if query.folder:
         details.append(f"資料夾：{query.folder}")
     return " · ".join(details) or "篩選瀏覽"
@@ -325,8 +334,6 @@ def navigator_page():
         payload["facets"]["sync"].get("bookmarks", {}),
         payload["facets"]["sources"].get("bookmarks", 0),
     ) if "bookmarks" in query.sources else None
-    if not payload["next_cursor"]:
-        payload["total_estimate"] = len(payload["items"])
     next_url = None
     if payload["next_cursor"]:
         next_url = _navigator_url(query, cursor=payload["next_cursor"])
@@ -354,7 +361,7 @@ def navigator_page():
         )
     )
     show_context = bool(
-        active_context or query.q or query.item_type or query.folder or query.tags
+        active_context or query.q or query.item_type or query.media or query.folder or query.tags
         or query.favorite or query.unviewed or query.duration_min is not None
         or query.duration_max is not None or query.added_from or query.added_to
         or query.sources != scope_sources or query.sort != "recently_added"
@@ -420,6 +427,7 @@ def navigator_page():
         eagle_available=eagle_available,
         bookmark_source_health=bookmark_source_health,
         item_type_labels=ITEM_TYPE_LABELS,
+        media_labels=MEDIA_LABELS,
     )
 
 

@@ -1,4 +1,4 @@
-<article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}" data-thumbnail-provider="{{ item.thumbnail_provider or '' }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
+<article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}" data-thumbnail-provider="{{ item.thumbnail_provider or '' }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}" data-media-category="{{ item.media_category or 'page' }}">
   <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
     {% if item.thumbnail_is_fallback %}
     <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
@@ -6,7 +6,7 @@
     {% else %}
     <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async"{% if item.thumbnail_id %} data-thumbnail-image{% endif %}>
     {% endif %}
-    <span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>
+    <span class="gallery-type-badge">{{ '漫畫／圖集' if item.media_category == 'album' else '影片' if item.media_category == 'video' else item_type_labels.get(item.item_type, item.item_type) }}</span>
     {% if item.duration_seconds %}<span class="gallery-duration-badge">{{ item.duration_seconds|int }}s</span>{% endif %}
   </a>
   <div class="gallery-card-body">

@@ -5,6 +5,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from flask import render_template, request, url_for
 
 from .common import get_feature_flags
+from src.flowinone.catalog.media import media_category
 
 ITEM_TYPE_LABELS = {
     "image": "圖片", "video": "影片", "bookmark": "書籤", "folder": "資料夾",
@@ -38,6 +39,7 @@ def source_cards(data: list[dict], source: str) -> list[dict]:
             "id": item.get("id") or str(index), "catalog_item": False,
             "title": item.get("name") or item.get("title") or "未命名",
             "item_type": kind, "launch_uri": uri,
+            "media_category": media_category(kind, uri),
             "launch_source": "bookmarks" if source == "chrome" else source,
             "launch_source_label": SOURCE_LABELS.get(source, source),
             "target_blank": kind == "bookmark", "thumbnail_ref": item.get("thumbnail_route"),
@@ -54,6 +56,9 @@ def source_cards(data: list[dict], source: str) -> list[dict]:
 
 def render_source_browse(*, metadata: dict, data: list[dict]):
     source = request.blueprint or "local"
+    cards = source_cards(data, source)
+    categories = {item["media_category"] for item in cards}
+    media_scope = next(iter(categories)) if len(categories) == 1 and not any(item["item_type"] in {"folder", "tag"} for item in cards) else ""
     pagination = metadata.get("pagination") or {}
     links = [{"label": "返回收藏", "url": url_for("catalog.navigator_page", scope="all")}]
     if source == "eagle" and get_feature_flags().get("eagle"):
@@ -65,10 +70,10 @@ def render_source_browse(*, metadata: dict, data: list[dict]):
         "browse.html", title=metadata.get("name", "來源瀏覽"), metadata=metadata,
         browse={"kind": "source", "heading": metadata.get("name", "來源瀏覽"),
                 "description": "瀏覽來源中的資料夾與項目。", "links": links,
-                "items": source_cards(data, source), "total": pagination.get("total", len(data)),
+                "items": cards, "total": pagination.get("total", len(data)),
                 "previous_url": pagination.get("previous_url"), "next_url": pagination.get("next_url"),
                 "error": metadata.get("error"), "batch_only": metadata.get("category") == "stream"},
-        view=browse_view(), item_type_labels=ITEM_TYPE_LABELS,
+        view=browse_view(), item_type_labels=ITEM_TYPE_LABELS, media_scope=media_scope,
     ), metadata.get("status_code", 200)
 
 
@@ -84,7 +89,8 @@ def render_catalog_browse(**context):
         "browse.html", browse={"kind": "catalog", "heading": "我的收藏",
         "description": "選個主題，接著逛自己的文章、影片與圖片。", "links": [],
         "items": context["payload"]["items"], "total": context["payload"]["total_estimate"],
-        "next_url": context["next_url"], "previous_url": None}, **context,
+        "next_url": context["next_url"], "previous_url": None},
+        media_scope=context["query"].media or (context["query"].item_type if context["query"].item_type in {"image", "video"} else ""), **context,
     )
 
 

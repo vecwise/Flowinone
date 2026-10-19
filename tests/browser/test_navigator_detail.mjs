@@ -34,7 +34,7 @@ function harness(firstItem = {}) {
   dialog.close = () => { dialog.open = false; dialog.listeners.close?.(); };
   const link = new Element();
   link.closest = () => ({dataset: {navigatorItem: 'first'}});
-  const page = new Element({navigatorQueryPayload: JSON.stringify({scope: 'gallery', sources: ['bookmarks'], q: 'old', tags: ['design'], tag_mode: 'all', favorite: true})});
+  const page = new Element({navigatorQueryPayload: JSON.stringify({scope: 'gallery', sources: ['bookmarks'], q: 'old', media: 'video', tags: ['design'], tag_mode: 'all', favorite: true})});
   const document = {
     querySelector: (selector) => selector === '[data-gallery-detail]' ? dialog : page,
     querySelectorAll: () => [link],
@@ -80,6 +80,7 @@ test('gallery detail stays in place, follows related items, and returns focus', 
   const relatedUrl = new URL(requests.find((request) => request.url.includes('/related')).url, 'http://localhost');
   assert.equal(relatedUrl.searchParams.get('scope'), 'gallery');
   assert.equal(relatedUrl.searchParams.get('q'), 'old');
+  assert.equal(relatedUrl.searchParams.get('media'), 'video');
   assert.equal(relatedUrl.searchParams.get('tags'), 'design');
   assert.equal(relatedUrl.searchParams.get('tag_mode'), 'all');
   assert.equal(relatedUrl.searchParams.get('favorite'), '1');

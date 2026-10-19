@@ -65,6 +65,7 @@ class CatalogEventRequest(ApiInput):
 
 
 class CatalogQueryInput(ApiInput):
+    media: Literal["", "video", "image", "album", "page"] | None = None
     q: StrictStr = Field(default="", max_length=300)
     scope: Literal["all", "gallery", "resources"] = "all"
     sources: list[CatalogSource] = list(CatalogSource.__args__)
@@ -181,6 +182,7 @@ class SavedSearchLimitQuery(ApiQuery):
 
 
 class CatalogListQuery(ApiQuery):
+    media: Literal["", "video", "image", "album", "page"] = ""
     q: str = Field(default="", max_length=300)
     scope: Literal["all", "gallery", "resources"] = "all"
     source: list[CatalogSource] = []

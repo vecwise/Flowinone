@@ -12,7 +12,7 @@
     if (query.folder) params.set('folder', query.folder);
     const itemSuffix = params.toString() ? `?${params}` : '';
     const relatedParams = new URLSearchParams(params);
-    ['q', 'scope', 'type', 'tag_mode', 'duration_min', 'duration_max', 'added_from', 'added_to'].forEach((key) => {
+    ['q', 'scope', 'type', 'media', 'tag_mode', 'duration_min', 'duration_max', 'added_from', 'added_to'].forEach((key) => {
       if (query[key] !== null && query[key] !== undefined && query[key] !== '') {
         relatedParams.set(key, query[key]);
       }
