@@ -197,6 +197,12 @@ def content_card_from_db_item(
 
 
 def decorate_related_items(items: list[dict] | None, metadata: dict | None = None) -> list[dict]:
+    from .browse_sources import source_preference
+
+    preferred = source_preference()
+    source = "local" if request.blueprint == "media" else "eagle"
+    if preferred and source not in preferred:
+        return []
     decorated = []
     metadata = metadata or {}
     tags = metadata.get("tags") or []
@@ -221,6 +227,9 @@ def catalog_related_for_origin(
         from sqlalchemy import text
 
         from src.flowinone.catalog.discovery import DiscoveryService
+        from src.flowinone.catalog.presentation import visible_items
+        from src.flowinone.catalog.query import CatalogQuery
+        from .browse_sources import current_sources
         from src.flowinone.resource_library.database import get_resource_database
 
         configured = current_app.config.get("FLOWINONE_RESOURCE_DB_PATH")
@@ -243,10 +252,15 @@ def catalog_related_for_origin(
             ).scalar_one_or_none()
         if not item_id:
             return []
+        context = CatalogQuery.create(sources=current_sources())
+        discovery = DiscoveryService(database)
+        related = discovery.related_items(item_id, limit=limit, context=context)
+        related = visible_items(discovery.catalog, {"items": related}, context)
         return [
             {
                 "title": item["title"],
-                "url": item.get("primary_detail_uri")
+                "url": item.get("launch_uri")
+                or item.get("primary_detail_uri")
                 or item.get("original_url")
                 or "#",
                 "thumbnail_route": item.get("thumbnail_ref")
@@ -254,7 +268,7 @@ def catalog_related_for_origin(
                 "why": "、".join((item.get("reason") or {}).get("shared") or [])
                 or item.get("relation_type", "相關項目"),
             }
-            for item in DiscoveryService(database).related_items(item_id, limit=limit)
+            for item in related
         ]
     except Exception:
         return []

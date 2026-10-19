@@ -13,6 +13,7 @@ from src.flowinone.resource_library.canonical import hash_text
 from src.flowinone.resource_library.jobs import JobQueue
 from src.flowinone.web.api import api_error, parse_json, parse_query, validated_json
 from src.flowinone.web.common import path_is_within_roots
+from src.flowinone.web.browse_sources import apply_source_preference, source_preference
 from src.flowinone.web.schemas import (
     CatalogEventRequest, CatalogFacetsOutput, CatalogItemOutput, CatalogItemsOutput,
     CatalogListOutput, CatalogListQuery, CatalogSessionOutput, CatalogSessionRequest,
@@ -54,7 +55,10 @@ def api_item(item_id: str):
     try:
         service = CatalogService(_database())
         item = service.get(item_id)
-        visible = visible_items(service, {"items": [item]}, _preview_query())
+        context = _preview_query()
+        if source_preference() and item_id not in service.matching_ids(context, [item_id]):
+            return api_error("Catalog item is outside selected sources", 404)
+        visible = visible_items(service, {"items": [item]}, context)
         if visible and visible[0]["item_type"] == "video" and visible[0].get("launch_source") in {"local", "eagle"}:
             visible[0]["playback_uri"] = url_for("catalog.catalog_video_playback", item_id=item_id, source=visible[0]["launch_source"])
         return validated_json(
@@ -114,7 +118,7 @@ def _catalog_query_from_params(query: CatalogListQuery) -> CatalogQuery:
     values = query.model_dump()
     values["sources"] = values.pop("source")
     values["item_type"] = values.pop("type")
-    return CatalogQuery.create(**values)
+    return apply_source_preference(CatalogQuery.create(**values))
 
 
 @bp.post("/api/catalog/items/<item_id>/events")
@@ -160,7 +164,7 @@ def api_related(item_id: str):
 
 def _preview_query() -> CatalogQuery:
     requested = tuple(source for source in request.args.getlist("source") if source in CATALOG_SOURCES)
-    return CatalogQuery.create(scope="all", sources=requested or CATALOG_SOURCES, folder=request.args.get("folder"))
+    return apply_source_preference(CatalogQuery.create(scope="all", sources=requested or CATALOG_SOURCES, folder=request.args.get("folder")))
 
 
 @bp.get("/api/catalog/items/<item_id>/similar-images")
@@ -173,10 +177,14 @@ def api_similar_images(item_id: str):
         )
     except LookupError:
         return api_error("Catalog item not found", 404)
+    context = apply_source_preference(CatalogQuery.create(scope="all", sources=CATALOG_SOURCES))
+    if source_preference():
+        matching = service.matching_ids(context, [item["id"] for item in payload["items"]])
+        payload["items"] = [item for item in payload["items"] if item["id"] in matching]
     payload["items"] = visible_items(
         service,
         payload,
-        CatalogQuery.create(scope="all", sources=CATALOG_SOURCES),
+        context,
     )
     return validated_json(payload, SimilarImagesOutput)
 

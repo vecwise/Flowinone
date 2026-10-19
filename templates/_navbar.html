@@ -10,6 +10,6 @@
     <a class="{{ 'is-active' if testing_ui else '' }}" href="{{ url_for('local.ui_lab', return_to=lab_return_url if testing_ui else request.full_path.rstrip('?')) }}" data-ui-lab-entry {% if testing_ui %}aria-current="page"{% endif %}>UI Lab</a>
   </div>
   {% if request.endpoint != 'catalog.navigator_page' %}
-  <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="get" role="search"><label class="sr-only" for="globalSearch">搜尋全部收藏</label><input id="globalSearch" type="search" placeholder="搜尋我的收藏" name="q"><input type="hidden" name="scope" value="all"><button type="submit">搜尋</button></form>
+  <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="get" role="search"><label class="sr-only" for="globalSearch">搜尋所選來源的收藏</label><input id="globalSearch" type="search" placeholder="搜尋所選來源" name="q"><input type="hidden" name="scope" value="all">{% for source in browse_selected_sources %}<input type="hidden" name="source" value="{{ source }}">{% endfor %}<button type="submit">搜尋</button></form>
   {% endif %}
 </nav>

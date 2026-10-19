@@ -734,7 +734,8 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
     assert BeautifulSoup(gallery.data, "html.parser").select_one(
         '[data-bookmark-source-health][data-state="unavailable"]'
     )
-    assert gallery.data.count(b'type="checkbox" name="source"') == 3
+    assert gallery.data.count(b'type="checkbox" name="source"') == 4
+    assert len(BeautifulSoup(gallery.data, "html.parser").select('#global-source-form input[checked]')) == 3
     management_page = BeautifulSoup(client.get("/library/").data, "html.parser")
     assert not BeautifulSoup(gallery.data, "html.parser").select("[data-catalog-sync-source]")
     sync_rows = management_page.select("[data-catalog-sync-source]")

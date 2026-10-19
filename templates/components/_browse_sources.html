@@ -1,0 +1,16 @@
+<form id="global-source-form" class="global-source-bar" action="{{ url_for('browse_sources.update_sources') }}" method="post" data-global-sources>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="return_to" value="{{ request.full_path.rstrip('?') }}">
+  <fieldset class="global-source-options" aria-describedby="global-source-hint">
+    <legend>瀏覽來源</legend>
+    {% for key, label in browse_source_options %}
+    <label class="global-source-chip">
+      <input type="checkbox" name="source" value="{{ key }}" {% if key in browse_selected_sources %}checked{% endif %}>
+      <span>{{ label }}</span>
+    </label>
+    {% endfor %}
+  </fieldset>
+  <button class="global-source-all" type="submit" name="source_action" value="all">全選</button>
+  <span id="global-source-hint" class="global-source-hint" role="status">可複選 · 套用至後續瀏覽</span>
+  <noscript><button class="action-button" type="submit">更新來源</button></noscript>
+</form>

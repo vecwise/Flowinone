@@ -14,6 +14,7 @@ from src.flowinone.web.api import register_api_error_handlers
 from src.flowinone.web.common import get_feature_flags
 from src.flowinone.web.security import register_request_security
 from src.flowinone.web.ui_variants import register_ui_variants
+from src.flowinone.web.browse_sources import register_browse_sources
 
 
 debug_bp = Blueprint("debug", __name__)
@@ -44,6 +45,7 @@ def register_routes(app: Flask) -> None:
     register_api_error_handlers(app)
     register_request_security(app)
     register_ui_variants(app)
+    register_browse_sources(app)
 
     @app.context_processor
     def inject_feature_flags():

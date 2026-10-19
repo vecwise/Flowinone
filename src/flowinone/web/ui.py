@@ -5,6 +5,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from flask import render_template, request, url_for
 
 from .common import get_feature_flags
+from .browse_sources import source_preference
 from src.flowinone.catalog.media import media_category
 
 ITEM_TYPE_LABELS = {
@@ -57,6 +58,10 @@ def source_cards(data: list[dict], source: str) -> list[dict]:
 def render_source_browse(*, metadata: dict, data: list[dict]):
     source = request.blueprint or "local"
     cards = source_cards(data, source)
+    preferred = source_preference()
+    excluded = bool(preferred and ("bookmarks" if source == "chrome" else source) not in preferred)
+    if excluded:
+        cards = []
     categories = {item["media_category"] for item in cards}
     media_scope = next(iter(categories)) if len(categories) == 1 and not any(item["item_type"] in {"folder", "tag"} for item in cards) else ""
     pagination = metadata.get("pagination") or {}
@@ -70,8 +75,8 @@ def render_source_browse(*, metadata: dict, data: list[dict]):
         "browse.html", title=metadata.get("name", "來源瀏覽"), metadata=metadata,
         browse={"kind": "source", "heading": metadata.get("name", "來源瀏覽"),
                 "description": "瀏覽來源中的資料夾與項目。", "links": links,
-                "items": cards, "total": pagination.get("total", len(data)),
-                "previous_url": pagination.get("previous_url"), "next_url": pagination.get("next_url"),
+                "items": cards, "total": 0 if excluded else pagination.get("total", len(data)),
+                "previous_url": None if excluded else pagination.get("previous_url"), "next_url": None if excluded else pagination.get("next_url"),
                 "error": metadata.get("error"), "batch_only": metadata.get("category") == "stream"},
         view=browse_view(), item_type_labels=ITEM_TYPE_LABELS, media_scope=media_scope,
     ), metadata.get("status_code", 200)
@@ -124,6 +129,15 @@ def safe_browse_return(value):
 def render_resource_detail(**context):
     resource = context["resource"]
     current_context = context.get("current_context") or {}
+    related = [
+        {"title": item["title"], "url": item["detail_url"] + (
+             "?" + urlencode({"return_to": current_context["return_url"]}) if current_context.get("return_url") else ""),
+         "thumbnail_route": item.get("thumbnail_url"), "why": item.get("domain") or item["source_type"]}
+        for item in context.get("similar_resources", [])
+    ]
+    if source_preference():
+        from .common import catalog_related_for_origin
+        related = catalog_related_for_origin("resources", resource["id"], limit=6)
     return render_template("detail.html", detail={
         "kind": "resource", "title": resource["title"],
         "source_label": f"{context['resource_type_labels'].get(resource['source_type'], resource['source_type'])} · {resource.get('domain') or '網站'}",
@@ -131,12 +145,7 @@ def render_resource_detail(**context):
         "tags": resource.get("tag_names") or [], "thumbnail_url": resource.get("thumbnail_url"),
         "parent_url": current_context.get("return_url") or url_for("catalog.navigator_page", scope="all"),
         "original_url": resource.get("original_url"),
-    }, related_items=[
-        {"title": item["title"], "url": item["detail_url"] + (
-             "?" + urlencode({"return_to": current_context["return_url"]}) if current_context.get("return_url") else ""),
-         "thumbnail_route": item.get("thumbnail_url"), "why": item.get("domain") or item["source_type"]}
-        for item in context.get("similar_resources", [])
-    ], **context)
+    }, related_items=related, **context)
 
 
 def management_context(database, facets):

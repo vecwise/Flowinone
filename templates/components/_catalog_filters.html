@@ -1,5 +1,6 @@
   <form class="gallery-query navigator-query" method="get" role="search" aria-label="收藏搜尋與篩選">
     <input type="hidden" name="scope" value="{{ query.scope }}">
+    {% for source in query.sources %}<input type="hidden" name="source" value="{{ source }}">{% endfor %}
     <input type="hidden" name="view" value="{{ 'list' if view == 'list' else '' }}">
     <input type="hidden" name="shape" value="{{ request.args.get('shape', 'auto') }}" data-shape-input>
     {% if current_context and current_context.named %}<input type="hidden" name="context" value="{{ request.args.get('context') }}">{% endif %}
@@ -37,7 +38,7 @@
       <a class="action-button" href="{{ reset_url }}">重設</a>
     </div>
     <details class="navigator-advanced">
-      <summary>更多篩選{% if query.sources != scope_sources or query.item_type or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
+      <summary>更多篩選{% if query.item_type or query.tags or query.favorite or query.unviewed or query.duration_min is not none or query.duration_max is not none %}<span>已套用</span>{% endif %}</summary>
       <div class="navigator-advanced-grid">
         <div class="gallery-select-field">
           <label for="navigator-type">精確類型</label>
@@ -49,17 +50,6 @@
           </select>
         </div>
         {% if query.scope == 'gallery' %}<p class="navigator-scope-note">目前連結只包含本機、Eagle 與書籤。<a href="{{ all_sources_url }}">包含所有收藏</a></p>{% endif %}
-        <fieldset class="gallery-source-filter">
-          <legend>來源</legend>
-          <div class="gallery-source-options {% if source_options|length == 4 %}has-four-sources{% endif %}">
-            {% for source in source_options %}
-            <label class="source-option {% if source.error %}has-warning{% endif %}">
-              <input type="checkbox" name="source" value="{{ source.key }}" {% if source.key in query.sources %}checked{% endif %}>
-              <span><strong>{{ source.label }}</strong><small>{{ source.count }} items{% if source.error %} · {{ source.error }}{% endif %}</small></span>
-            </label>
-            {% endfor %}
-          </div>
-        </fieldset>
         <div class="gallery-search-field">
           <label for="navigator-tags">標籤（逗號分隔）</label>
           <input id="navigator-tags" name="tags" value="{{ query.tags|join(',') }}" placeholder="例如：reference, motion">

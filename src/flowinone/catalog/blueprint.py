@@ -13,6 +13,7 @@ from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.config import CHROME_BOOKMARK_PATH
 
 from src.flowinone.web.ui import browse_view, render_catalog_browse
+from src.flowinone.web.browse_sources import apply_source_preference, source_preference
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .browse import CatalogService
@@ -58,7 +59,7 @@ def _navigator_query() -> CatalogQuery:
         # Older links used bookmark as a type, although it denotes an origin.
         sources = ("bookmarks",)
         item_type = None
-    return CatalogQuery.create(
+    return apply_source_preference(CatalogQuery.create(
         q=request.args.get("q"), scope=scope, sources=sources,
         item_type=item_type,
         media=request.args.get("media"),
@@ -70,7 +71,7 @@ def _navigator_query() -> CatalogQuery:
         added_from=request.args.get("added_from"), added_to=request.args.get("added_to"),
         sort=request.args.get("sort"), seed=request.args.get("seed"),
         limit=request.args.get("limit"), cursor=request.args.get("cursor"),
-    )
+    ))
 
 
 def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) -> list[tuple[str, str]]:
@@ -118,7 +119,7 @@ def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
     if request.args.get("shape") in {"landscape", "portrait", "square"}:
         pairs.append(("shape", request.args["shape"]))
     context = getattr(g, "navigator_context", None)
-    if context and CatalogQuery.create(**context["query"]).signature() == query.signature():
+    if context and apply_source_preference(CatalogQuery.create(**context["query"])).signature() == query.signature():
         pairs.append(("context", context["id"]))
     return f"{url_for('catalog.navigator_page')}?{urlencode(pairs)}"
 
@@ -133,7 +134,7 @@ def _quick_filter_url(query: CatalogQuery, **changes) -> str:
 def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
     values = query.public_dict()
     values.update({"scope": scope, "sources": NAVIGATOR_SCOPE_SOURCES[scope], "cursor": ""})
-    return CatalogQuery.create(**values)
+    return apply_source_preference(CatalogQuery.create(**values))
 
 
 def _navigator_topics(
@@ -187,7 +188,10 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
             source for source in saved_query.get("sources") or ()
             if source in NAVIGATOR_SCOPE_SOURCES[scope]
         ) or NAVIGATOR_SCOPE_SOURCES[scope]
-        session_query = CatalogQuery.create(**saved_query)
+        original_query = CatalogQuery.create(**saved_query)
+        session_query = apply_source_preference(original_query)
+        if session_query != original_query:
+            session = {**session, "cursor": "", "scroll_position": 0, "focused_item_id": None}
         meaningful = bool(
             session_query.q
             or session_query.item_type
@@ -268,7 +272,7 @@ def navigator_saved_view(saved_search_id: str):
         saved = CatalogService(_database()).get_saved_search(saved_search_id)
     except LookupError:
         abort(404)
-    query = CatalogQuery.create(**saved["query"])
+    query = apply_source_preference(CatalogQuery.create(**saved["query"]))
     target = _navigator_url(query)
     return redirect(f"{target}&context={saved_search_id}")
 
@@ -281,12 +285,16 @@ def navigator_page():
         return redirect(url_for("local.content_library", return_to=return_url) + "#collection-maintenance")
     service = CatalogService(_database())
     query = _navigator_query()
+    preferred = source_preference()
+    if preferred and (tuple(request.args.getlist("source")) != preferred
+                      or request.args.get("scope", "all") != "all"):
+        return redirect(_navigator_url(query, cursor=query.cursor))
     view = _navigator_view()
     context_id = request.args.get("context", "").strip()
     if context_id:
         try:
             candidate = service.get_saved_search(context_id)
-            if CatalogQuery.create(**candidate["query"]).signature() == query.signature():
+            if apply_source_preference(CatalogQuery.create(**candidate["query"])).signature() == query.signature():
                 g.navigator_context = candidate
         except LookupError:
             pass
@@ -337,17 +345,16 @@ def navigator_page():
     next_url = None
     if payload["next_cursor"]:
         next_url = _navigator_url(query, cursor=payload["next_cursor"])
-    scope_sources = NAVIGATOR_SCOPE_SOURCES[query.scope]
     folder_children = service.folder_children(query.folder)
     folder_crumbs = []
     folder_parts = query.folder.split(" / ") if query.folder else []
     for depth in range(1, len(folder_parts) + 1):
         path = " / ".join(folder_parts[:depth])
-        folder_crumbs.append({"name": path.rsplit(" / ", 1)[-1], "url": _quick_filter_url(query, folder=path, sources=("bookmarks",))})
+        folder_crumbs.append({"name": path.rsplit(" / ", 1)[-1], "url": _quick_filter_url(query, folder=path)})
     topics = _navigator_topics(
         service, query, payload["facets"], active_sources=active_sources,
     ) if active_sources else []
-    reset_query = CatalogQuery.create(scope=query.scope, sources=scope_sources)
+    reset_query = CatalogQuery.create(scope=query.scope, sources=query.sources)
     random_values = query.public_dict()
     random_values.update({"sort": "random", "seed": 0, "cursor": ""})
     active_context = getattr(g, "navigator_context", None)
@@ -364,7 +371,7 @@ def navigator_page():
         active_context or query.q or query.item_type or query.media or query.folder or query.tags
         or query.favorite or query.unviewed or query.duration_min is not None
         or query.duration_max is not None or query.added_from or query.added_to
-        or query.sources != scope_sources or query.sort != "recently_added"
+        or query.sort != "recently_added"
     )
     return render_catalog_browse(
         title="我的收藏 · Flowinone",
@@ -373,23 +380,13 @@ def navigator_page():
             "named": bool(active_context),
             "summary": _saved_search_summary(query),
             "share_url": share_url,
-            "clear_url": url_for("catalog.navigator_page", scope=query.scope),
+            "clear_url": _navigator_url(reset_query),
             "return_url": None,
         } if show_context else None,
         view=view,
         resume_scroll=request.args.get("resume_scroll", ""),
         payload=payload,
         query=query,
-        scope_sources=scope_sources,
-        source_options=[
-            {
-                "key": source,
-                "label": SOURCE_LABELS[source],
-                "count": payload["facets"]["sources"].get(source, 0),
-                "error": "目前未連線" if source == "eagle" and not eagle_available else None,
-            }
-            for source in scope_sources
-        ],
         catalog_sources=[
             {"key": source, "label": SOURCE_LABELS[source]}
             for source in CATALOG_SOURCES
@@ -404,24 +401,24 @@ def navigator_page():
             "favorites": _navigator_url(
                 CatalogQuery.create(
                     scope=query.scope,
-                    sources=NAVIGATOR_SCOPE_SOURCES[query.scope],
+                    sources=query.sources,
                     favorite=True,
                 )
             ),
             "unviewed": _navigator_url(
                 CatalogQuery.create(
                     scope=query.scope,
-                    sources=NAVIGATOR_SCOPE_SOURCES[query.scope],
+                    sources=query.sources,
                     unviewed=True,
                 )
             ),
         },
         folder_children=[
-            {**folder, "url": _quick_filter_url(query, folder=folder["path"], sources=("bookmarks",), cursor="")}
+            {**folder, "url": _quick_filter_url(query, folder=folder["path"], cursor="")}
             for folder in folder_children
         ],
         folder_crumbs=folder_crumbs,
-        folder_clear_url=_quick_filter_url(query, folder="", sources=scope_sources),
+        folder_clear_url=_quick_filter_url(query, folder=""),
         topics=topics,
         topic_clear_url=_quick_filter_url(query, tags=()),
         eagle_available=eagle_available,

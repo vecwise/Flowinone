@@ -65,7 +65,14 @@
     <div class="gallery-grid" data-gallery-view="{{ view }}" data-gallery-shape="{{ request.args.get('shape', 'auto') if request.args.get('shape', 'auto') in ['auto','landscape','portrait','square'] else 'auto' }}" data-media-scope="{{ media_scope }}">
       {% for item in browse['items'] %}{% include 'components/_item_card.html' %}{% endfor %}
     </div>
-    {% if not browse['items'] %}<section class="gallery-empty"><h3>目前沒有符合的項目</h3><p>可調整篩選或切換來源資料夾。</p>{% if reset_url %}<a class="action-button" href="{{ reset_url }}">清除篩選</a>{% endif %}</section>{% endif %}
+    {% if not browse['items'] %}<section class="gallery-empty"><h3>目前沒有符合的項目</h3>
+      {% if browse.kind == 'catalog' and query.folder and 'bookmarks' not in query.sources %}
+      <p>目前來源未包含書籤，無法瀏覽此書籤資料夾。可加入書籤來源，或清除資料夾條件。</p>
+      <button class="action-button primary" type="submit" form="global-source-form" name="source_action" value="add_bookmarks">加入書籤來源</button>
+      <a class="action-button" href="{{ folder_clear_url }}">清除資料夾條件</a>
+      {% else %}<p>可調整篩選或上方的瀏覽來源。</p>{% endif %}
+      {% if reset_url %}<a class="action-button" href="{{ reset_url }}">清除頁內篩選</a>{% endif %}
+    </section>{% endif %}
     <p data-browse-empty hidden role="status">這批項目沒有符合的結果。</p>
   </section>{% endif %}
   {% if browse.previous_url or browse.next_url %}<nav class="gallery-pagination" aria-label="批次載入">

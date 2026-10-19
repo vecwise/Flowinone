@@ -18,9 +18,13 @@
 
 <body>
     <a class="skip-link" href="#main-content">跳到主要內容</a>
-    {% include '_navbar.html' %}
+    <header class="app-header">
+      {% include '_navbar.html' %}
+      {% include 'components/_browse_sources.html' %}
+    </header>
     {% include 'components/_ui_switcher.html' %}
     {% block page_content %}{% endblock %}
     <script src="{{ url_for('static', filename='js/ui_switcher.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/browse_sources.js') }}"></script>
 </body>
 </html>

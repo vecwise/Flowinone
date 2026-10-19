@@ -106,7 +106,7 @@ html[data-ui="workbench"] .resource-management-list li { padding-block: 8px; }
   html[data-ui="workbench"] .manage-page:has(> .mode-tabs) { grid-template-columns: 170px minmax(0, 1fr); align-items: start; }
   html[data-ui="workbench"] .manage-page:has(> .mode-tabs) > * { grid-column: 2; min-width: 0; }
   html[data-ui="workbench"] .manage-page:has(> .mode-tabs) > .ui-page-header { grid-column: 1 / -1; }
-  html[data-ui="workbench"] .manage-page > .mode-tabs { grid-column: 1; grid-row: 2 / span 10; display: grid; position: sticky; top: 80px; }
+  html[data-ui="workbench"] .manage-page > .mode-tabs { grid-column: 1; grid-row: 2 / span 10; display: grid; position: sticky; top: 132px; }
 }
 @media (max-width: 1000px) {
   .app-nav { flex-wrap: wrap; gap: 8px 12px; }

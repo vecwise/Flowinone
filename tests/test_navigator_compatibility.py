@@ -66,7 +66,9 @@ def test_collection_form_keeps_legacy_filters_in_collapsed_controls(client):
     soup = BeautifulSoup(response.data, "html.parser")
     form = soup.select_one("form.navigator-query")
     assert form.select_one('input[name="q"]')["value"] == "design"
-    assert form.select_one('input[name="source"][checked]')["value"] == "local"
+    assert form.select_one('input[name="source"][type="hidden"]')["value"] == "local"
+    assert soup.select_one('#global-source-form input[name="source"][checked]')["value"] == "local"
+    assert form.select_one('.gallery-source-filter') is None
     assert form.select_one('input[name="tags"]')["value"] == "reference"
     assert form.select_one('input[name="limit"]')["value"] == "12"
     assert form.select_one('input[name="added_from"]')["value"] == "2026-09-01"

@@ -1,5 +1,5 @@
+.app-header { position: sticky; top: 0; z-index: 40; }
 .app-nav {
-  position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; gap: 20px;
   min-height: 60px; padding: 8px clamp(12px, 3vw, 44px);
   border-bottom: 1px solid var(--fo-border);
@@ -17,3 +17,16 @@
 .search-container { display: flex; gap: 6px; min-width: 0; }
 .search-container input { width: min(280px, 24vw); min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--fo-border); border-radius: 8px; background: var(--fo-bg); color: var(--fo-text); }
 .search-container button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--fo-primary); color: var(--fo-on-primary); cursor: pointer; }
+
+html { scroll-padding-top: 132px; }
+.global-source-bar { display: flex; align-items: center; gap: 16px; min-height: 52px; margin: 0; padding: 8px clamp(12px, 3vw, 44px); border-bottom: 1px solid var(--fo-border); background: var(--fo-surface); color: var(--fo-text); }
+.global-source-options { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.global-source-options legend { float: left; margin: 0 12px 0 0; padding: 6px 0; font-size: .82rem; font-weight: 700; }
+.global-source-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; margin: 0; padding: 5px 12px; border: 1px solid var(--fo-border); border-radius: 7px; background: var(--fo-bg); color: var(--fo-muted-text); font-size: .82rem; font-weight: 600; cursor: pointer; }
+.global-source-chip:has(input:checked) { border-color: var(--fo-primary); background: var(--fo-primary-soft); color: var(--fo-primary); }
+.global-source-chip:hover { border-color: var(--fo-primary); }
+.global-source-chip:focus-within { outline: 2px solid var(--fo-primary); outline-offset: 2px; }
+.global-source-chip input { width: 14px; height: 14px; margin: 0; accent-color: var(--fo-primary); cursor: pointer; }
+.global-source-all { padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--fo-primary); font: inherit; font-size: .82rem; cursor: pointer; }
+.global-source-all:hover { background: var(--fo-primary-soft); }
+.global-source-hint { margin-left: auto; color: var(--fo-muted-text); font-size: .75rem; }

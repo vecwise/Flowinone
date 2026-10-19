@@ -207,7 +207,7 @@ def test_resource_tools_and_versions_keep_return_context(ui_client):
     versions_link = page.find('a', string='查看差異')["href"]
     assert parse_qs(urlsplit(versions_link).query)["return_to"] == [return_to]
     versions = BeautifulSoup(ui_client.get(versions_link).data, "html.parser")
-    assert versions.select_one('form input[name="return_to"]')["value"] == return_to
+    assert versions.select_one('.resource-version-form input[name="return_to"]')["value"] == return_to
     assert parse_qs(urlsplit(versions.find('a', string='返回資源')["href"]).query)["return_to"] == [return_to]
     for tab in versions.select('nav[aria-label="資源詳情檢視"] a'):
         assert parse_qs(urlsplit(tab["href"]).query)["return_to"] == [return_to]

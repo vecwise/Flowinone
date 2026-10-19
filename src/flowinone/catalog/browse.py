@@ -308,6 +308,8 @@ class CatalogService:
             else:
                 conditions.append("i.item_type=:item_type")
         if query.folder:
+            if "bookmarks" not in query.sources:
+                conditions.append("0=1")
             params["folder"] = query.folder
             conditions.append("""
                 EXISTS (

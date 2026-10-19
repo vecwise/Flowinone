@@ -24,7 +24,7 @@ Chrome Bookmarks ────────┤
                 └→ processing_jobs → Worker 擷取 → data/content/ → Catalog 全文索引
 ```
 
-「我的收藏」預設包含四個來源，統一從主題、搜尋、類型與排序瀏覽；來源與其他條件收在「更多篩選」。舊 `scope=gallery` 連結仍只查 Local、Eagle、Chrome，可在更多篩選改成全部收藏。`/resources/` 提供新增網址、匯入與處理工具；閱讀內容仍由 Resource 詳情呈現，Navigator 讀 Catalog 投影。同一 URL 可同時有 Chrome 與 Resource 兩個 origin，但在 Catalog 合成一個 item。網頁／PDF 文字、字幕和可選 AI 摘要是 Resource 的內容，並非額外 Catalog 來源。三張可追程式與儲存層的圖見 [現行架構](docs/architecture.md)。
+「我的收藏」預設包含四個來源。主導覽下方常駐「瀏覽來源」列，可複選書籤、Eagle、本機與新增網址，勾選後立即生效，至少保留一個來源；「全選」恢復四來源。選擇以同一瀏覽器的 cookie 記住一年，後續搜尋、主題、常用條件、資料夾、推薦與分頁均沿用；頁內「重設／清除條件」保留來源。切換來源保留其他頁內條件，但回到第一批結果；未包含書籤時，書籤資料夾顯示空狀態並提供「加入書籤來源」。管理頁的同步、匯入與維護依操作指定的來源執行。尚未設定全域來源時，舊 `scope=gallery` 連結仍只查 Local、Eagle、Chrome；一旦勾選來源，後續連結以全域選擇為準。`/resources/` 提供新增網址、匯入與處理工具；閱讀內容仍由 Resource 詳情呈現，Navigator 讀 Catalog 投影。同一 URL 可同時有 Chrome 與 Resource 兩個 origin，但在 Catalog 合成一個 item。網頁／PDF 文字、字幕和可選 AI 摘要是 Resource 的內容，並非額外 Catalog 來源。三張可追程式與儲存層的圖見 [現行架構](docs/architecture.md)。
 
 找程式碼時，先看 `src/` 的應用邏輯；`scripts/` 是匯入、維護與 macOS 啟停的執行入口。根目錄的 `run.py` 供 Flask 與手動啟動使用，`config.py`、`routes.py` 只保留舊匯入相容性；設定與路由實作已在 `src/flowinone/`。
 
@@ -52,7 +52,7 @@ Chrome Bookmarks ────────┤
 
 正式 UI 現在共用三個頁面模板：`browse.html`（瀏覽）、`detail.html`（詳情，包含 Resource 版本差異）、`manage.html`（管理，包含重複圖片檢閱）。日常瀏覽只有「視覺／閱讀」兩個呈現模式；主導覽為「我的收藏／管理收藏」，另有「頁面測試」入口。`/route-guide/` 沿用管理模板，按頁型列出前端 route、模板與使用現有資料的測試連結，標示來源離線或缺少樣本；維護 POST 僅導向原本操作頁。頁型與路由見 [共用頁型說明](docs/ui-consolidation.md)。
 
-Navigator 的頁內搜尋保留目前條件；其他頁面導覽列的搜尋會進全部收藏。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。橫向與知識模式已整併；舊 `view=shelf` 對應網格，`view=knowledge`／`reader`／`single`／`linear` 對應清單，連結和瀏覽偏好保留原本查詢條件。Resource 詳情先顯示摘要與全文，標籤編輯、擷取狀態與版本差異收在「資源管理」。
+Navigator 的頁內搜尋保留目前條件；其他頁面導覽列的搜尋會在所選來源中搜尋。瀏覽請使用 `/navigator/`；舊 `/gallery/`、`/search/` 與 `/api/gallery/*` 已移除。橫向與知識模式已整併；舊 `view=shelf` 對應網格，`view=knowledge`／`reader`／`single`／`linear` 對應清單，連結和瀏覽偏好保留原本查詢條件。Resource 詳情先顯示摘要與全文，標籤編輯、擷取狀態與版本差異收在「資源管理」。
 
 首頁 `/` 轉到 `/navigator/?scope=all`，實際讀取路徑是 `CatalogQuery` → `CatalogService.list()` → `browse.html`；預設按最近加入排序，「隨機探索」才使用有 seed 的隨機排序。「今天想看什麼」沿用 Catalog tag facets，最多檢查 6 個候選主題，依目前來源、搜尋、類型、資料夾與瀏覽狀態等條件排除空主題，顯示符合條件的筆數。未選主題的第一批結果最多預覽 3 個主題、每個 3 筆；主題與預覽連結保留 Navigator 條件，預覽項目會進入該主題並定位到卡片。選定主題或載入下一批後只保留主題入口，避免重複顯示預覽。
 
