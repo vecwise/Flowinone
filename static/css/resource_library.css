@@ -654,80 +654,6 @@
     }
 }
 
-@media (max-width: 820px) {
-    .resource-hero,
-    .resource-detail-hero,
-    .resource-detail-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .resource-hero {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .resource-command-grid,
-    .resource-filter,
-    .resource-form-inline,
-    .resource-version-form {
-        grid-template-columns: 1fr;
-    }
-
-    .resource-version-form label,
-    .resource-version-form select,
-    .resource-version-form button { grid-column: 1; grid-row: auto; }
-
-    .resource-hero-actions {
-        width: 100%;
-    }
-
-    .resource-hero-side {
-        width: 100%;
-        min-width: 0;
-        justify-items: stretch;
-    }
-}
-
-@media (max-width: 520px) {
-    .resource-stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .resource-hero,
-    .resource-detail-hero,
-    .resource-surface,
-    .resource-versions-heading {
-        padding: 16px;
-    }
-
-    .resource-versions-heading { align-items: start; flex-direction: column; }
-    .resource-diff-stats { grid-template-columns: 1fr; }
-
-    .resource-hero > div:first-child > p:last-child { display: none; }
-
-    .resource-filter {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .resource-filter-search,
-    .resource-filter > div:not(.resource-filter-search) {
-        grid-column: 1 / -1;
-    }
-
-    .resource-grid,
-    .session-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .resource-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .resource-operations > summary span { display: none; }
-
-    .resource-card-actions .action-button,
-    .resource-card-actions form,
-    .resource-card-actions form .action-button {
-        flex: 1 1 auto;
-    }
-}
 .resource-mode-checks {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -769,11 +695,3 @@
 .resource-management-list span { overflow-wrap: anywhere; }
 .resource-management-list small { color: var(--fo-muted-text); }
 .resource-management-list a { display: inline-flex; align-items: center; min-height: 44px; }
-@media (max-width: 820px) {
-    .resource-import-grid, .resource-detail-tools-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 520px) {
-    .resource-management-list li { grid-template-columns: minmax(0, 1fr) auto; }
-    .resource-management-list small { grid-column: 1; }
-    .resource-management-list a { grid-column: 2; grid-row: 1 / span 2; }
-}

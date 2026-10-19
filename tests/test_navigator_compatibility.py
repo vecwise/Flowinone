@@ -75,7 +75,9 @@ def test_collection_form_keeps_legacy_filters_in_collapsed_controls(client):
     expanded = client.get(soup.select_one(".navigator-scope-note a")["href"])
     assert expanded.status_code == 200
     assert BeautifulSoup(expanded.data, "html.parser").select_one('input[name="scope"]')["value"] == "all"
-    assert response.data.index(b'id="navigator-theme-heading"') < response.data.index(b'id="navigator-q"')
+    # Search precedes the folded auxiliary tools in both visual and keyboard order.
+    assert response.data.index(b'id="navigator-q"') < response.data.index(b'id="navigator-theme-heading"')
+    assert "open" not in soup.select_one("details.navigator-theme-entry").attrs
 
 
 @pytest.fixture

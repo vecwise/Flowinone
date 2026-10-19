@@ -1,52 +1,46 @@
 <article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}" data-thumbnail-provider="{{ item.thumbnail_provider or '' }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}">
-        <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
-          {% if item.thumbnail_is_fallback %}
-          <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
-          <span class="gallery-fallback-copy"><strong>{{ item.site_domain or '網站' }}</strong><small>{{ item_type_labels.get(item.item_type, item.item_type) }} · 暫無預覽圖片</small></span>
-          {% else %}
-          <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async"{% if item.thumbnail_id %} data-thumbnail-image{% endif %}>
-          {% endif %}
-          {% if not item.thumbnail_is_fallback %}<span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>{% endif %}
-          {% if item.duration_seconds %}<span class="gallery-type-badge" style="left:auto;right:.6rem">{{ item.duration_seconds|int }}s</span>{% endif %}
-        </a>
-        <div class="gallery-card-body">
-          <div class="gallery-card-source">
-            {% if item.launch_source == 'bookmarks' and item.site_domain and not item.thumbnail_is_fallback %}
-            <span class="gallery-site-mark" aria-hidden="true">{{ item.site_mark }}</span>
-            <span class="gallery-site-domain" title="{{ item.site_domain }}">{{ item.site_domain }}</span>
-            <span class="gallery-card-source-label">Chrome 書籤</span>
-            {% else %}
-            <span>{{ item.launch_source_label }}</span>
-            {% if item.collection_label and item.launch_source != 'bookmarks' %}<span class="gallery-card-collection" title="{{ item.collection_path }}">{{ item.collection_label }}</span>{% endif %}
-            {% endif %}
-          </div>
-          <h3><a href="{{ item.launch_uri or '#' }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
-          {% if item.match_reason %}
-          <p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>
-          {% endif %}
-          {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
-          {% if item.content_excerpt and not (item.match_reason and item.match_reason.field == 'content') %}<p class="navigator-content-excerpt">{{ item.content_excerpt }}</p>{% endif %}
-          {% if item.launch_source == 'bookmarks' and item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">資料夾：{{ item.collection_label }}</p>{% endif %}
-          {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
-          {% if item.catalog_item %}<div class="navigator-card-actions">
-            <button class="action-button navigator-favorite" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}" aria-label="{{ '移出我的最愛：' if item.favorite else '加入我的最愛：' }}{{ item.title }}">{{ '移出最愛' if item.favorite else '加入最愛' }}</button>
-            {% if item.original_uri or item.resource_detail_uri or item.item_type == 'image' or item.open_count %}
-            <details class="gallery-card-more">
-              <summary>更多</summary>
-              <div class="gallery-card-more-actions">
-                {% if 'resources' in item.sources and item.resource_detail_uri and item.launch_uri != item.resource_detail_uri %}<a class="action-button" href="{{ item.resource_detail_uri }}">閱讀內容</a>{% endif %}
-                {% if item.original_uri %}<a class="action-button gallery-card-open" href="{{ item.original_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
-                {% if item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似圖片</button>{% endif %}
-                {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
-              </div>
-            </details>
-            {% endif %}
-          </div>{% endif %}
-          {% if item.thumbnail_id %}
-          <div class="thumbnail-card-tools">
-            <button class="action-button" type="button" data-thumbnail-retry="{{ item.thumbnail_id }}" aria-label="強制重爬縮圖：{{ item.title }}">強制重爬縮圖</button>
-            <small data-thumbnail-state role="status">{{ {'ready':'縮圖已就緒','queued':'排隊中','fetching':'重爬中','retry':'待重試','failed':'上次重爬失敗','missing':'尚未爬取'}.get(item.thumbnail_status, '尚未爬取') }}</small>
-          </div>
-          {% endif %}
+  <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
+    {% if item.thumbnail_is_fallback %}
+    <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
+    <span class="gallery-fallback-copy"><strong>{{ item.site_domain or '網站' }}</strong><small>暫無預覽圖片</small></span>
+    {% else %}
+    <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async"{% if item.thumbnail_id %} data-thumbnail-image{% endif %}>
+    {% endif %}
+    <span class="gallery-type-badge">{{ item_type_labels.get(item.item_type, item.item_type) }}</span>
+    {% if item.duration_seconds %}<span class="gallery-duration-badge">{{ item.duration_seconds|int }}s</span>{% endif %}
+  </a>
+  <div class="gallery-card-body">
+    <h3><a href="{{ item.launch_uri or '#' }}" title="{{ item.title }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+    <div class="gallery-card-source" title="{{ item.launch_source_label }}{% if item.site_domain %} · {{ item.site_domain }}{% endif %}"><span>{{ item.launch_source_label }}</span>{% if item.site_domain %}<span class="gallery-site-domain">{{ item.site_domain }}</span>{% endif %}</div>
+  </div>
+  <div class="gallery-card-actions">
+    {% if item.catalog_item %}
+    <button class="navigator-favorite gallery-icon-button" type="button" data-favorite="{{ 1 if item.favorite else 0 }}" aria-pressed="{{ 'true' if item.favorite else 'false' }}" aria-label="{{ '移出我的最愛：' if item.favorite else '加入我的最愛：' }}{{ item.title }}" title="{{ '移出最愛' if item.favorite else '加入最愛' }}">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20.5 3.7 12.3a5.2 5.2 0 0 1 7.4-7.4L12 6l.9-1.1a5.2 5.2 0 0 1 7.4 7.4Z"/></svg>
+      <span class="sr-only" data-favorite-label>{{ '移出最愛' if item.favorite else '加入最愛' }}</span>
+    </button>
+    {% endif %}
+    <details class="gallery-card-more" name="gallery-card-more">
+      <summary class="gallery-icon-button" aria-label="項目資訊與操作：{{ item.title }}" title="更多資訊與操作"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span class="sr-only">更多</span></summary>
+      <div class="gallery-card-more-actions">
+        {% if item.match_reason %}<p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>{% endif %}
+        {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
+        {% if item.content_excerpt and not (item.match_reason and item.match_reason.field == 'content') %}<p class="navigator-content-excerpt">{{ item.content_excerpt }}</p>{% endif %}
+        {% if item.collection_label %}<p class="gallery-card-context" title="{{ item.collection_path }}">資料夾：<span class="gallery-card-collection">{{ item.collection_label }}</span></p>{% endif %}
+        {% if item.card_tags %}<div class="gallery-tags" aria-label="Tags">{% for tag in item.card_tags %}<span>{{ tag }}</span>{% endfor %}</div>{% endif %}
+        <div class="action-row">
+          {% if 'resources' in item.sources and item.resource_detail_uri and item.launch_uri != item.resource_detail_uri %}<a class="action-button" href="{{ item.resource_detail_uri }}">閱讀內容</a>{% endif %}
+          {% if item.original_uri %}<a class="action-button gallery-card-open" href="{{ item.original_uri }}" target="_blank" rel="noopener noreferrer">開原站 ↗</a>{% endif %}
+          {% if item.catalog_item and item.item_type == 'image' %}<button class="action-button" type="button" data-catalog-similar-item="{{ item.id }}">找相似圖片</button>{% endif %}
         </div>
-      </article>
+        {% if item.open_count %}<span class="gallery-card-open-count">開啟 {{ item.open_count }} 次</span>{% endif %}
+        {% if item.thumbnail_id %}
+        <div class="thumbnail-card-tools">
+          <button class="action-button" type="button" data-thumbnail-retry="{{ item.thumbnail_id }}" aria-label="強制重爬縮圖：{{ item.title }}">強制重爬縮圖</button>
+          <small data-thumbnail-state role="status">{{ {'ready':'縮圖已就緒','queued':'排隊中','fetching':'重爬中','retry':'待重試','failed':'上次重爬失敗','missing':'尚未爬取'}.get(item.thumbnail_status, '尚未爬取') }}</small>
+        </div>
+        {% endif %}
+      </div>
+    </details>
+  </div>
+</article>

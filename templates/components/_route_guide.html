@@ -1,6 +1,6 @@
 <section class="route-guide-intro" aria-label="測試方式">
   <p>正式頁面共用 <strong>3 種模板</strong>：瀏覽、詳情、管理。版本差異使用 <code>detail.html</code>，重複圖片使用 <code>manage.html</code>；每列顯示註冊的路由格式與測試入口。</p>
-  <p>4 套 UI 都沿用這 3 種模板。可在上方切換目前頁面，或到 <a href="{{ url_for('local.ui_lab') }}">UI Lab</a> 並排開啟比較。</p>
+  <p>3 套桌面 UI 都沿用這 3 種模板。可在上方切換目前頁面，或到 <a href="{{ url_for('local.ui_lab') }}">UI Lab</a> 並排開啟比較。</p>
   <p>連結使用目前網站位址，樣本取自現有資料。來源未連線或沒有樣本時會標示原因；狀態依來源與資料判斷，並非逐頁 HTTP 檢查。</p>
   <nav class="route-guide-jumps" aria-label="頁型快速導覽">
     {% for group in route_groups %}<a class="mode-pill" href="#routes-{{ group.id }}">{{ group.label }} <span>{{ group.rows|length }}</span></a>{% endfor %}

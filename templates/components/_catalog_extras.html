@@ -133,7 +133,8 @@
       const next = !enabled;
       button.dataset.favorite = next ? '1' : '0';
       button.setAttribute('aria-pressed', String(next));
-      button.textContent = next ? '移出最愛' : '加入最愛';
+      button.querySelector('[data-favorite-label]').textContent = next ? '移出最愛' : '加入最愛';
+      button.title = next ? '移出最愛' : '加入最愛';
       const title = item.querySelector('h3').textContent;
       button.setAttribute('aria-label', `${next ? '移出我的最愛' : '加入我的最愛'}：${title}`);
       status.textContent = next ? `已加入我的最愛：${title}` : `已從我的最愛移除：${title}`;

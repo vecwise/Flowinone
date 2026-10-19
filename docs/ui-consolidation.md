@@ -4,7 +4,7 @@ Flowinone 使用瀏覽、詳情、管理三種正式頁型，沿用 Flask/Jinja 
 
 | 正式頁型 | 入口與內容 | 共用部分 |
 | --- | --- | --- |
-| `browse.html` | `/navigator/`、`/both/<path>/`、`/folders/`、`/chrome/<path>/`、`/chrome_youtube/`、Eagle Folders / Tags / Smart Folders / Stream 與搜尋結果 | 頁首、卡片、視覺／閱讀切換、空／失敗狀態、分批連結 |
+| `browse.html` | `/navigator/`、`/both/<path>/`、`/folders/`、`/chrome/<path>/`、`/chrome_youtube/`、Eagle Folders / Tags / Smart Folders / Stream 與搜尋結果 | 頁首、卡片、網格／清單切換、空／失敗狀態、分批連結 |
 | `detail.html` | `/image/<path>`、`/video/<path>`、Eagle Image / Video、`/resources/<id>/`、`/resources/<id>/versions/` | 頁首、返回條件；內容與版本檢視導覽；完整內容與 Navigator 預覽共用內容結構 |
 | `manage.html` | `/library/`、`/resources/`、`/item_db`、`/route-guide/`、`/ui-lab/`、`/catalog/duplicate-review/`、三種本機維護 POST 結果 | 管理頁首與功能導覽；來源同步、匯入、索引、結果及重複群組檢閱；UI 比較 |
 | 階段 | commit | 正式頁面數 |

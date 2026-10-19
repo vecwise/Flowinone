@@ -17,9 +17,3 @@
 .search-container { display: flex; gap: 6px; min-width: 0; }
 .search-container input { width: min(280px, 24vw); min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--fo-border); border-radius: 8px; background: var(--fo-bg); color: var(--fo-text); }
 .search-container button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--fo-primary); color: var(--fo-on-primary); cursor: pointer; }
-@media (max-width: 760px) {
-  .app-nav { flex-wrap: wrap; gap: 4px 12px; }
-  .app-brand > span:last-child { display: none; }
-  .search-container { flex: 1 1 100%; }
-  .search-container input { flex: 1; width: 100%; }
-}

@@ -8,7 +8,7 @@ const id = n => n.toString(16).padStart(40, '0');
 const item = (n, status, extra = {}) => ({id: id(n), title: `Bookmark ${n}`, status, provider: 'metadata', thumbnail_url: `/images/${n}`, image_version: 'v2', ...extra});
 
 class Element {
-  constructor(dataset = {}) { this.dataset = dataset; this.hidden = false; this.disabled = false; this.textContent = ''; this.value = 'page'; this.nodes = new Map(); this.listeners = new Map(); this.children = []; this.attrs = new Map(); this.classList = {remove() {}}; }
+  constructor(dataset = {}) { this.dataset = dataset; this.hidden = false; this.open = false; this.disabled = false; this.textContent = ''; this.value = 'page'; this.nodes = new Map(); this.listeners = new Map(); this.children = []; this.attrs = new Map(); this.classList = {remove() {}}; }
   querySelector(s) { return this.nodes.get(s) || null; }
   querySelectorAll(s) { return this.nodes.get(s) || []; }
   addEventListener(type, callback) { this.listeners.set(type, callback); }
@@ -62,7 +62,7 @@ function harness({saved = null, statuses = [], post, offline = false} = {}) {
   };
   vm.runInNewContext(source, {document, window, fetch: request, URL, console});
   documentListeners.get('DOMContentLoaded')();
-  return {controls, status, card, media, button, requests, storage, timers,
+  return {tools, controls, status, card, media, button, requests, storage, timers,
     setOffline: value => { isOffline = value; },
     single: async () => {
       documentListeners.get('click')({target: {closest: () => button}, preventDefault() {}});
@@ -78,7 +78,9 @@ function harness({saved = null, statuses = [], post, offline = false} = {}) {
 
 test('single retry forces refresh, disables duplicate actions, updates fallback and cache version', async () => {
   const h = harness();
+  assert.equal(h.tools.open, false);
   await h.single();
+  assert.equal(h.tools.open, true);
   assert.equal(h.requests[0].url, '/api/bookmark-thumbnails/enqueue');
   assert.deepEqual(JSON.parse(h.requests[0].options.body), {ids: [id(1)], force: true});
   assert.equal(h.button.disabled, true);
@@ -105,6 +107,7 @@ test('resumes a batch above 200 IDs, counts one attempt as finished on retry and
   const statuses = Array.from({length: 205}, (_, n) => item(n + 1, n < 100 ? 'ready' : 'retry', n < 100 ? {} : {provider: 'site-tile', title: '<img onerror=alert(1)>', error: 'HTTP 403'}));
   const h = harness({saved: {started: Date.now(), items: statuses.map(r => ({...r, status: 'queued'}))}, statuses});
   assert.equal(h.button.disabled, true);
+  assert.equal(h.tools.open, true);
   await h.tick();
   assert.equal(h.requests.length, 2);
   assert.match(h.status.textContent, /本輪完成 205 \/ 205：成功 100、失敗 105/);
@@ -142,5 +145,6 @@ test('restored completed runs restore the versioned image and permit another ret
   const h = harness({saved: {started: Date.now(), items: [item(1, 'ready')]}});
   assert.equal(h.media.querySelector('[data-thumbnail-image]').getAttribute('src'), '/images/1?v=v2');
   assert.equal(h.button.disabled, false);
+  assert.equal(h.tools.open, false);
   assert.match(h.status.textContent, /本輪完成 1 \/ 1/);
 });

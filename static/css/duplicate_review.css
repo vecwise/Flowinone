@@ -184,17 +184,3 @@
     color: var(--fo-muted-text);
     line-height: 1.6;
 }
-
-@media (max-width: 700px) {
-    .duplicate-review-overview {
-        grid-template-columns: 1fr;
-    }
-
-    .duplicate-review-group-heading {
-        display: grid;
-    }
-
-    .duplicate-review-group-heading code {
-        max-width: 100%;
-    }
-}

@@ -1,6 +1,6 @@
 (function initializeUI(global) {
   'use strict';
-  const KEYS = ['baseline', 'curator', 'reader', 'workbench'];
+  const KEYS = ['baseline', 'curator', 'workbench'];
   const normalize = (key) => KEYS.includes(key) ? key : 'baseline';
   const isPagePath = (path) => path === '/' || path === '/search' || path === '/item_db'
     || /^\/(navigator(?:\/views\/[^/]+)?|library|route-guide|ui-lab|folders|both(?:\/.*)?|grid(?:\/.*)?|slide(?:\/.*)?|chrome(?:\/.*)?|chrome_youtube|image\/.*|video\/.*|catalog\/duplicate-review|EAGLE_(?:folders|folder\/[^/]+|tags|tag\/[^/]+|smart_folders|smart_folder\/[^/]+|stream|image\/[^/]+|video\/[^/]+))\/?$/.test(path)
@@ -115,7 +115,8 @@
         });
       }).observe(root.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'action']});
     }
-    refresh();
+    if (active && !KEYS.includes(new URL(base()).searchParams.get('ui'))) apply('baseline');
+    else refresh();
     return {apply, refresh};
   }
 

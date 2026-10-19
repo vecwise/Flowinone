@@ -35,14 +35,14 @@ def test_every_variant_renders_all_three_families_and_version_comparison(ui_app,
         assert page.html["data-ui"] == variant
         assert page.select_one(f'main[data-page-family="{family}"]')
         assert page.select_one(f'[data-ui-select] option[value="{variant}"][selected]')
-        assert all(len(select.select('option')) == 4 for select in page.select('[data-ui-select]'))
+        assert all(len(select.select('option')) == 3 for select in page.select('[data-ui-select]'))
         assert f"ui={variant}" in page.select_one('.nav-links a')["href"]
         assert page.select_one('script[src="/static/js/ui_switcher.js"]')
         if family == "browse":
             assert page.select_one('[data-gallery-detail] [data-ui-select]')
 
 
-def test_lab_has_twelve_fair_comparison_links_and_preserves_original_page(ui_app):
+def test_lab_has_nine_fair_comparison_links_and_preserves_original_page(ui_app):
     client = ui_app.test_client()
     resource = client.post("/api/resources", json={
         "url": "https://example.com/lab", "title": "Lab sample", "enqueue": False,
@@ -50,8 +50,8 @@ def test_lab_has_twelve_fair_comparison_links_and_preserves_original_page(ui_app
     original = "/navigator/?source=local&source=bookmarks&tags=設計&tags=UX&seed=123#item-one"
     page = BeautifulSoup(client.get("/ui-lab/", query_string={"return_to": original}).data, "html.parser")
     assert page.select_one('main[data-page-family="manage"]')
-    assert len(page.select('[data-ui-candidate]')) == 4
-    assert len(page.select('[data-ui-scenario]')) == 12
+    assert len(page.select('[data-ui-candidate]')) == 3
+    assert len(page.select('[data-ui-scenario]')) == 9
     for family in ("browse", "detail", "manage"):
         targets = [urlsplit(link["href"]) for link in page.select(f'[data-ui-scenario="{family}"]')]
         assert len({target.path for target in targets}) == 1
@@ -78,7 +78,7 @@ def test_lab_empty_data_reports_missing_detail_and_invalid_variant_uses_baseline
     page = BeautifulSoup(client.get("/ui-lab/?ui=unknown").data, "html.parser")
     assert page.html["data-ui"] == "baseline"
     assert "目前沒有可用詳情樣本" in page.get_text()
-    assert len(page.select('a[data-ui-scenario="detail"]')) == 4
+    assert len(page.select('a[data-ui-scenario="detail"]')) == 3
     assert "準備詳情樣本" in page.select_one('a[data-ui-scenario="detail"]').get_text()
 
 
@@ -88,26 +88,26 @@ def test_ui_does_not_change_catalog_query_or_api_and_survives_redirects(ui_app):
     candidate = BeautifulSoup(client.get("/navigator/?scope=all&tags=A&tags=B&ui=workbench").data, "html.parser")
     for attribute in ("data-navigator-query", "data-navigator-query-payload"):
         assert baseline.main[attribute] == candidate.main[attribute]
-    response = client.get("/?ui=reader")
-    assert parse_qs(urlsplit(response.location).query) == {"scope": ["all"], "ui": ["reader"]}
+    response = client.get("/?ui=workbench")
+    assert parse_qs(urlsplit(response.location).query) == {"scope": ["all"], "ui": ["workbench"]}
     legacy = client.get("/slide/nested/folder/?src=internal&tag=A&tag=B&ui=curator")
     assert parse_qs(urlsplit(legacy.location).query) == {
         "src": ["internal"], "tag": ["A", "B"], "view": ["reader"], "ui": ["curator"],
     }
-    page = BeautifulSoup(client.get("/resources/?ui=reader").data, "html.parser")
+    page = BeautifulSoup(client.get("/resources/?ui=workbench").data, "html.parser")
     token = page.select_one('input[name="csrf_token"]')["value"]
     created = client.post("/resources/", data={
-        "url": "https://example.com/created", "enqueue": "0", "csrf_token": token, "ui": "reader",
+        "url": "https://example.com/created", "enqueue": "0", "csrf_token": token, "ui": "workbench",
     })
     assert created.status_code == 302
-    assert parse_qs(urlsplit(created.location).query)["ui"] == ["reader"]
+    assert parse_qs(urlsplit(created.location).query)["ui"] == ["workbench"]
     # Different explicit URLs are independent; no shared preference cookie is set.
     assert "flowinone-ui" not in created.headers.get("Set-Cookie", "")
     assert BeautifulSoup(client.get("/resources/").data, "html.parser").html["data-ui"] == "baseline"
 
 
 def test_ui_url_boundaries_preserve_repeated_queries_nested_return_and_assets(ui_app):
-    with ui_app.test_request_context("/navigator/?ui=reader"):
+    with ui_app.test_request_context("/navigator/?ui=workbench"):
         target = ui_href("/image/a.jpg?src=internal&tag=A&tag=B&return_to=%2Fnavigator%2F%3Ftags%3DX%26tags%3DY%23item-x#image")
         parsed = urlsplit(target)
         query = parse_qs(parsed.query)
@@ -115,7 +115,7 @@ def test_ui_url_boundaries_preserve_repeated_queries_nested_return_and_assets(ui
         assert parsed.fragment == "image"
         nested = urlsplit(query["return_to"][0])
         assert nested.fragment == "item-x"
-        assert parse_qs(nested.query) == {"tags": ["X", "Y"], "ui": ["reader"]}
+        assert parse_qs(nested.query) == {"tags": ["X", "Y"], "ui": ["workbench"]}
         for path in ("https://example.com/", "//example.com/", "/api/catalog/items", "/static/favicon.svg",
                      "/serve_image/a.jpg", "/resources/one/asset/cover", "javascript:alert(1)", "#related",
                      "http://[", "https://localhost/navigator/", "http:/navigator/"):
@@ -146,3 +146,33 @@ def test_variants_cover_source_owned_browse_and_pagination(ui_app, monkeypatch, 
     assert page.select_one('.gallery-card a[href="https://example.com/source"]')
     if "EAGLE" in path:
         assert parse_qs(urlsplit(page.select_one('[data-browse-link]')["href"]).query)["offset"] == ["4"]
+
+
+def test_retired_reader_ui_uses_baseline_without_changing_filters(ui_app):
+    client = ui_app.test_client()
+    page = BeautifulSoup(client.get("/navigator/?ui=reader&scope=all&q=design&source=local&source=bookmarks&tags=A&tags=B&view=reader").data, "html.parser")
+    assert page.html["data-ui"] == "baseline"
+    assert not page.select('[data-ui-select] option[value="reader"]')
+    assert not page.select('[data-ui-candidate="reader"]')
+    assert page.select_one('[data-gallery-view]')["data-gallery-view"] == "list"
+    assert page.select_one('#navigator-q')["value"] == "design"
+    assert {field["value"] for field in page.select('input[name="source"][checked]')} == {"local", "bookmarks"}
+    response = client.get("/?ui=reader")
+    assert parse_qs(urlsplit(response.location).query) == {"scope": ["all"], "ui": ["baseline"]}
+    with ui_app.test_request_context("/navigator/?ui=reader"):
+        nested = urlsplit(ui_href("/resources/?return_to=%2Fnavigator%2F%3Ftags%3DA%26tags%3DB%23item-a"))
+        query = parse_qs(nested.query)
+        assert query["ui"] == ["baseline"]
+        returned = urlsplit(query["return_to"][0])
+        assert parse_qs(returned.query) == {"tags": ["A", "B"], "ui": ["baseline"]}
+        assert returned.fragment == "item-a"
+
+
+@pytest.mark.parametrize("variant", sorted(UI_KEYS))
+def test_folded_source_status_keeps_disconnected_eagle_notice_without_bookmark_health(ui_app, monkeypatch, variant):
+    monkeypatch.setattr("src.flowinone.catalog.blueprint._bookmark_source_health", lambda *args: None)
+    monkeypatch.setattr("src.flowinone.catalog.blueprint.is_eagle_available", lambda: False)
+    page = BeautifulSoup(ui_app.test_client().get(f"/navigator/?source=eagle&source=bookmarks&ui={variant}").data, "html.parser")
+    status = page.select_one('details.browse-source-status')
+    assert status is not None and 'open' not in status.attrs
+    assert 'EAGLE 未連線' in status.get_text()

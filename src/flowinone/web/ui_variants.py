@@ -8,15 +8,12 @@ from werkzeug.exceptions import HTTPException
 
 UI_VARIANTS = (
     {"key": "baseline", "label": "目前基準", "number": "00", "tagline": "熟悉的收藏入口",
-     "description": "保留現有視覺與版面，作為每次比較的起點。",
-     "layouts": ("原有卡片與搜尋列", "內容與接著看雙欄", "原有來源卡片與維護區")},
+     "description": "沿用熟悉的配色，以緊密縮圖、精簡標題與收合資訊快速瀏覽。",
+     "layouts": ("緊密縮圖網格與精簡搜尋列", "內容與接著看雙欄", "來源卡片與維護分區")},
     {"key": "curator", "label": "視覺策展", "number": "01", "tagline": "讓影像帶路",
-     "description": "暖白畫廊、大幅影像與留白，適合尋找靈感與比較素材。",
-     "layouts": ("大圖網格與策展標題", "寬幅主體、橫向接著看", "寬鬆分區與來源展卡")},
-    {"key": "reader", "label": "閱讀優先", "number": "02", "tagline": "把注意力留給內容",
-     "description": "紙感色調、清楚的文字層級與舒適行寬，適合讀文章與筆記。",
-     "layouts": ("文字主導的書目卡片", "集中閱讀、延伸內容置底", "單欄步驟與直向表單")},
-    {"key": "workbench", "label": "素材工作台", "number": "03", "tagline": "看得多，做得快",
+     "description": "暖白畫廊配色，縮圖優先、縮短留白，適合比較影像與尋找靈感。",
+     "layouts": ("影像優先的緊密網格", "寬幅主體、橫向接著看", "來源展卡與功能分區")},
+    {"key": "workbench", "label": "素材工作台", "number": "02", "tagline": "看得多，做得快",
      "description": "冷灰工具介面、側欄篩選與緊湊資訊，適合整理與處理收藏。",
      "layouts": ("側欄篩選與密集網格", "主體與資訊工具並排", "側邊功能列與密集狀態列")},
 )

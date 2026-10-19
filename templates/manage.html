@@ -6,7 +6,7 @@
 {% endblock %}
 {% block page_content %}
 <main id="main-content" class="container gallery-page manage-page{% if management == 'duplicates' %} duplicate-review-page{% endif %}" data-page-family="manage" {% if management == 'duplicates' %}data-duplicate-review{% endif %}>
-  {% set management_heading = {'routes': '頁面測試導覽', 'lab': '同一份收藏，四種觀看方式。', 'duplicates': '重複圖片檢閱'}.get(management, '管理收藏') %}
+  {% set management_heading = {'routes': '頁面測試導覽', 'lab': '同一份收藏，三種桌面介面。', 'duplicates': '重複圖片檢閱'}.get(management, '管理收藏') %}
   {% set management_description = {'routes': '依頁型逐一開啟測試，對照 route 與共用模板。', 'lab': 'UI LAB / 用真實內容，找到最順手的介面。', 'duplicates': '檢閱相同內容的本機圖片，並選擇參考圖片。'}.get(management, '新增資源、檢查來源與執行維護。') %}
   {% with page_heading=management_heading, page_description=management_description, page_links=[{'label': '返回管理', 'url': url_for('local.content_library')}, {'label': '重新分析圖片', 'url': url_for('local.content_library')+'#catalog-similarity-rebuild'}] if management == 'duplicates' else [] %}{% include 'components/_page_header.html' %}{% endwith %}
   {% if management == 'routes' %}

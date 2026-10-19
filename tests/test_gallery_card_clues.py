@@ -78,6 +78,18 @@ def test_gallery_cards_show_bookmark_identity_and_keep_images_visual(monkeypatch
     soup = BeautifulSoup(page.data, "html.parser")
     cards = {card.select_one("h3").get_text(strip=True): card for card in soup.select(".gallery-card")}
 
+    # All secondary copy and maintenance actions are reachable but initially folded.
+    for card in cards.values():
+        more = card.select_one('details.gallery-card-more')
+        assert more is not None and 'open' not in more.attrs
+        assert not card.select_one('.gallery-card-body .gallery-card-description')
+        assert not card.select_one('.gallery-card-body .thumbnail-card-tools')
+        assert card.select_one('.gallery-card-body h3 a[title]')
+        for secondary in card.select('.gallery-card-description, .navigator-match-reason, .gallery-tags, [data-thumbnail-retry]'):
+            assert secondary.find_parent('details') is more
+    assert 'open' not in soup.select_one('.navigator-theme-entry').attrs
+    assert 'open' not in soup.select_one('[data-thumbnail-tools]').attrs
+
     bookmark = cards["Type reference"]
     assert bookmark.select_one(".gallery-card-media.is-site-fallback") is not None
     assert bookmark.select_one(".gallery-fallback-copy strong").get_text(strip=True) == "example.org"

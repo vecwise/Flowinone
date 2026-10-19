@@ -166,6 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function start(url, payload) {
     if (submitting || active()) return;
+    tools.open = true;
     submitting = true;
     pollError = false;
     render();
@@ -209,6 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saved.items.every(item => /^[a-f0-9]{40}$/.test(item.id) && typeof item.status === 'string')) run = saved;
   } catch (_) { /* A fresh run works even when storage is unavailable. */ }
   if (run) run.items.forEach(updateThumbnailItem);
+  if (active()) tools.open = true;
   render();
   schedule(500);
 });

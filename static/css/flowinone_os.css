@@ -798,31 +798,6 @@
     }
 }
 
-@media (max-width: 640px) {
-    .container {
-        width: min(100% - 24px, 1280px);
-        padding-top: 16px;
-    }
-
-    .detail-header,
-.browse-header {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .media-stage {
-        min-height: 280px;
-    }
-
-    .linear-card {
-        grid-template-columns: 112px minmax(0, 1fr);
-    }
-
-    .linear-card img {
-        width: 112px;
-    }
-}
-
 /* Flowinone editorial workbench */
 .flow-page {
     gap: 24px;
@@ -947,14 +922,4 @@
     color: var(--fo-subtle-text);
     cursor: not-allowed;
     opacity: 0.65;
-}
-
-@media (max-width: 640px) {
-    .container {
-        width: min(100% - 24px, 1360px);
-    }
-
-    .health-notice {
-        align-items: flex-start;
-    }
 }

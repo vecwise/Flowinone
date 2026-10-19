@@ -23,7 +23,7 @@ function setup(href = 'http://localhost/navigator/?source=local&source=eagle&tag
     documentElement: {dataset: {ui: 'baseline'}}, body: {},
     share: {value: 'http://localhost/navigator/views/saved/?tags=A&tags=B'},
     links: [element('A', {href: '/resources/one/?return_to=%2Fnavigator%2F%3Ftags%3DA%26tags%3DB%23item-one'}),
-      element('A', {href: '/navigator/?ui=reader', 'data-ui-fixed': ''}),
+      element('A', {href: '/navigator/?ui=workbench', 'data-ui-fixed': ''}),
       element('A', {href: '/api/catalog/items?source=local'}),
       element('A', {href: 'https://example.com/'})],
     forms: [element('FORM', {method: 'get'}), element('FORM', {method: 'post', action: '/resources/?ui=curator'}),
@@ -69,15 +69,15 @@ test('switching preserves repeated filters, cursor, seed, context and selected-i
 
 test('normal navigation follows the selected UI while fixed A/B links and APIs stay independent', () => {
   const {window, root, api} = setup();
-  api.controller.apply('reader');
+  api.controller.apply('workbench');
   const destination = new URL(root.links[0].getAttribute('href'), window.location.href);
   const returnTo = new URL(destination.searchParams.get('return_to'), window.location.href);
-  assert.equal(destination.searchParams.get('ui'), 'reader');
+  assert.equal(destination.searchParams.get('ui'), 'workbench');
   assert.deepEqual(returnTo.searchParams.getAll('tags'), ['A', 'B']);
-  assert.equal(returnTo.searchParams.get('ui'), 'reader');
+  assert.equal(returnTo.searchParams.get('ui'), 'workbench');
   assert.equal(returnTo.hash, '#item-one');
   api.controller.apply('curator');
-  assert.equal(root.links[1].getAttribute('href'), '/navigator/?ui=reader');
+  assert.equal(root.links[1].getAttribute('href'), '/navigator/?ui=workbench');
   assert.equal(root.links[2].getAttribute('href'), '/api/catalog/items?source=local');
   assert.equal(root.links[3].getAttribute('href'), 'https://example.com/');
   const dynamic = element('A', {href: '/image/a.jpg?src=internal&return_to=%2Fboth%2Fboard%2F%3Fsrc%3Dinternal'});
@@ -90,11 +90,11 @@ test('UI URL decoration excludes files, download routes, APIs and off-origin URL
   const {api} = setup();
   for (const value of ['/api/catalog/items', '/static/favicon.svg', '/serve_video/a.mp4',
     '/resources/id/asset/cover', '/catalog/video/id', 'https://example.com/resources/id/', '//example.com/', '#related']) {
-    assert.equal(api.withUI(value, 'reader', 'http://localhost/navigator/'), value);
+    assert.equal(api.withUI(value, 'workbench', 'http://localhost/navigator/'), value);
   }
   for (const value of ['/navigator/', '/navigator/views/id/', '/resources/id/versions/', '/image/a.jpg',
     '/video/a.mp4', '/EAGLE_folder/id/', '/EAGLE_image/id/', '/catalog/duplicate-review/', '/route-guide/', '/ui-lab/']) {
-    assert.equal(new URL(api.withUI(value, 'reader', 'http://localhost/'), 'http://localhost').searchParams.get('ui'), 'reader');
+    assert.equal(new URL(api.withUI(value, 'workbench', 'http://localhost/'), 'http://localhost').searchParams.get('ui'), 'workbench');
   }
 });
 
@@ -107,4 +107,23 @@ test('entering Lab from baseline captures the live query and anchor without requ
   assert.deepEqual(previous.searchParams.getAll('tags'), ['A', 'B']);
   assert.equal(previous.hash, '#item-one');
   assert.equal(lab.searchParams.has('ui'), false);
+});
+
+
+test('retired reader UI normalizes to baseline while preserving filters and nested return anchor', () => {
+  const {window, root, api} = setup('http://localhost/navigator/?ui=reader&q=design&source=local&source=eagle&tags=A&tags=B&seed=42#item-one');
+  const current = new URL(window.location.href);
+  assert.equal(current.searchParams.get('ui'), 'baseline');
+  assert.equal(current.searchParams.get('q'), 'design');
+  assert.deepEqual(current.searchParams.getAll('source'), ['local', 'eagle']);
+  assert.deepEqual(current.searchParams.getAll('tags'), ['A', 'B']);
+  assert.equal(current.searchParams.get('seed'), '42');
+  assert.equal(current.hash, '#item-one');
+  assert.equal(root.documentElement.dataset.ui, 'baseline');
+  const destination = new URL(api.withUI('/resources/one/?return_to=%2Fnavigator%2F%3Ftags%3DA%26tags%3DB%23item-one', 'reader', current), current);
+  assert.equal(destination.searchParams.get('ui'), 'baseline');
+  const returned = new URL(destination.searchParams.get('return_to'), current);
+  assert.equal(returned.searchParams.get('ui'), 'baseline');
+  assert.deepEqual(returned.searchParams.getAll('tags'), ['A', 'B']);
+  assert.equal(returned.hash, '#item-one');
 });

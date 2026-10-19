@@ -1,11 +1,11 @@
 <section class="ui-lab-intro" aria-label="比較方式">
-  <p>保留目前基準，再比較三套方向。每套都涵蓋 <strong>瀏覽、詳情、管理</strong>；下方同一欄位會開啟相同條件或樣本，只改變 UI。</p>
+  <p>三套桌面介面共用精簡卡片與縮圖優先的瀏覽方式。每套都涵蓋 <strong>瀏覽、詳情、管理</strong>；下方同一欄位會開啟相同條件或樣本，只改變 UI。</p>
   <div class="action-row">
     <a class="action-button primary" href="{{ lab_return_url|ui_href }}" data-ui-lab-return>返回剛才的頁面</a>
     <a class="action-button" href="{{ url_for('local.route_guide') }}">查看全部 route 與模板</a>
   </div>
 </section>
-<section class="ui-lab-grid" aria-label="四套 UI 比較">
+<section class="ui-lab-grid" aria-label="三套桌面 UI 比較">
   {% for variant in ui_variants %}
   <article class="ui-lab-card" data-ui-candidate="{{ variant.key }}">
     <div class="ui-lab-swatch" data-scheme="{{ variant.key }}" aria-hidden="true">
