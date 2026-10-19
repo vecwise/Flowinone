@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from sqlalchemy import text
 
 from .identity import origin_key, reconcile_bound_bookmarks, stable_id, write_origins
+from src.flowinone.catalog.fts import CatalogSearchIndex
 from src.flowinone.resource_library.canonical import classify_resource, normalize_resource_url, normalize_tag
 from src.flowinone.resource_library.models import Resource, utc_now_text
 
@@ -117,6 +118,13 @@ def _refresh_titles_tags(conn, bindings, records, now):
     grouped = defaultdict(list)
     for b in bindings:
         grouped[(b['catalog_item_id'],b['resource_id'])].append(by_guid[b['guid']])
+    search_index = CatalogSearchIndex(conn, {cid for cid, _rid in grouped})
+    resource_ids = {rid for _cid, rid in grouped}
+    resource_fts = {
+        row['resource_id']: dict(row)
+        for row in conn.execute(text("SELECT rowid,resource_id,title FROM resource_fts")).mappings()
+        if row['resource_id'] in resource_ids
+    }
     for (cid,rid), nodes in grouped.items():
         raw_metadata = conn.execute(text("SELECT metadata_json FROM catalog_items WHERE id=:id"), {'id':cid}).scalar()
         primary_guid = json.loads(raw_metadata or '{}').get('chrome_primary_guid')
@@ -126,7 +134,11 @@ def _refresh_titles_tags(conn, bindings, records, now):
         if not independent:
             conn.execute(text("UPDATE catalog_items SET title=:title,indexed_at=:now WHERE id=:id AND title IS NOT :title"), {'title':primary['title'],'now':now,'id':cid})
             conn.execute(text("UPDATE resources SET title=:title WHERE id=:id AND title IS NOT :title"), {'title':primary['title'],'id':rid})
-            conn.execute(text("UPDATE resource_fts SET title=:title WHERE resource_id=:id AND title IS NOT :title"), {'title':primary['title'],'id':rid})
+            indexed = resource_fts.get(rid)
+            if indexed and indexed['title'] != primary['title']:
+                conn.execute(text("UPDATE resource_fts SET title=:title WHERE rowid=:rowid"),
+                             {'title':primary['title'],'rowid':indexed['rowid']})
+                indexed['title'] = primary['title']
         # Folder tags reflect all active placements, including other sources.
         folders = [r['folder_path'] for r in _rows(conn, "SELECT folder_path FROM bookmark_bindings WHERE catalog_item_id=:id", {'id':cid})]
         conn.execute(text("DELETE FROM catalog_item_tags WHERE catalog_item_id=:id AND source='folder'"), {'id':cid})
@@ -150,13 +162,9 @@ def _refresh_titles_tags(conn, bindings, records, now):
             conn.execute(text("INSERT OR IGNORE INTO resource_tags(resource_id,tag_id,source,created_at) VALUES(:rid,:tid,'chrome_folder',:now)"), {'rid':rid,'tid':tid,'now':now})
         item = conn.execute(text("SELECT title,description FROM catalog_items WHERE id=:id"), {'id':cid}).mappings().one()
         names = conn.execute(text("SELECT t.name FROM catalog_item_tags it JOIN catalog_tags t ON t.id=it.tag_id WHERE it.catalog_item_id=:id"), {'id':cid}).scalars().all()
-        old_fts = conn.execute(text("SELECT title,description,tags,extracted_text FROM catalog_fts WHERE catalog_item_id=:id"), {'id':cid}).mappings().first()
-        if old_fts and (old_fts['title'],old_fts['description'] or '',old_fts['tags'] or '') == (item['title'],item['description'] or '', ' '.join(names)):
-            continue
-        extracted = old_fts['extracted_text'] or '' if old_fts else ''
-        conn.execute(text("DELETE FROM catalog_fts WHERE catalog_item_id=:id"), {'id':cid})
-        conn.execute(text("INSERT INTO catalog_fts(catalog_item_id,title,description,tags,extracted_text) VALUES(:id,:title,:desc,:tags,:extracted)"),
-                     {'id':cid,'title':item['title'],'desc':item['description'] or '', 'tags':' '.join(names),'extracted':extracted})
+        old_fts = search_index.get(cid)
+        search_index.replace(cid, title=item['title'], description=item['description'],
+                             tags=' '.join(names), extracted_text=(old_fts or {}).get('extracted_text'))
 
 
 def reconcile_mirror(conn, records, source):
@@ -269,12 +277,15 @@ def maintain_mirror_cache(database, store=None, *, deleted_content=False):
         if match:
             store.reuse_thumbnail(match[1],lookup.media_id)
         lookups[n['guid']] = lookup
+    # Cache lookups use a different SQLite database. Never wait on that database
+    # while holding the library writer, or a thumbnail operation can block UI writes.
+    routes = {media_id: store.thumbnail_route(media_id) for media_id in {lookup.media_id for lookup in lookups.values()}}
     with database.write_transaction() as conn:
         for n in nodes:
             lookup = lookups.get(n['guid'])
             if not lookup:
                 continue
-            route = store.thumbnail_route(lookup.media_id)
+            route = routes[lookup.media_id]
             conn.execute(text("UPDATE catalog_items SET thumbnail_ref=:route WHERE id=:id"), {'route':route,'id':n['catalog_item_id']})
             conn.execute(text("UPDATE resources SET thumbnail_media_id=:media WHERE id=:id"), {'media':lookup.media_id,'id':n['resource_id']})
             key = origin_key(stable_id(n['source_id']+':guid:'+n['guid']))

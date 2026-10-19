@@ -108,6 +108,11 @@ def test_navigator_home_100k_topics_query_contract(tmp_path, monkeypatch):
 @pytest.mark.performance
 def test_bookmark_projection_1000_item_baseline(monkeypatch, tmp_path):
     database = get_resource_database(tmp_path / "bookmarks-1000.db")
+    with database.write_transaction() as conn:
+        conn.exec_driver_sql(
+            "INSERT INTO catalog_fts(catalog_item_id,title) VALUES(?,?)",
+            [(f"unrelated-{index}", "Unrelated document") for index in range(75_000)],
+        )
     records = [
         {"url": f"https://example.com/{index}", "title": f"Bookmark {index}"}
         for index in range(1_000)
@@ -119,11 +124,23 @@ def test_bookmark_projection_1000_item_baseline(monkeypatch, tmp_path):
         lambda *_args, **_kwargs: SimpleNamespace(route=None, sub_type=None),
     )
 
+    scans = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        if "FROM catalog_fts" in statement:
+            scans.append(statement)
+
+    event.listen(database.engine, "before_cursor_execute", capture)
     started = time.perf_counter()
-    result = CatalogSyncService(database).sync(("bookmarks",))
+    try:
+        result = CatalogSyncService(database).sync(("bookmarks",))
+    finally:
+        event.remove(database.engine, "before_cursor_execute", capture)
     elapsed = time.perf_counter() - started
 
     print(f"bookmark_sync_1000 elapsed={elapsed:.3f}s")
     assert result["bookmarks"]["status"] == "complete"
     assert result["bookmarks"]["count"] == 1_000
     assert CatalogService(database).count() == 1_000
+    assert len(scans) == 1, "bulk projection must not scan the 75k-row FTS table per item"
+    assert elapsed < 10, "bulk writer risks exhausting the other process's SQLite busy timeout"

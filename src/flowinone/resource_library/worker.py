@@ -12,6 +12,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Optional
 
 from sqlalchemy import text
+from src.flowinone.catalog.locking import database_is_locked
 
 from .database import ResourceDatabase, get_resource_database
 from .enrichment import EnrichmentService
@@ -91,8 +92,8 @@ class ResourceWorker:
             else:
                 self.enrichment.process_job(job)
         except Exception as exc:
-            status = self.queue.fail(str(job["id"]), str(exc))
-            self.enrichment.record_failure(job.get("resource_id"), str(exc))
+            status = self._retry_bookkeeping(lambda: self.queue.fail(str(job["id"]), str(exc)))
+            self._retry_bookkeeping(lambda: self.enrichment.record_failure(job.get("resource_id"), str(exc)))
             LOGGER.warning(
                 "resource_job_failed",
                 extra={
@@ -116,7 +117,7 @@ class ResourceWorker:
                 if not exists:
                     from src.flowinone.bookmarks.mirror import prune_resource_files
                     prune_resource_files(self.database)
-        self.queue.complete(str(job["id"]))
+        self._retry_bookkeeping(lambda: self.queue.complete(str(job["id"])))
         LOGGER.info(
             "resource_job_complete",
             extra={
@@ -128,6 +129,18 @@ class ResourceWorker:
                 "status": "complete",
             },
         )
+
+    def _retry_bookkeeping(self, operation):
+        """Retry an acknowledgement, never repeat the completed job's work."""
+        while True:
+            try:
+                return operation()
+            except Exception as exc:
+                if not database_is_locked(exc) or self.stop_event.is_set():
+                    raise
+                LOGGER.warning("worker job acknowledgement deferred while SQLite is busy")
+                if self.stop_event.wait(0.75):
+                    raise
 
     def _run_loop(self, *, stop_when_idle: bool, max_jobs: Optional[int] = None) -> int:
         completed = 0
@@ -156,7 +169,14 @@ class ResourceWorker:
                 slots = self.max_workers - len(futures)
                 if max_jobs is not None:
                     slots = min(slots, max_jobs - completed - len(futures))
-                claimed = self.queue.claim(self.owner, limit=slots) if slots > 0 else []
+                try:
+                    claimed = self.queue.claim(self.owner, limit=slots) if slots > 0 else []
+                except Exception as exc:
+                    if not database_is_locked(exc):
+                        raise
+                    LOGGER.warning("worker job claim deferred while SQLite is busy")
+                    self.stop_event.wait(0.75)
+                    continue
                 for job in claimed:
                     futures[executor.submit(self._process, job)] = job
 

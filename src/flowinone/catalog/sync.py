@@ -23,6 +23,7 @@ from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .browse import CatalogService
 from .eagle_sync import EagleSyncMixin
+from .fts import CatalogSearchIndex
 from .locking import database_is_locked
 from .query import CATALOG_SOURCES, _normalize_tag
 from src.flowinone.bookmarks.identity import reconcile_bound_bookmarks, registry_exists
@@ -79,6 +80,7 @@ class CatalogSyncService(EagleSyncMixin):
         content_fingerprint: str = "",
         prefer: bool = False,
         seen_at: str = "",
+        search_index: CatalogSearchIndex | None = None,
     ) -> str:
         now = utc_now_text()
         seen_at = seen_at or now
@@ -202,16 +204,14 @@ class CatalogSyncService(EagleSyncMixin):
                 {"id": item_id},
             ).scalars()
         )
-        existing_fts = conn.execute(text("SELECT extracted_text FROM catalog_fts WHERE catalog_item_id=:id"), {"id": item_id}).scalar_one_or_none() or ""
+        search_index = search_index if search_index is not None else CatalogSearchIndex(conn, {item_id})
+        existing_fts = (search_index.get(item_id) or {}).get("extracted_text") or ""
         stored = conn.execute(text("SELECT title,description FROM catalog_items WHERE id=:id"), {"id": item_id}).mappings().one()
         merged_text = extracted_text or existing_fts
         if extracted_text and existing_fts and extracted_text not in existing_fts:
             merged_text = f"{existing_fts}\n{extracted_text}"
-        conn.execute(text("DELETE FROM catalog_fts WHERE catalog_item_id=:id"), {"id": item_id})
-        conn.execute(
-            text("INSERT INTO catalog_fts(catalog_item_id,title,description,tags,extracted_text) VALUES(:id,:title,:description,:tags,:text)"),
-            {"id": item_id, "title": stored["title"] or "", "description": stored["description"] or "", "tags": tag_text, "text": merged_text[:500_000]},
-        )
+        search_index.replace(item_id, title=stored["title"], description=stored["description"],
+                             tags=tag_text, extracted_text=merged_text[:500_000])
         return item_id
 
     def _sync_resources(self, conn, resource_id: str | None = None) -> int:
@@ -233,6 +233,7 @@ class CatalogSyncService(EagleSyncMixin):
             {"resource_id": resource_id} if resource_id else {},
         ).mappings()
         count = 0
+        search_index = None
         bound_resources = {}
         if registry_exists(conn):
             bound_resources = {row["resource_id"]: dict(row) for row in conn.execute(text(
@@ -240,6 +241,8 @@ class CatalogSyncService(EagleSyncMixin):
                 "JOIN catalog_items i ON i.id=b.catalog_item_id"
             )).mappings()}
         for row in rows:
+            if search_index is None:
+                search_index = CatalogSearchIndex(conn)
             identity, canonical = self._url_identity(row["canonical_url"])
             # Bound Resources and their Catalog rows move together. A stale
             # enrichment result must never create a second URL projection.
@@ -261,7 +264,7 @@ class CatalogSyncService(EagleSyncMixin):
                 tags=tags, captured_at=row["captured_at"],
                 metadata={},
                 extracted_text="\n".join(filter(None, (row["summary_short"], row["why_this_matters"], extracted))),
-                content_fingerprint=row["content_hash"] or "", prefer=True,
+                content_fingerprint=row["content_hash"] or "", prefer=True, search_index=search_index,
             )
             count += 1
         return count
@@ -286,6 +289,7 @@ class CatalogSyncService(EagleSyncMixin):
             **{key:reconciled[key] for key in ('nodes','new_bindings','deleted_bindings','deleted_catalog','deleted_resources') if key in reconciled},
         }
         count = reconciled["matched"] + reconciled["conflicts"]
+        search_index = None
         for index, record in enumerate(records):
             if index in reconciled["handled"]:
                 continue
@@ -302,17 +306,20 @@ class CatalogSyncService(EagleSyncMixin):
             description = str(record.get("description") or "")
             tags = [(part, "folder") for part in re.split(r"\s*/\s*|\s+\/\s+", folder) if part]
             thumbnail = lookup_thumbnail_for_bookmark(url, str(record.get("title") or canonical), {"folder_path": folder})
+            if search_index is None:
+                search_index = CatalogSearchIndex(conn)
             self._upsert(
                 conn, identity_key=identity, source_kind="bookmarks", source_key=f"{url}\n{folder}",
                 item_type="bookmark", title=str(record.get("title") or canonical),
                 description=description, thumbnail_ref=str(thumbnail.route or ""), original_url=canonical, detail_uri=canonical,
-                tags=tags, captured_at=str(record.get("date_added") or ""), metadata={"folder_path": folder, "thumbnail_ref": thumbnail.route or "", "thumbnail_sub_type": thumbnail.sub_type},
+                tags=tags, captured_at=str(record.get("date_added") or ""), metadata={"folder_path": folder, "thumbnail_ref": thumbnail.route or "", "thumbnail_sub_type": thumbnail.sub_type}, search_index=search_index,
             )
             count += 1
         return count
 
     def _sync_local(self, conn) -> int:
         offset = count = 0
+        search_index = None
         internal_root = Path(config.DB_route_internal).expanduser().resolve() if config.DB_route_internal else None
         external_root = Path(config.DB_route_external).expanduser().resolve() if config.DB_route_external else None
         while offset < 100_000:
@@ -330,13 +337,15 @@ class CatalogSyncService(EagleSyncMixin):
                 fingerprint = str(row.get("content_fingerprint") or "")
                 portable_uid = str(row.get("portable_uid") or "")
                 metadata_source = "sidecar" if row.get("sidecar_updated_at") else "folder"
+                if search_index is None:
+                    search_index = CatalogSearchIndex(conn)
                 self._upsert(
                     conn, identity_key=f"local:{portable_uid or fingerprint or row['item_id']}", source_kind="local",
                     source_key=str(row["item_id"]), item_type=str(row["item_type"]),
                     title=str(row.get("name") or "Untitled"), description=str(row.get("annotation") or ""), thumbnail_ref=str(row.get("thumbnail_route") or ""),
                     detail_uri=detail, source_path=relative,
                     tags=[(tag, metadata_source) for tag in row.get("tags") or []], captured_at=str(row.get("updated_at") or ""),
-                    metadata={"ext": row.get("ext"), "size_bytes": row.get("size_bytes"), "portable_uid": portable_uid or None, "metadata_provenance": metadata_source}, content_fingerprint=fingerprint,
+                    metadata={"ext": row.get("ext"), "size_bytes": row.get("size_bytes"), "portable_uid": portable_uid or None, "metadata_provenance": metadata_source}, content_fingerprint=fingerprint, search_index=search_index,
                 )
                 count += 1
             offset += len(rows)

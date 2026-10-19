@@ -13,6 +13,7 @@ from src.file_handler.eagle_integration import get_eagle_catalog_page, get_eagle
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .query import _json
+from .fts import CatalogSearchIndex
 
 EAGLE_SYNC_CURSOR_VERSION = 1
 EAGLE_SYNC_FINGERPRINT_VERSION = 1
@@ -289,6 +290,7 @@ class EagleSyncMixin:
                     }
 
                 unchanged = []
+                search_index = None
                 for row in page.items:
                     item_id = str(row.get("id") or "")
                     item_type = str(row.get("media_type") or "")
@@ -331,6 +333,8 @@ class EagleSyncMixin:
                         "fingerprint_version": EAGLE_SYNC_FINGERPRINT_VERSION,
                         "modified_at": row.get("modified_at") or None,
                     }
+                    if search_index is None:
+                        search_index = CatalogSearchIndex(conn)
                     self._upsert(
                         conn,
                         identity_key=f"eagle:{item_id}",
@@ -349,6 +353,7 @@ class EagleSyncMixin:
                         content_fingerprint=fingerprint,
                         prefer=True,
                         seen_at=str(cursor["scan_id"]),
+                        search_index=search_index,
                     )
                     cursor["changed"] = int(cursor.get("changed") or 0) + 1
 

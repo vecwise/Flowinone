@@ -101,6 +101,18 @@ Navigator 的「同步變更」會建立 `processing_jobs` 工作並回 202；CL
 
 Catalog 與 Resource Library 各自以 `blueprint.py` 放頁面與註冊、`api.py` 放 JSON route、`commands.py` 放 CLI；`http.py` 提供共用 Blueprint 和 request helper。兩者共用的資料庫設定在 `web/database.py`。
 
+### SQLite 寫入競爭與 worker 恢復
+
+主 DB 使用 WAL 與 30 秒 busy timeout；WAL 允許讀取與寫入並行，但仍只有一個 writer。`ResourceDatabase` 的 RLock 只能協調同一程序，Web 與獨立 worker 之間仍由 SQLite 仲裁。不能只靠加長 timeout 掩蓋長交易。
+
+`catalog/fts.py` 的 `CatalogSearchIndex` 在每次批次交易內只讀一次 FTS 文件，透過 SQLite `rowid` 更新既有資料，內容未變時不重寫。`catalog_item_id`、`resource_id` 是 FTS5 的 UNINDEXED 欄位，逐筆用這些欄位搜尋會讓同步反覆掃描整個虛擬表。共用更新方式涵蓋 Resource、Local、一般書籤及 Eagle 分頁；Chrome mirror 的標題／資料夾更新也使用同樣的索引策略。快照不跨交易或回滾共用。
+
+Chrome mirror 保留完整來源驗證與同一交易內的刪除／投影；來源途中變動仍整批回滾。縮圖 cache 的 route 查詢在主 DB 寫入交易之前完成，避免持有主 DB writer 時等待另一個 SQLite 資料庫。
+
+`ResourceWorker` 遇到 SQLite BUSY／LOCKED 會等待 0.75 秒後重新領取；完成與失敗狀態的寫入也可重試，並不重新執行已完成的工作或重複累計失敗次數。等待可被 stop event 結束。其他資料庫錯誤不套用這個重試規則。
+
+回歸測試：`tests/test_worker_sqlite_contention.py` 使用真正的獨立 SQLite writer，涵蓋領取、停止、完成／失敗確認與非鎖錯誤；`tests/test_bookmark_bindings.py` 驗證 FTS 更新、全文與收藏保留、來源變動回滾及跨 DB 的交易邊界；`tests/test_catalog_performance.py` 在 75,000 筆既有全文索引上投影 1,000 筆書籤，限制為一次 FTS 掃描。
+
 ## 3. 資料架構：權威、投影與儲存位置
 
 ```mermaid

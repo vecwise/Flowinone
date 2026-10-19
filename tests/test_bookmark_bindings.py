@@ -798,3 +798,100 @@ def test_new_chrome_source_revives_a_previously_deleted_catalog_projection(seede
     with seed.db.engine.connect() as conn:
         assert conn.execute(text('SELECT sum(is_deleted) FROM catalog_items')).scalar()==0
         assert conn.execute(text("SELECT count(*) FROM bookmark_bindings WHERE status='matched'")).scalar()==2
+
+
+def test_mirror_bulk_fts_refresh_preserves_content_without_per_bookmark_scans(seeded, monkeypatch, tmp_path):
+    from sqlalchemy import event
+
+    seed = seeded(tuple(f'https://example.com/document-{i}' for i in range(12)))
+    enable_mirror(seed, monkeypatch, tmp_path)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status'] == 'complete'
+    with seed.db.write_transaction() as conn:
+        # A large unrelated catalog must be scanned once, not for every bookmark.
+        conn.exec_driver_sql(
+            'INSERT INTO catalog_fts(catalog_item_id,title,extracted_text) VALUES(?,?,?)',
+            [(f'unrelated-{i}', f'Unrelated {i}', 'unrelated content') for i in range(20_000)],
+        )
+        conn.execute(text('UPDATE catalog_fts SET extracted_text=:body WHERE catalog_item_id=:id'),
+                     {'body': 'Retained article text', 'id': seed.cid})
+        conn.execute(text('UPDATE resource_fts SET extracted_text=:body WHERE resource_id=:id'),
+                     {'body': 'Retained resource text', 'id': seed.rid})
+    seed.nodes[0]['name'] = 'Renamed searchable document'
+    write_nodes(seed)
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(' '.join(statement.split()))
+
+    event.listen(seed.db.engine, 'before_cursor_execute', capture)
+    try:
+        assert seed.sync.sync(('bookmarks',))['bookmarks']['status'] == 'complete'
+    finally:
+        event.remove(seed.db.engine, 'before_cursor_execute', capture)
+    assert sum(sql.startswith('SELECT rowid,catalog_item_id,') for sql in statements) == 1
+    assert sum(sql.startswith('SELECT rowid,resource_id,title FROM resource_fts') for sql in statements) == 1
+    assert not any('FROM catalog_fts WHERE catalog_item_id=' in sql for sql in statements)
+    assert not any(sql.startswith('UPDATE resource_fts') and 'WHERE resource_id=' in sql for sql in statements)
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text("SELECT catalog_item_id FROM catalog_fts WHERE catalog_fts MATCH 'Renamed'")).scalar_one() == seed.cid
+        assert conn.execute(text('SELECT extracted_text FROM catalog_fts WHERE catalog_item_id=:id'), {'id':seed.cid}).scalar_one() == 'Retained article text'
+        assert conn.execute(text('SELECT extracted_text FROM resource_fts WHERE resource_id=:id'), {'id':seed.rid}).scalar_one() == 'Retained resource text'
+        assert conn.execute(text('SELECT count(*) FROM catalog_fts')).scalar_one() == 20_012
+        assert conn.execute(text('SELECT favorite FROM item_user_state WHERE catalog_item_id=:id'), {'id':seed.cid}).scalar_one() == 1
+
+
+def test_mirror_cache_lookups_do_not_hold_the_library_writer(seeded, monkeypatch, tmp_path):
+    from src.flowinone.bookmarks.mirror import maintain_mirror_cache
+
+    seed = seeded()
+    store = enable_mirror(seed, monkeypatch, tmp_path)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status'] == 'complete'
+    route = store.thumbnail_route
+    probes = []
+
+    def lookup(media_id):
+        # Model a slow/cache-locked lookup: an independent library writer must
+        # remain free while we access the other database.
+        with sqlite3.connect(seed.db.path, timeout=0) as other:
+            other.execute("UPDATE runtime_state SET heartbeat_at=heartbeat_at")
+        probes.append(media_id)
+        return route(media_id)
+
+    monkeypatch.setattr(store, 'thumbnail_route', lookup)
+    maintain_mirror_cache(seed.db, store)
+    assert probes
+
+
+def test_mirror_source_change_rolls_back_bulk_fts_updates_and_deletions(seeded, monkeypatch, tmp_path):
+    from src.flowinone.bookmarks import backfill
+
+    seed = seeded(('https://example.com/first', 'https://example.com/second'))
+    enable_mirror(seed, monkeypatch, tmp_path)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status'] == 'complete'
+    with seed.db.engine.connect() as conn:
+        before = conn.execute(text('SELECT title,description,tags,extracted_text FROM catalog_fts WHERE catalog_item_id=:id'), {'id':seed.cid}).one()
+    seed.nodes[0]['name'] = 'Replacement title'
+    seed.nodes.pop()
+    write_nodes(seed)
+    original_read = backfill.read_bookmarks
+    reads = []
+
+    def changing_snapshot(path):
+        records, sha = original_read(path)
+        reads.append(sha)
+        return records, sha if len(reads) == 1 else 'changed-during-sync'
+
+    monkeypatch.setattr(backfill, 'read_bookmarks', changing_snapshot)
+    result = seed.sync.sync(('bookmarks',))['bookmarks']
+    assert result['status'] == 'failed'
+    assert 'snapshot changed' in result['error']
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM bookmark_bindings')).scalar_one() == 2
+        assert conn.execute(text('SELECT count(*) FROM resources')).scalar_one() == 2
+        assert conn.execute(text('SELECT title,description,tags,extracted_text FROM catalog_fts WHERE catalog_item_id=:id'), {'id':seed.cid}).one() == before
+    # A fresh transaction must load fresh rowids after the rollback.
+    monkeypatch.setattr(backfill, 'read_bookmarks', original_read)
+    assert seed.sync.sync(('bookmarks',))['bookmarks']['status'] == 'complete'
+    with seed.db.engine.connect() as conn:
+        assert conn.execute(text('SELECT count(*) FROM bookmark_bindings')).scalar_one() == 1
+        assert conn.execute(text('SELECT title FROM catalog_fts WHERE catalog_item_id=:id'), {'id':seed.cid}).scalar_one() == 'Replacement title'
