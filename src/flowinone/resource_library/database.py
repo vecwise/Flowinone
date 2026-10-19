@@ -138,6 +138,8 @@ class ResourceDatabase:
 
     @staticmethod
     def _configure_connection(dbapi_connection, _connection_record) -> None:
+        from src.flowinone.ordering import natural_sort_key
+        dbapi_connection.create_function("flowinone_natural_key", 1, natural_sort_key, deterministic=True)
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA foreign_keys=ON")

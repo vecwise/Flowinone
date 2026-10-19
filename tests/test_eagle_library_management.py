@@ -1,6 +1,7 @@
 """Primary-library safety and cleanup use synthetic Eagle data only."""
 
 import sqlite3
+import hashlib
 
 import pytest
 from sqlalchemy import text
@@ -29,6 +30,7 @@ def library(monkeypatch, tmp_path):
     def page(offset=0, limit=1000):
         return EaglePage(items=list(items[offset:offset+limit]), total=len(items), offset=offset, limit=limit)
     for module in (eagle_library, eagle_sync):
+        monkeypatch.setattr(module, 'get_eagle_catalog_folders', lambda **_: (hashlib.sha256(source['identity'].encode()).hexdigest(), {}))
         monkeypatch.setattr(module, 'get_eagle_catalog_source', current)
         monkeypatch.setattr(module, 'get_eagle_catalog_page', page)
     service = EagleLibraryService(db)

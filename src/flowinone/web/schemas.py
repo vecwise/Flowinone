@@ -245,6 +245,7 @@ class CatalogListQuery(ApiQuery):
         "most_viewed",
         "recently_viewed",
         "favorites",
+        "page_order",
     ] = "recently_added"
     seed: int = Field(default=0, ge=0)
     limit: int = Field(default=48, ge=1, le=100)

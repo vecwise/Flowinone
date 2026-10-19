@@ -97,8 +97,9 @@
         return;
       }
       items.forEach((item) => {
-        const button = root.createElement('button');
-        button.type = 'button';
+        const button = root.createElement(item.is_eagle_album ? 'a' : 'button');
+        if (item.is_eagle_album) button.href = item.launch_uri;
+        else button.type = 'button';
         button.className = 'navigator-detail-related-item';
         const thumb = root.createElement('img');
         thumb.src = item.thumbnail_ref || '/static/default_thumbnail.svg';
@@ -112,7 +113,7 @@
         hint.textContent = shared.length ? `共同標籤：${shared.slice(0, 2).join('、')}` : (item.launch_source_label || '相關內容');
         label.append(name, hint);
         button.append(thumb, label);
-        button.addEventListener('click', () => {
+        if (!item.is_eagle_album) button.addEventListener('click', () => {
           trail.push(activeId);
           void load(item.id, true);
         });

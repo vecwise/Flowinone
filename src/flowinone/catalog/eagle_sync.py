@@ -9,12 +9,13 @@ from urllib.parse import quote
 
 from sqlalchemy import text
 
-from src.file_handler.eagle_integration import get_eagle_catalog_page, get_eagle_catalog_source
+from src.file_handler.eagle_integration import get_eagle_catalog_page, get_eagle_catalog_source, get_eagle_catalog_folders
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .query import _json
 from .fts import CatalogSearchIndex
 from .eagle_library import EagleLibraryService
+from .albums import sync_albums
 
 EAGLE_SYNC_CURSOR_VERSION = 1
 EAGLE_SYNC_FINGERPRINT_VERSION = 1
@@ -168,6 +169,9 @@ class EagleSyncMixin:
         library = EagleLibraryService(self.database)
         library.require_source(source)
         source_signature, source_snapshot = self._eagle_source_tokens(source)
+        folder_library, folders = get_eagle_catalog_folders(detailed=True)
+        if folder_library != source_signature:
+            raise RuntimeError("Eagle folder metadata belongs to a different library")
         with self.database.engine.connect() as conn:
             durable = conn.execute(
                 text(
@@ -423,16 +427,20 @@ class EagleSyncMixin:
             )
 
         completed_at = utc_now_text()
+        if get_eagle_catalog_folders(detailed=True) != (folder_library, folders):
+            raise RuntimeError("Eagle folders changed during catalog sync; retry with the new snapshot")
         with self.database.write_transaction() as conn:
             locked_source = get_eagle_catalog_source(force=True)
             library.require_source(locked_source, conn=conn)
             if self._eagle_source_tokens(locked_source) != (source_signature, source_snapshot):
                 raise RuntimeError("Eagle library changed before deletion reconciliation")
+            if get_eagle_catalog_folders(detailed=True) != (folder_library, folders):
+                raise RuntimeError("Eagle folders changed before deletion reconciliation")
             seen_count = int(
                 conn.execute(
                     text(
                         "SELECT COUNT(*) FROM catalog_origins "
-                        "WHERE source_kind='eagle' AND last_seen_at=:scan_id"
+                        "WHERE source_kind='eagle' AND source_key NOT LIKE 'folder:%' AND last_seen_at=:scan_id"
                     ),
                     {"scan_id": cursor["scan_id"]},
                 ).scalar()
@@ -442,6 +450,8 @@ class EagleSyncMixin:
                 raise RuntimeError(
                     "Eagle returned an unstable item order; the next run will restart safely"
                 )
+            album_count = sync_albums(self, conn, folders=folders, library=source_signature,
+                                      scan_id=cursor["scan_id"], full_rescan=cursor["mode"] == "full")
             deleted = conn.execute(
                 text(
                     "UPDATE catalog_origins SET stale=1 "
@@ -496,6 +506,7 @@ class EagleSyncMixin:
             )
         return {
             "count": count,
+            "album_count": album_count,
             "processed": int(cursor.get("total") or 0),
             "total": int(cursor.get("total") or 0),
             "changed": int(cursor.get("changed") or 0),

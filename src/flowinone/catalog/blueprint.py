@@ -12,7 +12,7 @@ from flask import Flask, abort, current_app, g, redirect, render_template, reque
 from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.config import CHROME_BOOKMARK_PATH
 
-from src.flowinone.web.ui import browse_view, render_catalog_browse
+from src.flowinone.web.ui import browse_view, render_catalog_browse, safe_browse_return
 from src.flowinone.web.browse_sources import SOURCE_OPTIONS, apply_source_preference, source_preference
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
@@ -42,6 +42,7 @@ ITEM_TYPE_LABELS = {
     "social_post": "社群貼文",
     "file": "檔案",
     "folder": "資料夾",
+    "album": "漫畫／圖集",
     "unknown": "其他",
 }
 
@@ -79,6 +80,9 @@ def _navigator_query() -> CatalogQuery:
 
 def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) -> list[tuple[str, str]]:
     pairs = [("scope", query.scope)]
+    return_to = _album_return_url()
+    if return_to:
+        pairs.append(("return_to", return_to))
     if query.q:
         pairs.append(("q", query.q))
     pairs.extend(("source", source) for source in query.sources)
@@ -110,6 +114,11 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
     if cursor:
         pairs.append(("cursor", cursor))
     return pairs
+
+
+def _album_return_url():
+    value = safe_browse_return(request.args.get("return_to"))
+    return value if value and value.split("?", 1)[0].split("#", 1)[0] == "/navigator/" else None
 
 
 def _navigator_view() -> str:
@@ -466,6 +475,7 @@ def navigator_page():
         payload=payload,
         query=query,
         browse_target=g.navigator_target,
+        album_return_url=_album_return_url() if query.target.startswith("eagle_folder:") else None,
         catalog_sources=[
             {"key": source, "label": SOURCE_LABELS[source]}
             for source in CATALOG_SOURCES

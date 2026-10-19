@@ -7,6 +7,7 @@
     {% if current_context and current_context.named %}<input type="hidden" name="context" value="{{ request.args.get('context') }}">{% endif %}
     {% if query.folder %}<input type="hidden" name="folder" value="{{ query.folder }}">{% endif %}
     {% if query.target %}<input type="hidden" name="target" value="{{ query.target }}">{% endif %}
+    {% if album_return_url %}<input type="hidden" name="return_to" value="{{ album_return_url }}">{% endif %}
     <input type="hidden" name="limit" value="{{ query.limit }}">
     {% if query.added_from %}<input type="hidden" name="added_from" value="{{ query.added_from }}">{% endif %}
     {% if query.added_to %}<input type="hidden" name="added_to" value="{{ query.added_to }}">{% endif %}

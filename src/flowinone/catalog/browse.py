@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from threading import RLock
@@ -385,22 +386,57 @@ class CatalogService:
             NULL AS fts_matched_tags,
             NULL AS fts_matched_content,
         """
+        search_prefix = ""
         if query.q:
             fts = _fts_query(query.q)
             if not fts:
                 return {"items": [], "next_cursor": None, "total_estimate": 0, "query": query.public_dict(), "facets": self.facets(query) if include_facets else {}}
-            joins.append("JOIN catalog_fts f ON f.catalog_item_id=i.id")
-            conditions.append("catalog_fts MATCH :fts")
             params["fts"] = fts
-            rank_expression = "bm25(catalog_fts)"
-            match_select = """
-                highlight(catalog_fts, 1, char(1), char(2)) AS fts_matched_title,
-                highlight(catalog_fts, 2, char(1), char(2)) AS fts_matched_description,
-                highlight(catalog_fts, 3, char(1), char(2)) AS fts_matched_tags,
-                snippet(catalog_fts, 4, char(1), char(2), '…', 20) AS fts_matched_content,
-            """
+            if re.search(r"[\u3400-\u9fff]", query.q):
+                # unicode61 treats uninterrupted Chinese as one token. Add
+                # substring candidates only from album titles, not image text.
+                words = re.findall(r"[\w\u3400-\u9fff-]+", query.q.lower())[:24]
+                title_conditions = []
+                for number, word in enumerate(words):
+                    params[f"album_word_{number}"] = word
+                    title_conditions.append(f"instr(lower(a.title),:album_word_{number})>0")
+                search_prefix = """
+                    WITH search_matches AS MATERIALIZED (
+                        SELECT catalog_item_id,bm25(catalog_fts) AS rank,
+                               highlight(catalog_fts,1,char(1),char(2)) AS title_match,
+                               highlight(catalog_fts,2,char(1),char(2)) AS description_match,
+                               highlight(catalog_fts,3,char(1),char(2)) AS tags_match,
+                               snippet(catalog_fts,4,char(1),char(2),'…',20) AS content_match
+                        FROM catalog_fts WHERE catalog_fts MATCH :fts
+                    ), search_ids AS (
+                        SELECT catalog_item_id FROM search_matches
+                        UNION SELECT a.id FROM catalog_items a
+                        WHERE a.item_type='album' AND """ + " AND ".join(title_conditions) + ") "
+                joins.extend([
+                    "JOIN search_ids si ON si.catalog_item_id=i.id",
+                    "LEFT JOIN search_matches sm ON sm.catalog_item_id=i.id",
+                ])
+                params["album_exact"] = query.q.lower()
+                rank_expression = "CASE WHEN i.item_type='album' AND lower(i.title)=:album_exact THEN -1000000 ELSE COALESCE(sm.rank,0) END"
+                match_select = """
+                    COALESCE(sm.title_match,char(1)||i.title||char(2)) AS fts_matched_title,
+                    sm.description_match AS fts_matched_description,
+                    sm.tags_match AS fts_matched_tags,sm.content_match AS fts_matched_content,
+                """
+            else:
+                joins.append("JOIN catalog_fts f ON f.catalog_item_id=i.id")
+                conditions.append("catalog_fts MATCH :fts")
+                rank_expression = "bm25(catalog_fts)"
+                match_select = """
+                    highlight(catalog_fts, 1, char(1), char(2)) AS fts_matched_title,
+                    highlight(catalog_fts, 2, char(1), char(2)) AS fts_matched_description,
+                    highlight(catalog_fts, 3, char(1), char(2)) AS fts_matched_tags,
+                    snippet(catalog_fts, 4, char(1), char(2), '…', 20) AS fts_matched_content,
+                """
 
-        if query.sort == "title":
+        if query.sort == "page_order":
+            sort_expression, direction = "flowinone_natural_key(i.title)", "ASC"
+        elif query.sort == "title":
             sort_expression, direction = "lower(i.title)", "ASC"
         elif query.sort == "random":
             # Deterministic and seed-sensitive; changing the seed changes the
@@ -431,7 +467,7 @@ class CatalogService:
             page_conditions.append(f"(({sort_expression}) {comparator} :cursor_sort OR (({sort_expression})=:cursor_sort AND i.id>:cursor_id))")
 
         eagle_clause = "" if eagle_allowed else "AND o.source_kind!='eagle'"
-        sql = f"""
+        sql = f"""{search_prefix}
             SELECT i.*, COALESCE(us.favorite,0) AS favorite, COALESCE(us.hidden,0) AS hidden,
                    COALESCE(us.open_count,0) AS open_count, us.last_viewed_at,
                    ({sort_expression}) AS sort_value,
@@ -447,7 +483,7 @@ class CatalogService:
             rows = list(conn.execute(text(sql), params).mappings()) if include_items else []
             total = self._browse_cache.get_total(*cache_context) if cache_context else None
             if total is None:
-                count_sql = f"SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(filter_conditions)}"
+                count_sql = f"{search_prefix} SELECT COUNT(DISTINCT i.id) FROM catalog_items i {' '.join(joins)} WHERE {' AND '.join(filter_conditions)}"
                 count_params = {key: value for key, value in params.items() if key not in {"limit", "cursor_sort", "cursor_id"}}
                 total = int(conn.execute(text(count_sql), count_params).scalar() or 0)
                 if cache_context:

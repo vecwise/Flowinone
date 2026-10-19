@@ -357,6 +357,7 @@
     overflow: hidden;
     background: var(--fo-muted);
 }
+.gallery-album-count { margin: 0; color: var(--fo-muted-text); font-size: .8rem; }
 .gallery-card .gallery-card-media.is-site-fallback {
     display: flex;
     min-height: 96px;

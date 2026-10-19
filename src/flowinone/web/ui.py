@@ -9,7 +9,7 @@ from .browse_sources import source_preference
 from src.flowinone.catalog.media import media_category
 
 ITEM_TYPE_LABELS = {
-    "image": "圖片", "video": "影片", "bookmark": "書籤", "folder": "資料夾",
+    "image": "圖片", "video": "影片", "bookmark": "書籤", "folder": "資料夾", "album": "漫畫／圖集",
     "tag": "標籤", "article": "文章", "web_page": "網頁", "pdf": "PDF",
     "github": "GitHub", "social_post": "社群貼文", "file": "檔案", "unknown": "其他",
 }

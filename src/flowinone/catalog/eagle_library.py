@@ -11,7 +11,7 @@ import json
 from flask import g, has_request_context
 from sqlalchemy import text
 
-from src.file_handler.eagle_integration import get_eagle_catalog_page, get_eagle_catalog_source
+from src.file_handler.eagle_integration import get_eagle_catalog_page, get_eagle_catalog_source, get_eagle_catalog_folders, _extract_folder_ids
 from src.flowinone.resource_library.database import backup_database
 from src.flowinone.resource_library.models import utc_now_text
 
@@ -117,7 +117,7 @@ class EagleLibraryService:
     def _snapshot(self):
         source = get_eagle_catalog_source(force=True)
         self.require_source(source, require_pin=True)
-        ids, offset, total = set(), 0, None
+        ids, image_folders, offset, total = set(), set(), 0, None
         for _ in range(10000):
             # Check before every page so switching libraries never mixes snapshots.
             observed = get_eagle_catalog_source(force=True)
@@ -135,6 +135,8 @@ class EagleLibraryService:
                 if not item_id or item_id in ids:
                     raise EagleLibraryError("Eagle 項目順序不穩定，未進行清理。")
                 ids.add(item_id)
+                if row.get("media_type") == "image":
+                    image_folders.update(_extract_folder_ids(row.get("folders")))
             offset += len(page.items)
             if offset >= total:
                 break
@@ -143,7 +145,12 @@ class EagleLibraryService:
         final = get_eagle_catalog_source(force=True)
         if final != source or len(ids) != total:
             raise EagleLibraryError("比對期間資源庫已變更，請重新預覽。")
-        return source, ids
+        folder_library, folders = get_eagle_catalog_folders(detailed=True)
+        if folder_library != source_signature(source):
+            raise EagleLibraryError("資料夾所屬資源庫已變更，請重新預覽。")
+        from .albums import album_source_key
+        ids.update(album_source_key(folder_library, folder_id) for folder_id in image_folders if folder_id in folders)
+        return source, ids, (folder_library, folders)
 
     @staticmethod
     def _targets(conn, live_ids):
@@ -154,27 +161,27 @@ class EagleLibraryService:
         )).mappings() if row["source_key"] not in live_ids]
 
     @staticmethod
-    def _token(source, live_ids, targets):
+    def _token(source, live_ids, targets, folders):
         return hashlib.sha256(json.dumps(
-            [source, sorted(live_ids), targets], ensure_ascii=False, sort_keys=True
+            [source, sorted(live_ids), targets, folders], ensure_ascii=False, sort_keys=True
         ).encode()).hexdigest()
 
     def preview_cleanup(self):
-        source, live_ids = self._snapshot()
+        source, live_ids, folders = self._snapshot()
         with self.database.engine.connect() as conn:
             targets = self._targets(conn, live_ids)
         return {"library": source, "live_count": len(live_ids), "count": len(targets),
                 "sample": [{"id": row["source_key"], "title": row["title"]} for row in targets[:10]],
-                "token": self._token(source, live_ids, targets)}
+                "token": self._token(source, live_ids, targets, folders)}
 
     def cleanup(self, token):
         if not isinstance(token, str) or not token:
             raise EagleLibraryError("請先預覽待清理資料。")
         with self.database.catalog_sync():
-            source, live_ids = self._snapshot()
+            source, live_ids, folders = self._snapshot()
             with self.database.engine.connect() as conn:
                 targets = self._targets(conn, live_ids)
-            if self._token(source, live_ids, targets) != token:
+            if self._token(source, live_ids, targets, folders) != token:
                 raise EagleLibraryError("資料已變更，請重新預覽後再清理。")
             backup = backup_database(self.database.path) if targets else None
             with self.database.write_transaction() as conn:
@@ -184,8 +191,10 @@ class EagleLibraryService:
                 self.require_source(final, require_pin=True, conn=conn)
                 if final != source:
                     raise EagleLibraryError("備份期間資源庫已變更，請重新預覽。")
+                if get_eagle_catalog_folders(detailed=True) != folders:
+                    raise EagleLibraryError("備份期間資料夾已變更，請重新預覽。")
                 targets = self._targets(conn, live_ids)
-                if self._token(source, live_ids, targets) != token:
+                if self._token(source, live_ids, targets, folders) != token:
                     raise EagleLibraryError("資料已變更，請重新預覽後再清理。")
                 deleted_items = 0
                 for row in targets:
@@ -194,7 +203,7 @@ class EagleLibraryService:
                         "SELECT tag_id FROM catalog_item_tags WHERE catalog_item_id=:id"
                     ), {"id": item}).scalars())
                     conn.execute(text("DELETE FROM catalog_origins WHERE id=:id"), {"id": row["id"]})
-                    conn.execute(text("DELETE FROM catalog_item_tags WHERE catalog_item_id=:id AND source='eagle'"), {"id": item})
+                    conn.execute(text("DELETE FROM catalog_item_tags WHERE catalog_item_id=:id AND source IN ('eagle','eagle_folder_member')"), {"id": item})
                     if not conn.execute(text("SELECT 1 FROM catalog_origins WHERE catalog_item_id=:id LIMIT 1"), {"id": item}).scalar():
                         conn.execute(text("DELETE FROM catalog_fts WHERE catalog_item_id=:id"), {"id": item})
                         conn.execute(text("DELETE FROM catalog_items WHERE id=:id"), {"id": item})

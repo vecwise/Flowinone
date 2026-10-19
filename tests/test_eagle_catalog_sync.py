@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 
 from bs4 import BeautifulSoup
 from flask import Flask
@@ -39,6 +40,7 @@ def _item(
 
 
 def _install_eagle(monkeypatch, items: list[dict], offsets: list[int] | None = None):
+    monkeypatch.setattr(eagle_sync, "get_eagle_catalog_folders", lambda **_: (hashlib.sha256(b"library-one").hexdigest(), {}))
     monkeypatch.setattr(
         eagle_sync,
         "get_eagle_catalog_source",

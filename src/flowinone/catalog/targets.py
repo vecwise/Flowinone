@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
-from flask import url_for
+from flask import g, has_request_context, url_for
 from sqlalchemy import text
 
 from src.file_handler.eagle_integration import get_eagle_catalog_folders, _extract_folder_ids
@@ -61,13 +61,30 @@ class BrowseTargetService:
             )).scalar() or "legacy"
 
     def _folder_names(self) -> dict[str, str]:
+        library = self.eagle_library()
+        cache = g.setdefault("catalog_folder_names", {}) if has_request_context() else {}
+        cache_key = (str(self.database.path), library)
+        if cache_key in cache:
+            return cache[cache_key]
+        with self.database.engine.connect() as conn:
+            names = {str(_json(row["metadata_json"], {}).get("folder_id")): row["title"]
+                     for row in conn.execute(text(
+                         "SELECT i.title,o.metadata_json FROM catalog_origins o "
+                         "JOIN catalog_items i ON i.id=o.catalog_item_id WHERE o.source_kind='eagle' "
+                         "AND o.source_key LIKE :prefix AND o.stale=0 AND i.is_deleted=0"
+                     ), {"prefix": f"folder:{library}:%"}).mappings()}
+        if names:
+            cache[cache_key] = names
+            return names
         # Names are optional display metadata. Membership always comes from the
         # indexed origins, so unavailable Eagle never breaks a Catalog query.
         try:
-            library, names = get_eagle_catalog_folders()
+            observed, names = get_eagle_catalog_folders()
         except Exception:
+            cache[cache_key] = {}
             return {}
-        return names if library == self.eagle_library() else {}
+        cache[cache_key] = names if observed == library else {}
+        return cache[cache_key]
 
     @staticmethod
     def entry(target: BrowseTarget, label: str, sources=()) -> dict:

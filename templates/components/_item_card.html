@@ -1,5 +1,5 @@
 <article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}" data-thumbnail-provider="{{ item.thumbnail_provider or '' }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}" data-media-category="{{ item.media_category or 'page' }}">
-  <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="預覽 {{ item.title }}">
+  <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item and not item.is_eagle_album %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="{{ '開啟圖集' if item.is_eagle_album else '預覽' }} {{ item.title }}">
     {% if item.thumbnail_is_fallback %}
     <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
     <span class="gallery-fallback-copy"><strong>{{ item.site_domain or '網站' }}</strong><small>暫無預覽圖片</small></span>
@@ -10,7 +10,8 @@
     {% if item.duration_seconds %}<span class="gallery-duration-badge">{{ item.duration_seconds|int }}s</span>{% endif %}
   </a>
   <div class="gallery-card-body">
-    <h3><a href="{{ item.launch_uri or '#' }}" title="{{ item.title }}" {% if item.catalog_item %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+    <h3><a href="{{ item.launch_uri or '#' }}" title="{{ item.title }}" {% if item.catalog_item and not item.is_eagle_album %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title }}</a></h3>
+    {% if item.is_eagle_album %}<p class="gallery-album-count">{{ item.image_count }} 張圖片</p>{% endif %}
     <div class="gallery-card-source" title="{{ item.launch_source_label }}{% if item.site_domain %} · {{ item.site_domain }}{% endif %}"><span>{{ item.launch_source_label }}</span>{% if item.site_domain %}<span class="gallery-site-domain">{{ item.site_domain }}</span>{% endif %}</div>
   </div>
   <div class="gallery-card-actions">

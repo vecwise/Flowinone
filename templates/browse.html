@@ -22,6 +22,7 @@
   {% if browse.kind != 'catalog' %}{% include 'components/_thumbnail_tools.html' %}{% endif %}
   </div>
   <div class="browse-content">
+  {% if album_return_url %}<a class="detail-back" data-album-return href="{{ album_return_url }}">← 返回搜尋結果</a>{% endif %}
   {% if not browse.error %}<section class="browse-results" aria-labelledby="navigator-results-heading">
     <div class="gallery-results-heading">
       {% if browse.kind == 'catalog' %}<div class="catalog-result-title"><h1>{{ gallery_heading }}</h1>{% endif %}

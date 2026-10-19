@@ -58,6 +58,16 @@ FLOWINONE_HEADLESS=1 conda run -n py3.11 python run.py
 
 入口使用 `target=tag:<id>`、`target=person:<id>`、`target=eagle_folder:<library-signature>:<folder-id>`。EAGLE 資料夾顯示直接歸屬於該 folder 的索引項目；來源樹狀頁仍用於瀏覽子資料夾。來源未包含 EAGLE 時會提示調整來源，不會自行開啟該來源。
 
+### 3.1.1 按 EAGLE 漫畫／圖集探索
+
+更新後先同步一次 EAGLE。直接含圖片的 folder 會成為一筆「漫畫／圖集」item；只有子資料夾、只有影片或空的 folder 不會變成圖集。
+
+在「我的收藏」選「漫畫／圖集」，再搜尋 folder 名稱，例如「夏日森林自然攝影作品」，會顯示整組作品的封面卡片與圖片數。中文完整名稱與片段（例如「森林」）皆可搜尋。單張圖片保留在「圖片」類型；全部類型會同時包含兩者。
+
+點圖集直接進入該 folder 的圖片，清除外層關鍵字與圖集條件，以「頁碼／檔名順序」排列，分頁能看完所有直接歸屬圖片。子 folder 的圖片不會混入。頁面可返回原本搜尋結果。圖集的 tag 表示「至少有一張成員圖片帶此 tag」，不是每張圖片都有。
+
+Folder 改名、移動或增減圖片後再同步，會更新名稱、封面、圖片數與成員 tag。固定身分使用資源庫與 folder ID；不會因改名重建圖集。這些都是 Catalog 投影，不會修改 EAGLE 原始資料，也不需要新增 Collection DB 或執行 schema migration。
+
 ### 3.2 我不知道資源在哪個來源
 
 「我的收藏」預設會搜尋 Local、Eagle、Bookmarks 與 Resources。其他頁面的導覽列搜尋也會進全部收藏。

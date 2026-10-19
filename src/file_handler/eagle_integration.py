@@ -364,7 +364,7 @@ def get_eagle_catalog_source(*, force=False):
     }
 
 
-def get_eagle_catalog_folders():
+def get_eagle_catalog_folders(*, detailed=False):
     """Return folder names and their library signature from one metadata snapshot."""
     response = _get_eagle_library_info()
     if response.get("status") != "success":
@@ -373,10 +373,17 @@ def get_eagle_catalog_folders():
     identity = data.get("id") or data.get("libraryId") or data.get("path")
     if not identity:
         raise ExternalServiceError("Eagle library identity is unavailable")
-    return hashlib.sha256(str(identity).encode()).hexdigest(), {
-        str(folder["id"]): str(folder.get("name") or folder["id"])
-        for folder, _parent in _iter_eagle_folders(data.get("folders")) if folder.get("id")
-    }
+    folders = {}
+    for folder, parent in _iter_eagle_folders(data.get("folders")):
+        if not folder.get("id"):
+            continue
+        folder_id = str(folder["id"])
+        name = str(folder.get("name") or folder_id)
+        folders[folder_id] = {
+            "name": name, "parent_id": str(parent["id"]) if parent and parent.get("id") else None,
+            "description": str(folder.get("description") or folder.get("annotation") or ""),
+        } if detailed else name
+    return hashlib.sha256(str(identity).encode()).hexdigest(), folders
 
 
 def get_eagle_catalog_page(offset=0, limit=1000):

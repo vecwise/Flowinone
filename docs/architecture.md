@@ -50,6 +50,7 @@ flowchart LR
 - **Resource 有自己的資料與頁面**：`/resources/` 讀 Resource；`/navigator/?scope=all` 讀 Catalog 投影。Resource 建立、標籤或擷取內容更新並提交後，透過 `resource_library/projection.py` 刷新對應投影。擷取工作的 worker 未運行時，工作仍在 queue 等待。
 - **同一 URL 可有多個來源**：Bookmark 與 Resource 經 URL canonicalization 後可共用一筆 `catalog_items`，`catalog_origins` 仍保留兩個來源紀錄。
 - **直接來源頁和 Navigator 讀法不同**：`/folders/`、`/chrome/`、`/EAGLE_*` 保留來源的資料夾或樹狀結構；Navigator 讀統一 Catalog。來源同步與來源頁讀取不是同一件事。
+- **Eagle 圖集也是 Catalog item**：`catalog/albums.py` 在完整素材掃描驗證後，將直接含圖片的 folder 投影為 `item_type=album`。身分與 origin key 包含 library signature、folder ID；成員仍讀圖片 origin 的 folder 歸屬。封面與數量批次計算，成員 tag 以 `eagle_folder_member` 記錄來源。同步及清理分別辨認素材與 folder key；中斷掃描不會刪除圖集。中文搜尋沿用 FTS 並補 album 題名片段候選，`page_order` 使用共用自然排序 key，於 SQL 分頁前排序。
 - 瀏覽入口 `/navigator/` 預設使用 `all` scope，包含四個來源。舊 `gallery` scope 只包含 Local、Eagle、Bookmarks；舊 `/gallery/`、`/search/` 與 Gallery API 已移除。
 
 ## 2. 程式架構：請求與背景工作

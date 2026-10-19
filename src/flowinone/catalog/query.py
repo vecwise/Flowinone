@@ -13,7 +13,7 @@ from .media import MEDIA_LABELS
 CATALOG_SOURCES = ("local", "eagle", "bookmarks", "resources")
 CATALOG_SORTS = (
     "newest", "recently_added", "relevance", "title", "random",
-    "most_viewed", "recently_viewed", "favorites",
+    "most_viewed", "recently_viewed", "favorites", "page_order",
 )
 
 def _json(value: Any, fallback: Any) -> Any:

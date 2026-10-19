@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlencode
+
+from flask import has_request_context, request
 
 from src.file_handler.thumbnails.store import get_thumbnail_store
 from src.file_handler.thumbnails.retry import resolve_bookmark_ids
@@ -85,6 +87,20 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             bookmark_thumbnails.append((item, thumbnail_id))
         item["folder_path"] = metadata.get("folder_path") or ""
         item["target_blank"] = source == "bookmarks"
+        item["is_eagle_album"] = source == "eagle" and metadata.get("source_object") == "folder" and item["item_type"] == "album"
+        if item["is_eagle_album"]:
+            item["image_count"] = int(metadata.get("image_count") or 0)
+            pairs = [("scope", "all"), *(("source", value) for value in query.sources),
+                     ("target", f"eagle_folder:{metadata['library_signature']}:{metadata['folder_id']}"),
+                     ("media", "image"), ("sort", "page_order")]
+            if has_request_context():
+                pairs.extend((key, request.args[key]) for key in ("view", "shape") if request.args.get(key))
+                if request.path.rstrip("/") == "/navigator":
+                    outer = [(key, value) for key, value in request.args.items(multi=True) if key not in {"return_to", "resume_scroll"}]
+                    return_to = request.path + ("?" + urlencode(outer) if outer else "") + f"#item-{item['id']}"
+                    if len(return_to) <= 4000:
+                        pairs.append(("return_to", return_to))
+            item["launch_uri"] = "/navigator/?" + urlencode(pairs)
         item["card_description"] = _card_description(item.get("description"), item["folder_path"])
         item["site_domain"] = ""
         item["site_mark"] = ""
