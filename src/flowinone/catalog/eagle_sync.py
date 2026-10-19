@@ -14,6 +14,7 @@ from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .query import _json
 from .fts import CatalogSearchIndex
+from .eagle_library import EagleLibraryService
 
 EAGLE_SYNC_CURSOR_VERSION = 1
 EAGLE_SYNC_FINGERPRINT_VERSION = 1
@@ -164,6 +165,8 @@ class EagleSyncMixin:
     ) -> dict[str, Any]:
         """Checkpoint Eagle pages and only project records whose fingerprint changed."""
         source = get_eagle_catalog_source(force=True)
+        library = EagleLibraryService(self.database)
+        library.require_source(source)
         source_signature, source_snapshot = self._eagle_source_tokens(source)
         with self.database.engine.connect() as conn:
             durable = conn.execute(
@@ -258,8 +261,10 @@ class EagleSyncMixin:
         )
 
         while cursor.get("total") is None or int(cursor["next_offset"]) < int(cursor["total"]):
+            library.require_source(get_eagle_catalog_source(force=True))
             offset = int(cursor.get("next_offset") or 0)
             page = get_eagle_catalog_page(offset=offset, limit=EAGLE_SYNC_PAGE_SIZE)
+            library.require_source(get_eagle_catalog_source(force=True))
             if int(page.offset) != offset:
                 raise RuntimeError(
                     f"Eagle returned offset {page.offset} while {offset} was requested"
@@ -408,6 +413,7 @@ class EagleSyncMixin:
             )
 
         final_source = get_eagle_catalog_source(force=True)
+        library.require_source(final_source)
         final_signature, final_snapshot = self._eagle_source_tokens(final_source)
         if final_signature != source_signature or (
             source_snapshot and final_snapshot and final_snapshot != source_snapshot
@@ -418,6 +424,10 @@ class EagleSyncMixin:
 
         completed_at = utc_now_text()
         with self.database.write_transaction() as conn:
+            locked_source = get_eagle_catalog_source(force=True)
+            library.require_source(locked_source, conn=conn)
+            if self._eagle_source_tokens(locked_source) != (source_signature, source_snapshot):
+                raise RuntimeError("Eagle library changed before deletion reconciliation")
             seen_count = int(
                 conn.execute(
                     text(

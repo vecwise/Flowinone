@@ -25,6 +25,8 @@ from src.flowinone.web.schemas import (
     DuplicateReviewOutput, CatalogWatchSettingsRequest, CatalogWatchStatusOutput,
     PersonLinkRequest, PersonNameRequest, PersonOutput, RelationsRebuildOutput,
     RelatedLimitQuery, SimilarImageQuery, SimilarImagesOutput, SessionLimitQuery,
+    EmptyRequest, EaglePrimaryRequest, EagleCleanupRequest, EagleLibraryStatusOutput,
+    EagleCleanupPreviewOutput, EagleCleanupOutput,
 )
 
 from . import http
@@ -37,6 +39,41 @@ from .presentation import visible_items
 from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
 from .watch import CatalogSourceWatcher
+from .eagle_library import EagleLibraryService, EagleLibraryError
+
+
+@bp.get("/api/catalog/eagle/library")
+def api_eagle_library():
+    return validated_json(EagleLibraryService(_database()).status(), EagleLibraryStatusOutput)
+
+
+@bp.post("/api/catalog/eagle/primary")
+def api_eagle_primary():
+    payload = parse_json(EaglePrimaryRequest)
+    service = EagleLibraryService(_database())
+    try:
+        service.pin(payload.identity)
+        return validated_json(service.status(), EagleLibraryStatusOutput)
+    except (EagleLibraryError, ExternalServiceError) as exc:
+        return api_error(str(exc), 409)
+
+
+@bp.post("/api/catalog/eagle/cleanup/preview")
+def api_eagle_cleanup_preview():
+    parse_json(EmptyRequest)
+    try:
+        return validated_json(EagleLibraryService(_database()).preview_cleanup(), EagleCleanupPreviewOutput)
+    except (EagleLibraryError, ExternalServiceError) as exc:
+        return api_error(str(exc), 409)
+
+
+@bp.post("/api/catalog/eagle/cleanup")
+def api_eagle_cleanup():
+    payload = parse_json(EagleCleanupRequest)
+    try:
+        return validated_json(EagleLibraryService(_database()).cleanup(payload.token), EagleCleanupOutput)
+    except (EagleLibraryError, ExternalServiceError) as exc:
+        return api_error(str(exc), 409)
 
 
 @bp.get("/api/catalog/items")
@@ -366,6 +403,10 @@ def api_person_link(person_id: str, item_id: str):
 @bp.post("/api/catalog/sync")
 def api_sync():
     payload = parse_json(CatalogSyncRequest)
+    if 'eagle' in payload.sources:
+        service = EagleLibraryService(_database())
+        if set(payload.sources) == {'eagle'} and service.primary() and not service.visibility()['allowed']:
+            return api_error('目前 Eagle 不是主要庫或無法連線；已暫停同步，請切回主要庫。', 409)
     if not current_app.config.get("FLOWINONE_CATALOG_SYNC_INLINE", False):
         selected_sources = [
             source for source in CATALOG_SOURCES if source in payload.sources

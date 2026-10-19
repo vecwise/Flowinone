@@ -40,6 +40,20 @@ from .schemas import EagleStreamOutput, EagleStreamQuery
 bp = Blueprint("eagle", __name__)
 
 
+@bp.before_request
+def protect_primary_library():
+    from .database import request_database
+    from src.flowinone.catalog.eagle_library import EagleLibraryService
+
+    service = EagleLibraryService(request_database())
+    if not service.visibility()["allowed"]:
+        message = "目前 Eagle 不是主要庫或無法連線；已隱藏 Eagle 內容，請切回主要庫。"
+        if request.path.startswith('/api/'):
+            return {"error": message}, 409
+        return render_source_browse(metadata={"name": "Eagle 主要庫保護", "error": message,
+                                             "status_code": 409}, data=[])
+
+
 def page_args() -> tuple[int, int]:
     try:
         offset = int(request.args.get("offset", 0))

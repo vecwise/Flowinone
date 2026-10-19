@@ -146,7 +146,10 @@ class DiscoveryService:
         for candidate in candidates:
             if candidate["id"] in seen or (matching is not None and candidate["id"] not in matching):
                 continue
-            item = self.catalog.get(candidate["id"])
+            try:
+                item = self.catalog.get(candidate["id"])
+            except LookupError:
+                continue
             shared_tags = sorted(source_tags.intersection(item["tags"]))
             output.append({**item, "relation_type": "shared_tags", "score": float(candidate["shared_count"]), "reason": {"shared_tags": shared_tags}})
             if len(output) >= limit:

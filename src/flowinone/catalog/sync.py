@@ -23,6 +23,7 @@ from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .browse import CatalogService
 from .eagle_sync import EagleSyncMixin
+from .eagle_library import EagleLibraryError
 from .fts import CatalogSearchIndex
 from .locking import database_is_locked
 from .query import CATALOG_SOURCES, _normalize_tag
@@ -523,7 +524,7 @@ class CatalogSyncService(EagleSyncMixin):
 
                     now = utc_now_text()
                     recorded = False
-                    if not locked:
+                    if not locked and not isinstance(exc, EagleLibraryError):
                         recorded = self._record_failure(
                             source,
                             previous_count,

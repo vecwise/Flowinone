@@ -357,7 +357,10 @@ def get_eagle_catalog_source(*, force=False):
         or data.get("updatedAt")
         or ""
     )
-    return {"identity": str(identity), "version": str(version)}
+    return {
+        "identity": str(identity), "version": str(version),
+        "name": str(data.get("name") or ""), "path": str(data.get("path") or ""),
+    }
 
 
 def get_eagle_catalog_page(offset=0, limit=1000):

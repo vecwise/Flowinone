@@ -16,6 +16,7 @@ from src.flowinone.resource_library.database import ResourceDatabase
 from src.flowinone.resource_library.models import new_id, utc_now_text
 
 from .eagle_sync import EAGLE_SYNC_CURSOR_VERSION
+from .eagle_library import EagleLibraryService
 from .locking import database_is_locked
 from .media import media_category, media_category_sql
 from .query import CatalogQuery, _fts_query, _json
@@ -133,6 +134,16 @@ class CatalogService:
         self.database = database
         self._browse_cache = _browse_cache_for(database)
 
+    def _eagle_allowed(self) -> bool:
+        return EagleLibraryService(self.database).visibility()["allowed"]
+
+    def _visibility_sql(self, alias="i") -> str:
+        if self._eagle_allowed():
+            return "1=1"
+        return (f"(NOT EXISTS (SELECT 1 FROM catalog_origins eg WHERE eg.catalog_item_id={alias}.id "
+                "AND eg.source_kind='eagle') OR EXISTS (SELECT 1 FROM catalog_origins other "
+                f"WHERE other.catalog_item_id={alias}.id AND other.source_kind!='eagle' AND other.stale=0))")
+
     @staticmethod
     def mark_browse_data_changed(database: ResourceDatabase) -> None:
         """Invalidate Catalog metadata in this and other application processes.
@@ -176,11 +187,12 @@ class CatalogService:
                 ).scalar()
                 or ""
             )
-        return query.filter_signature(), revision
+        return query.filter_signature() + f":eagle={self._eagle_allowed()}", revision
 
     def count(self) -> int:
+        visibility = self._visibility_sql()
         with self.database.engine.connect() as conn:
-            return int(conn.execute(text("SELECT COUNT(*) FROM catalog_items WHERE is_deleted=0")).scalar() or 0)
+            return int(conn.execute(text(f"SELECT COUNT(*) FROM catalog_items i WHERE is_deleted=0 AND {visibility}")).scalar() or 0)
 
     def folder_children(self, parent: str = "", *, limit: int = 24) -> list[dict[str, Any]]:
         """Show direct Chrome folder children while counting bookmarked items below them."""
@@ -282,6 +294,8 @@ class CatalogService:
         params: dict[str, Any] = {"limit": query.limit + 1, "seed": query.seed or 1}
         joins = ["LEFT JOIN item_user_state us ON us.catalog_item_id=i.id"]
         conditions = ["i.is_deleted=0", "COALESCE(us.hidden,0)=0"]
+        eagle_allowed = self._eagle_allowed()
+        conditions.append(self._visibility_sql())
         if candidate_ids is not None:
             placeholders = []
             for index, item_id in enumerate(candidate_ids):
@@ -295,9 +309,11 @@ class CatalogService:
         if query.sources:
             placeholders = []
             for index, source in enumerate(query.sources):
+                if source == "eagle" and not eagle_allowed:
+                    continue
                 params[f"source_{index}"] = source
                 placeholders.append(f":source_{index}")
-            conditions.append(f"EXISTS (SELECT 1 FROM catalog_origins so WHERE so.catalog_item_id=i.id AND so.stale=0 AND so.source_kind IN ({','.join(placeholders)}))")
+            conditions.append(f"EXISTS (SELECT 1 FROM catalog_origins so WHERE so.catalog_item_id=i.id AND so.stale=0 AND so.source_kind IN ({','.join(placeholders)}))" if placeholders else "0=1")
         if query.media:
             params["media"] = query.media
             conditions.append(f"({media_category_sql()})=:media")
@@ -407,13 +423,14 @@ class CatalogService:
             comparator = ">" if direction == "ASC" else "<"
             page_conditions.append(f"(({sort_expression}) {comparator} :cursor_sort OR (({sort_expression})=:cursor_sort AND i.id>:cursor_id))")
 
+        eagle_clause = "" if eagle_allowed else "AND o.source_kind!='eagle'"
         sql = f"""
             SELECT i.*, COALESCE(us.favorite,0) AS favorite, COALESCE(us.hidden,0) AS hidden,
                    COALESCE(us.open_count,0) AS open_count, us.last_viewed_at,
                    ({sort_expression}) AS sort_value,
                    {match_select}
                    (SELECT GROUP_CONCAT(name, char(31)) FROM (SELECT DISTINCT t.name AS name FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id WHERE it.catalog_item_id=i.id ORDER BY t.name)) AS tag_names,
-                   (SELECT GROUP_CONCAT(DISTINCT source_kind) FROM catalog_origins o WHERE o.catalog_item_id=i.id AND o.stale=0) AS source_names
+                   (SELECT GROUP_CONCAT(DISTINCT source_kind) FROM catalog_origins o WHERE o.catalog_item_id=i.id AND o.stale=0 {eagle_clause}) AS source_names
             FROM catalog_items i {' '.join(joins)}
             WHERE {' AND '.join(page_conditions)}
             ORDER BY sort_value {direction}, i.id ASC LIMIT :limit
@@ -453,6 +470,8 @@ class CatalogService:
     ) -> dict[str, Any]:
         """Return catalog facets with live sync state kept outside the cache."""
         cache_key, cache_revision = cache_context or self._browse_cache_context(query)
+        visibility = self._visibility_sql()
+        origin_visibility = "1=1" if self._eagle_allowed() else "source_kind!='eagle'"
         cached = self._browse_cache.get_facets(cache_key, cache_revision)
         if cached is None:
             with self.database.engine.connect() as conn:
@@ -461,7 +480,7 @@ class CatalogService:
                     for source, count in conn.execute(
                         text(
                             "SELECT source_kind,COUNT(DISTINCT catalog_item_id) "
-                            "FROM catalog_origins WHERE stale=0 GROUP BY source_kind"
+                            f"FROM catalog_origins WHERE stale=0 AND {origin_visibility} GROUP BY source_kind"
                         )
                     ).all()
                 )
@@ -469,8 +488,8 @@ class CatalogService:
                     (str(item_type), int(count))
                     for item_type, count in conn.execute(
                         text(
-                            "SELECT item_type,COUNT(*) FROM catalog_items "
-                            "WHERE is_deleted=0 GROUP BY item_type"
+                            "SELECT item_type,COUNT(*) FROM catalog_items i "
+                            f"WHERE is_deleted=0 AND {visibility} GROUP BY item_type"
                         )
                     ).all()
                 )
@@ -480,6 +499,7 @@ class CatalogService:
                         text(
                             "SELECT t.name,COUNT(DISTINCT it.catalog_item_id) AS count "
                             "FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id "
+                            f"JOIN catalog_items i ON i.id=it.catalog_item_id WHERE {visibility} "
                             "GROUP BY t.id ORDER BY count DESC,t.name LIMIT 100"
                         )
                     ).mappings()
@@ -541,15 +561,17 @@ class CatalogService:
         return sync
 
     def get(self, item_id: str) -> dict[str, Any]:
+        visibility = self._visibility_sql()
+        eagle_clause = "" if self._eagle_allowed() else "AND source_kind!='eagle'"
         with self.database.engine.connect() as conn:
             row = conn.execute(
-                text("SELECT i.*,COALESCE(us.favorite,0) favorite,COALESCE(us.hidden,0) hidden,COALESCE(us.open_count,0) open_count,us.last_viewed_at,'' tag_names,'' source_names FROM catalog_items i LEFT JOIN item_user_state us ON us.catalog_item_id=i.id WHERE i.id=:id AND i.is_deleted=0"),
+                text(f"SELECT i.*,COALESCE(us.favorite,0) favorite,COALESCE(us.hidden,0) hidden,COALESCE(us.open_count,0) open_count,us.last_viewed_at,'' tag_names,'' source_names FROM catalog_items i LEFT JOIN item_user_state us ON us.catalog_item_id=i.id WHERE i.id=:id AND i.is_deleted=0 AND {visibility}"),
                 {"id": item_id},
             ).mappings().first()
             if row is None:
                 raise LookupError(item_id)
             result = self._row(row)
-            result["origins"] = [dict(origin) for origin in conn.execute(text("SELECT source_kind,source_key,detail_uri,original_url,metadata_json,stale FROM catalog_origins WHERE catalog_item_id=:id"), {"id": item_id}).mappings()]
+            result["origins"] = [dict(origin) for origin in conn.execute(text(f"SELECT source_kind,source_key,detail_uri,original_url,metadata_json,stale FROM catalog_origins WHERE catalog_item_id=:id {eagle_clause}"), {"id": item_id}).mappings()]
             result["tags"] = list(conn.execute(text("SELECT DISTINCT t.name FROM catalog_tags t JOIN catalog_item_tags it ON it.tag_id=t.id WHERE it.catalog_item_id=:id ORDER BY t.name"), {"id": item_id}).scalars())
             return result
 
@@ -581,6 +603,8 @@ class CatalogService:
         primary URI, otherwise a Bookmark can accidentally open its Resource
         detail page.
         """
+        if source_kind == "eagle" and not self._eagle_allowed():
+            return None
         stale_clause = "" if include_stale else "AND stale=0"
         with self.database.engine.connect() as conn:
             row = conn.execute(
@@ -613,9 +637,11 @@ class CatalogService:
                 "THEN 0 ELSE 1 END, "
             )
             params["folder"] = folder
+        eagle_clause = "AND source_kind!='eagle'" if not self._eagle_allowed() else ""
         statement = text(
             f"SELECT * FROM catalog_origins WHERE catalog_item_id IN ({placeholders}) "
-            f"{stale_clause} ORDER BY catalog_item_id, source_kind, {folder_order}last_seen_at DESC"
+            f"{stale_clause} {eagle_clause} "
+            f"ORDER BY catalog_item_id, source_kind, {folder_order}last_seen_at DESC"
         )
         with self.database.engine.connect() as conn:
             rows = conn.execute(statement, params).mappings()
@@ -635,6 +661,8 @@ class CatalogService:
     def record_event(self, item_id: str, event_type: str, *, value: float | None = None, session_id: str | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         if event_type not in {"open", "view", "favorite", "unfavorite", "hide", "unhide"}:
             raise ValueError("不支援的 Catalog event")
+        if not self._eagle_allowed():
+            self.get(item_id)
         now = utc_now_text()
         with self.database.write_transaction() as conn:
             if conn.execute(text("SELECT 1 FROM catalog_items WHERE id=:id"), {"id": item_id}).first() is None:

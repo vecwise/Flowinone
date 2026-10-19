@@ -155,6 +155,7 @@ def management_context(database, facets):
     from src.flowinone.catalog.query import CATALOG_SOURCES, CatalogQuery
     from src.flowinone.catalog.similarity import CatalogSimilarityService
     from src.flowinone.catalog.watch import CatalogSourceWatcher
+    from src.flowinone.catalog.eagle_library import EagleLibraryService
     from src.flowinone.config import CHROME_BOOKMARK_PATH
 
     return {
@@ -162,6 +163,7 @@ def management_context(database, facets):
         "catalog_sources": [{"key": source, "label": catalog_labels[source]} for source in CATALOG_SOURCES],
         "source_watch_status": CatalogSourceWatcher(database).status(),
         "similarity_status": CatalogSimilarityService(database).status(),
+        "eagle_library": EagleLibraryService(database).status(),
         "bookmark_source_health": bookmark_source_health(Path(CHROME_BOOKMARK_PATH),
             facets["sync"].get("bookmarks", {}), facets["sources"].get("bookmarks", 0)),
         "eagle_available": get_feature_flags().get("eagle"), "maintenance_open": True,

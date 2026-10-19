@@ -24,6 +24,7 @@ from .query import CATALOG_SOURCES, CatalogQuery
 from .media import MEDIA_LABELS
 from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
+from .eagle_library import EagleLibraryService
 
 NAVIGATOR_SCOPE_SOURCES = {
     "gallery": tuple(source for source in CATALOG_SOURCES if source != "resources"),
@@ -346,6 +347,8 @@ def navigator_page():
         return redirect(target)
 
     eagle_available = is_eagle_available() if "eagle" in query.sources else True
+    if "eagle" in query.sources:
+        eagle_available = eagle_available and EagleLibraryService(_database()).visibility()["allowed"]
     active_sources = tuple(source for source in query.sources if source != "eagle" or eagle_available)
     values = query.public_dict()
     values["sources"] = active_sources

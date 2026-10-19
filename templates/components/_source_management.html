@@ -15,6 +15,30 @@
     </div>
   </section>
 
+<section id="eagle-library-management" class="resource-surface" aria-labelledby="eagle-library-heading">
+  <h2 id="eagle-library-heading">Eagle 主要資源庫</h2>
+  <p>固定主要庫後，誤切其他資源庫會暫停 Eagle 同步並隱藏 Eagle 內容；切回主要庫即可恢復。</p>
+  <p>主要庫：<strong>{{ eagle_library.primary.name or eagle_library.primary.identity if eagle_library.primary else '尚未設定' }}</strong></p>
+  {% if eagle_library.primary %}<p class="eagle-library-path">{{ eagle_library.primary.path }}</p>{% endif %}
+  <p>目前開啟：<strong>{{ eagle_library.current.name or eagle_library.current.identity if eagle_library.current else '無法連線' }}</strong></p>
+  {% if eagle_library.current %}<p class="eagle-library-path">{{ eagle_library.current.path }}</p>{% endif %}
+  <p role="status" data-eagle-library-status>{% if eagle_library.state == 'active' %}主要庫已連線。{% elif eagle_library.state == 'different' %}目前不是主要庫。已暫停 Eagle 同步與清理，Eagle 內容已隱藏；請切回主要庫。{% elif eagle_library.state == 'unavailable' %}無法確認 Eagle 資源庫。{% else %}請確認名稱與路徑，再設定主要庫。{% endif %}</p>
+  <div class="action-row">
+    {% if not eagle_library.primary %}<button class="action-button" type="button" id="eagle-pin-primary" data-identity="{{ eagle_library.current.identity if eagle_library.current else '' }}" {% if not eagle_library.current %}disabled{% endif %}>將目前資源庫設為主要庫</button>{% endif %}
+    <button class="action-button" type="button" id="eagle-cleanup-preview" {% if not eagle_library.allowed %}disabled{% endif %}>預覽 Eagle 殘留資料</button>
+  </div>
+  <p>完整比對主要庫後，才會列出 DB 多出的 Eagle 紀錄。確認清理時會先備份 DB；不會刪除 Eagle 原始檔案。Eagle 內刪除的項目會在同步後隱藏，永久清理由此處執行。</p>
+  <div id="eagle-cleanup-review" hidden>
+    <p id="eagle-cleanup-summary"></p>
+    <ul id="eagle-cleanup-sample"></ul>
+    <p>清除無其他來源的紀錄時，也會移除其最愛、觀看紀錄及搜尋索引。</p>
+    <div class="action-row">
+      <button class="action-button" type="button" id="eagle-cleanup-confirm">確認永久清理</button>
+      <button class="action-button" type="button" id="eagle-cleanup-cancel">取消</button>
+    </div>
+  </div>
+</section>
+
 <details id="collection-maintenance" class="navigator-maintenance" {% if maintenance_open %}open{% endif %}>
   <summary>來源與同步</summary>
   <div class="navigator-maintenance-panel">

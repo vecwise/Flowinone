@@ -262,6 +262,14 @@ class CatalogSourceWatcher:
             if state.get('_auto_mirror') and source!='bookmarks':
                 continue
             previous = dict(sources.get(source) or {})
+            if source == 'eagle':
+                from .eagle_library import EagleLibraryService
+                library = EagleLibraryService(self.database)
+                if library.primary() and not library.status()['allowed']:
+                    sources[source] = {**previous, 'state': 'unavailable',
+                        'error': '目前不是主要庫或 Eagle 無法連線；已暫停 Eagle 同步。',
+                        'observed_at': now_text}
+                    continue
             try:
                 signature = provider()
             except Exception as exc:  # pragma: no cover - provider boundary
@@ -279,6 +287,9 @@ class CatalogSourceWatcher:
                     "observed_at": now_text,
                 }
                 continue
+            if previous.get('state') == 'unavailable':
+                previous['state'] = 'watching'
+                previous.pop('error', None)
             if not previous.get("signature"):
                 sources[source] = {
                     "signature": signature,

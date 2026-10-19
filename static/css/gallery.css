@@ -873,3 +873,6 @@
     .gallery-card { transition: none; }
     .gallery-card:hover, .gallery-card:focus-within { transform: none; }
 }
+.eagle-library-path {
+  overflow-wrap: anywhere;
+}

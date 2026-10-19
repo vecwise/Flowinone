@@ -16,6 +16,35 @@ class EmptyRequest(ApiInput):
     pass
 
 
+class EaglePrimaryRequest(ApiInput):
+    identity: StrictStr = Field(min_length=1, max_length=4096)
+
+
+class EagleCleanupRequest(ApiInput):
+    token: StrictStr = Field(min_length=64, max_length=64)
+
+
+class EagleLibraryStatusOutput(ApiOutput):
+    primary: dict[str, Any] | None
+    current: dict[str, Any] | None
+    state: Literal['active', 'different', 'unconfigured', 'unavailable']
+    allowed: bool
+
+
+class EagleCleanupPreviewOutput(ApiOutput):
+    library: dict[str, Any]
+    live_count: int
+    count: int
+    sample: list[dict[str, str]]
+    token: str
+
+
+class EagleCleanupOutput(ApiOutput):
+    deleted_origins: int
+    deleted_items: int
+    backup_path: str | None
+
+
 class ResourceCreateRequest(ApiInput):
     url: StrictStr = Field(min_length=1, max_length=4096)
     title: StrictStr = Field(default="", max_length=500)
