@@ -1,6 +1,6 @@
 """Presentation adapters for shared page families; source loaders keep ownership of data."""
 
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from flask import render_template, request, url_for
 
@@ -17,7 +17,7 @@ SOURCE_LABELS = {"local": "本機", "eagle": "Eagle", "chrome": "Chrome 書籤"}
 
 
 def browse_view() -> str:
-    return "list" if request.args.get("view") in {"list", "knowledge", "reader", "single", "linear"} else "grid"
+    return "list" if request.args.get("view") in {"list", "continuous", "knowledge", "reader", "single", "linear"} else "grid"
 
 
 def source_cards(data: list[dict], source: str) -> list[dict]:
@@ -51,8 +51,22 @@ def source_cards(data: list[dict], source: str) -> list[dict]:
             "thumbnail_id": item.get("id") if kind == "bookmark" else None,
             "thumbnail_status": item.get("thumbnail_status"), "sources": [],
             "thumbnail_provider": item.get("thumbnail_provider"),
+            "media_uri": source_media_uri(uri, source, kind),
+            "media_width": item.get("width") or 0, "media_height": item.get("height") or 0,
         })
     return cards
+
+
+def source_media_uri(uri, source, kind):
+    if source not in {"local", "eagle"} or kind not in {"image", "video"}:
+        return None
+    parsed = urlsplit(uri)
+    prefix = f"/EAGLE_{kind}/" if source == "eagle" else f"/{kind}/"
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith(prefix):
+        return None
+    key = unquote(parsed.path[len(prefix):].rstrip("/"))
+    return url_for("media.browse_media_content", source=source, media_kind=kind, key=key,
+                   src=parse_qs(parsed.query).get("src", ["external"])[0] if source == "local" else None)
 
 
 def render_source_browse(*, metadata: dict, data: list[dict]):

@@ -1,0 +1,5 @@
+<label class="browse-shape-control browse-names-control" for="browse-names">名稱
+  <select id="browse-names" data-gallery-names-option>
+    {% for key, label in [('auto','自動'),('show','全部顯示'),('hide','全部隱藏')] %}<option value="{{ key }}" {% if request.args.get('names', 'auto') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+</label>

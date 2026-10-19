@@ -37,9 +37,7 @@ def _build_file_route(abs_path, src):
     quoted = quote(normalized, safe="/:")
     if _is_video_file(abs_path):
         return f"/serve_video/{quoted.lstrip('/')}"
-    if src == "external":
-        return f"/serve_image/{quoted}"
-    return f"/{quoted}"
+    return f"/serve_image/{quoted.lstrip('/')}"
 
 
 def _build_image_url(rel_path, src):

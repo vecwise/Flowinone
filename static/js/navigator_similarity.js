@@ -96,7 +96,10 @@
     root.querySelector('.navigator-maintenance')?.addEventListener('toggle', (event) => {
       if (event.currentTarget.open) refreshStatus().catch(() => {});
     });
-    root.querySelectorAll('[data-catalog-similar-item]').forEach((button) => {
+    const boundButtons = new WeakSet();
+    const bindButtons = () => root.querySelectorAll('[data-catalog-similar-item]').forEach((button) => {
+      if (boundButtons.has(button)) return;
+      boundButtons.add(button);
       button.addEventListener('click', async () => {
         show();
         summary.textContent = '正在查詢…';
@@ -111,6 +114,8 @@
         }
       });
     });
+    bindButtons();
+    root.addEventListener?.('flowinone:items-added', bindButtons);
     return {refreshStatus};
   }
 

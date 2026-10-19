@@ -64,7 +64,8 @@ def test_home_exposes_guide_and_empty_guide_never_writes_or_contacts_eagle(guide
     assert client.get("/debug/").status_code == 404
     represented = {row["data-route-endpoint"] for row in page.select("[data-route-endpoint]")}
     non_pages = {"static", "media.serve_image_by_full_path", "media.serve_video_by_full_path",
-                 "resource_library.resource_asset", "catalog.catalog_video_playback"}
+                 "resource_library.resource_asset", "catalog.catalog_video_playback",
+                 "catalog.catalog_image_content", "media.browse_media_content"}
     html_endpoints = {rule.endpoint for rule in app.url_map.iter_rules()
                       if "GET" in rule.methods and not rule.rule.startswith("/api/")
                       and rule.endpoint not in non_pages}

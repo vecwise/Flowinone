@@ -1,10 +1,20 @@
 <article id="item-{{ item.id }}" class="gallery-card" {% if item.catalog_item %}data-navigator-item="{{ item.id }}"{% endif %} data-name="{{ item.title|lower }}"{% if item.thumbnail_id %} data-thumbnail-id="{{ item.thumbnail_id }}" data-thumbnail-status="{{ item.thumbnail_status }}" data-thumbnail-provider="{{ item.thumbnail_provider or '' }}"{% endif %} data-card-type="{{ item.item_type }}" data-card-source="{{ item.launch_source }}" data-media-category="{{ item.media_category or 'page' }}">
+  {% if item.media_uri %}
+  <div class="gallery-continuous-media" data-continuous-media>
+    {% if item.item_type == 'video' %}
+    <video controls preload="none" playsinline poster="{{ item.thumbnail_ref or '' }}" data-media-src="{{ item.media_uri }}" aria-label="影片播放器"{% if item.media_width and item.media_height %} style="aspect-ratio: {{ item.media_width }} / {{ item.media_height }}"{% endif %}></video>
+    {% else %}
+    <img data-media-src="{{ item.media_uri }}" alt="{{ item.title }}" loading="lazy" decoding="async" width="{{ item.media_width or 1200 }}" height="{{ item.media_height or 900 }}">
+    {% endif %}
+    <p class="gallery-media-error" hidden role="status">媒體載入失敗。<button type="button" class="action-button" data-media-retry>重試</button></p>
+  </div>
+  {% endif %}
   <a class="gallery-card-media{% if item.thumbnail_is_fallback %} is-site-fallback{% endif %}" href="{{ item.launch_uri or '#' }}" {% if item.catalog_item and not item.is_eagle_album %}data-gallery-detail-open{% endif %} {% if item.target_blank %}target="_blank" rel="noopener noreferrer"{% endif %} aria-label="{{ '開啟圖集' if item.is_eagle_album else '預覽' }} {{ item.title }}">
     {% if item.thumbnail_is_fallback %}
     <span class="gallery-fallback-mark" aria-hidden="true">{{ item.site_mark }}</span>
     <span class="gallery-fallback-copy"><strong>{{ item.site_domain or '網站' }}</strong><small>暫無預覽圖片</small></span>
     {% else %}
-    <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="640" height="420" loading="lazy" decoding="async"{% if item.thumbnail_id %} data-thumbnail-image{% endif %}>
+    <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="{{ item.media_width or 640 }}" height="{{ item.media_height or 420 }}" loading="lazy" decoding="async"{% if item.thumbnail_id %} data-thumbnail-image{% endif %}>
     {% endif %}
     <span class="gallery-type-badge">{{ '漫畫／圖集' if item.media_category == 'album' else '影片' if item.media_category == 'video' else item_type_labels.get(item.item_type, item.item_type) }}</span>
     {% if item.duration_seconds %}<span class="gallery-duration-badge">{{ item.duration_seconds|int }}s</span>{% endif %}
@@ -24,6 +34,7 @@
     <details class="gallery-card-more" name="gallery-card-more">
       <summary class="gallery-icon-button" aria-label="項目資訊與操作：{{ item.title }}" title="更多資訊與操作"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span class="sr-only">更多</span></summary>
       <div class="gallery-card-more-actions">
+        <p class="gallery-item-name">{{ item.title }}</p>
         {% if item.match_reason %}<p class="navigator-match-reason"><strong>命中：{{ item.match_reason.label }}</strong><span>{{ item.match_reason.excerpt }}</span></p>{% endif %}
         {% if item.card_description %}<p class="gallery-card-description">{{ item.card_description }}</p>{% endif %}
         {% if item.content_excerpt and not (item.match_reason and item.match_reason.field == 'content') %}<p class="navigator-content-excerpt">{{ item.content_excerpt }}</p>{% endif %}

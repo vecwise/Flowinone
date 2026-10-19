@@ -67,7 +67,7 @@
         const destination = new URL(entry.url, global.location.href);
         const current = new URL(global.location.href);
         // Enter another set with its own membership; carry only display choices.
-        ['view', 'shape'].forEach((key) => {
+        ['view', 'shape', 'names'].forEach((key) => {
           if (current.searchParams.has(key)) destination.searchParams.set(key, current.searchParams.get(key));
         });
         chip.href = destination.pathname + destination.search;
@@ -213,7 +213,10 @@
       }
     }
 
-    root.querySelectorAll('[data-gallery-detail-open]').forEach((link) => {
+    const boundLinks = new WeakSet();
+    const bindLinks = () => root.querySelectorAll('[data-gallery-detail-open]').forEach((link) => {
+      if (boundLinks.has(link)) return;
+      boundLinks.add(link);
       link.addEventListener('click', (event) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         const item = link.closest('[data-navigator-item]');
@@ -230,6 +233,8 @@
         void load(item.dataset.navigatorItem);
       });
     });
+    bindLinks();
+    root.addEventListener?.('flowinone:items-added', bindLinks);
     back.addEventListener('click', () => {
       const previous = trail.pop();
       if (previous) void load(previous);

@@ -110,7 +110,7 @@ def test_chinese_title_search_finds_one_album_before_pagination(albums, query):
     assert api.status_code == 200 and api.json["total_estimate"] == 1
 
 
-def test_album_card_opens_all_images_without_outer_filters_and_returns_to_search(albums):
+def test_album_card_opens_images_and_videos_without_outer_filters_and_returns_to_search(albums):
     _app, client, _db, _sync, catalog, _source, _folders, _items, signature, _calls = albums
     response = client.get("/navigator/", query_string={"q": TITLE, "media": "album", "source": "eagle", "tags": "nature", "sort": "title", "view": "list"})
     assert response.status_code == 200
@@ -122,7 +122,7 @@ def test_album_card_opens_all_images_without_outer_filters_and_returns_to_search
     target = card.select_one('.gallery-card-media')["href"]
     params = parse_qs(urlsplit(target).query)
     assert not {"q", "tags", "favorite", "cursor", "type"} & params.keys()
-    assert params["media"] == ["image"] and params["sort"] == ["page_order"]
+    assert "media" not in params and params["sort"] == ["page_order"]
     assert params["target"] == [f"eagle_folder:{signature}:work"]
     seen = []
     while target:
@@ -134,7 +134,7 @@ def test_album_card_opens_all_images_without_outer_filters_and_returns_to_search
         seen.extend(item.select_one('h3').get_text(strip=True) for item in page.select('[data-navigator-item]'))
         next_link = page.select_one('.gallery-pagination a')
         target = next_link["href"] if next_link else None
-    assert seen == [f"{number}.jpg" for number in range(1, 101)]
+    assert seen == [*[f"{number}.jpg" for number in range(1, 101)], "video"]
     back = client.get(page.select_one('[data-album-return]')["href"])
     assert len(BeautifulSoup(back.data, "html.parser").select('[data-card-type="album"]')) == 1
 

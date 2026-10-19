@@ -2,7 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'flowinone-gallery-view';
-  const normalizeView = (view) => ['list', 'knowledge', 'reader', 'single', 'linear'].includes(view) ? 'list' : 'grid';
+  const normalizeView = (view) => ['list', 'continuous', 'knowledge', 'reader', 'single', 'linear'].includes(view) ? 'list' : 'grid';
   const isBrowsePath = (path) => path === '/navigator/' || path.startsWith('/navigator/views/')
     || /^\/(both|folders|chrome|chrome_youtube|EAGLE_folders|EAGLE_tags|EAGLE_smart_folders|EAGLE_smart_folder|EAGLE_folder|EAGLE_tag|EAGLE_stream)\//.test(path);
 
@@ -23,10 +23,11 @@
       const url = new URL(global.location.href);
       if (normalized === 'list') url.searchParams.set('view', 'list');
       else url.searchParams.delete('view');
-      global.history.replaceState(null, '', url);
+      global.history.replaceState(global.history.state, '', url);
       const viewInput = root.querySelector('form.navigator-query input[name="view"]');
       if (viewInput) viewInput.value = normalized === 'list' ? 'list' : '';
       root.querySelectorAll('a[href]').forEach((link) => {
+        if (link.hasAttribute?.('data-ui-fixed')) return;
         const destination = new URL(link.href, global.location.href);
         if (destination.origin !== global.location.origin) return;
         if (destination.searchParams.has('return_to')) {
@@ -43,6 +44,7 @@
         else destination.searchParams.delete('view');
         link.href = destination.pathname + destination.search + destination.hash;
       });
+      if (global.CustomEvent) root.dispatchEvent(new global.CustomEvent('flowinone:view-changed'));
     };
 
     let initial = new URL(global.location.href).searchParams.get('view');
@@ -53,6 +55,7 @@
     buttons.forEach((button) => {
       button.addEventListener('click', () => setView(button.dataset.galleryViewOption));
     });
+    root.addEventListener?.('flowinone:items-added', () => setView(gallery.dataset.galleryView, false));
     return {setView};
   }
 

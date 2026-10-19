@@ -19,7 +19,7 @@ def album_source_key(library, folder_id):
 
 def album_content_uri(library, folder_id):
     return "/navigator/?" + urlencode({
-        "scope": "all", "source": "eagle", "media": "image", "sort": "page_order",
+        "scope": "all", "source": "eagle", "sort": "page_order",
         "target": f"eagle_folder:{library}:{folder_id}",
     })
 

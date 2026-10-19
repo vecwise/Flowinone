@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
   const tools = document.querySelector('[data-thumbnail-tools]');
   if (!tools) return;
-  const cards = Array.from(document.querySelectorAll('[data-thumbnail-id]'));
-  const pageIds = [...new Set(cards.map(card => card.dataset.thumbnailId))];
+  let cards = Array.from(document.querySelectorAll('[data-thumbnail-id]'));
+  let pageIds = [...new Set(cards.map(card => card.dataset.thumbnailId))];
   const scope = tools.querySelector('[data-thumbnail-scope]');
   const batchButton = tools.querySelector('[data-thumbnail-batch]');
   const runRegion = tools.querySelector('[data-thumbnail-run]');
@@ -13,6 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultList = tools.querySelector('[data-thumbnail-result-list]');
   const busy = new Set(['queued', 'fetching']);
   const autoPending = new Set(cards.filter(card => busy.has(card.dataset.thumbnailStatus)).map(card => card.dataset.thumbnailId));
+  document.addEventListener('flowinone:items-added', () => {
+    cards = Array.from(document.querySelectorAll('[data-thumbnail-id]'));
+    pageIds = [...new Set(cards.map(card => card.dataset.thumbnailId))];
+    cards.filter(card => busy.has(card.dataset.thumbnailStatus)).forEach(card => autoPending.add(card.dataset.thumbnailId));
+    render();
+    if (autoPending.size) schedule();
+  });
   const storageKey = 'flowinone.thumbnail-retry.v1';
   let run = null;
   let submitting = false;

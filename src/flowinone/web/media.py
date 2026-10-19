@@ -7,7 +7,7 @@ import platform
 from pathlib import Path
 from urllib.parse import unquote
 
-from flask import Blueprint, abort, current_app, request, send_file
+from flask import Blueprint, abort, current_app, redirect, request, send_file
 
 from src.flowinone import config
 from src.file_handler.paths import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
@@ -19,6 +19,9 @@ from src.file_handler import (
     MediaNotFound,
     get_image_details,
     get_video_details,
+    get_eagle_image_details,
+    get_eagle_video_details,
+    ExternalServiceError,
 )
 
 from .ui import render_media_detail
@@ -34,6 +37,29 @@ from .common import (
 
 
 bp = Blueprint("media", __name__)
+
+
+@bp.get("/browse-media/<source>/<media_kind>/<path:key>")
+def browse_media_content(source: str, media_kind: str, key: str):
+    """Direct-source browsing uses the same contained media loaders as details."""
+    if source not in {"local", "eagle"} or media_kind not in {"image", "video"}:
+        abort(404)
+    try:
+        if source == "eagle":
+            from .common import get_feature_flags
+            if not get_feature_flags().get("eagle"):
+                abort(404)
+            loader = get_eagle_video_details if media_kind == "video" else get_eagle_image_details
+            _, detail = loader(key)
+        else:
+            selected = request.args.get("src", "external")
+            if selected not in {"internal", "external"}:
+                abort(404)
+            loader = get_video_details if media_kind == "video" else get_image_details
+            _, detail = loader(key, selected)
+    except (AccessDenied, FolderNotFound, MediaNotFound, ExternalServiceError):
+        abort(404)
+    return redirect(detail.source_url)
 
 
 def _allowed_media_roots() -> list[Path]:

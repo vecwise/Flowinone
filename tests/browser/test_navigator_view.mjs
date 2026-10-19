@@ -50,7 +50,7 @@ test('an unknown saved mode falls back to the grid', () => {
 });
 
 test('legacy modes migrate without loading a different page or losing the query', () => {
-  for (const mode of ['knowledge', 'reader', 'single', 'linear', 'shelf']) {
+  for (const mode of ['continuous', 'list', 'knowledge', 'reader', 'single', 'linear', 'shelf']) {
     const oldUrl = `http://localhost/navigator/?scope=gallery&source=bookmarks&tags=ML&view=${mode}#item-example`;
     const result = harness(null, {href: oldUrl});
     const url = new URL(result.location.href);

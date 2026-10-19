@@ -7,7 +7,10 @@ from urllib.parse import parse_qs, urlsplit
 
 from flask import abort, current_app, redirect, request, url_for
 
-from src.file_handler import AccessDenied, ExternalServiceError, MediaNotFound, get_eagle_video_details, get_video_details
+from src.file_handler import (
+    AccessDenied, ExternalServiceError, FolderNotFound, MediaNotFound,
+    get_eagle_image_details, get_eagle_video_details, get_image_details, get_video_details,
+)
 
 from src.flowinone.resource_library.canonical import hash_text
 from src.flowinone.resource_library.jobs import JobQueue
@@ -112,6 +115,16 @@ def api_item(item_id: str):
 @bp.get("/catalog/items/<item_id>/video")
 def catalog_video_playback(item_id: str):
     """Resolve one Catalog video to its source-owned, range-capable stream."""
+    return _catalog_media_content(item_id, "video")
+
+
+@bp.get("/catalog/items/<item_id>/image")
+def catalog_image_content(item_id: str):
+    """Resolve original images on demand, without source calls for every card."""
+    return _catalog_media_content(item_id, "image")
+
+
+def _catalog_media_content(item_id: str, kind: str):
     source = request.args.get("source")
     if source not in {"local", "eagle"}:
         abort(404)
@@ -120,24 +133,26 @@ def catalog_video_playback(item_id: str):
         item = service.get(item_id)
     except LookupError:
         abort(404)
-    if item["item_type"] != "video":
+    if item["item_type"] != kind:
         abort(404)
     origin = service.get_origin(item_id, source)
     if not origin:
         abort(404)
     try:
         if source == "eagle":
-            _, detail = get_eagle_video_details(origin["source_key"])
+            loader = get_eagle_video_details if kind == "video" else get_eagle_image_details
+            _, detail = loader(origin["source_key"])
         else:
             path = origin.get("source_path") or ""
             selected = parse_qs(urlsplit(origin.get("detail_uri") or "").query).get("src", ["external"])[0]
             if selected not in {"internal", "external"}:
                 abort(404)
+            loader = get_video_details if kind == "video" else get_image_details
             try:
-                _, detail = get_video_details(path, selected)
+                _, detail = loader(path, selected)
             except MediaNotFound:
-                _, detail = get_video_details(path, "external" if selected == "internal" else "internal")
-    except (AccessDenied, MediaNotFound, ExternalServiceError):
+                _, detail = loader(path, "external" if selected == "internal" else "internal")
+    except (AccessDenied, FolderNotFound, MediaNotFound, ExternalServiceError):
         abort(404)
     return redirect(detail.source_url)
 

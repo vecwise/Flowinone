@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit, urlencode
+from urllib.parse import quote, urlsplit, urlencode
 
 from flask import has_request_context, request
 
@@ -72,6 +72,10 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
         item["original_uri"] = chosen.get("original_url") if source in {"bookmarks", "resources"} else None
         item["resource_detail_uri"] = (available.get("resources") or {}).get("detail_uri")
         item["thumbnail_ref"] = metadata.get("thumbnail_ref") or item.get("thumbnail_ref")
+        if item.get("item_type") in {"image", "video"} and source in {"local", "eagle"}:
+            item["media_uri"] = f"/catalog/items/{quote(item['id'], safe='')}/{item['item_type']}?{urlencode({'source': source})}"
+        item["media_width"] = metadata.get("width") or 0
+        item["media_height"] = metadata.get("height") or 0
         item["thumbnail_is_fallback"] = source == "bookmarks" and not item["thumbnail_ref"]
         thumbnail_id = None
         if source == "bookmarks" and item["thumbnail_ref"]:
@@ -92,9 +96,9 @@ def visible_items(service: CatalogService, payload: dict, query: CatalogQuery) -
             item["image_count"] = int(metadata.get("image_count") or 0)
             pairs = [("scope", "all"), *(("source", value) for value in query.sources),
                      ("target", f"eagle_folder:{metadata['library_signature']}:{metadata['folder_id']}"),
-                     ("media", "image"), ("sort", "page_order")]
+                     ("sort", "page_order")]
             if has_request_context():
-                pairs.extend((key, request.args[key]) for key in ("view", "shape") if request.args.get(key))
+                pairs.extend((key, request.args[key]) for key in ("view", "shape", "names") if request.args.get(key))
                 if request.path.rstrip("/") == "/navigator":
                     outer = [(key, value) for key, value in request.args.items(multi=True) if key not in {"return_to", "resume_scroll"}]
                     return_to = request.path + ("?" + urlencode(outer) if outer else "") + f"#item-{item['id']}"

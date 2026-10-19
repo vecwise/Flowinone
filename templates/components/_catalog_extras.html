@@ -117,7 +117,9 @@
   );
   if (meaningfulQuery) saveSession({query, scroll_position: Number(restoredScroll || 0)});
 
-  document.querySelectorAll('[data-navigator-item] a').forEach((link) => link.addEventListener('click', () => {
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('[data-navigator-item] a');
+    if (!link) return;
     sessionStorage.setItem(stateKey, String(window.scrollY));
     const item = link.closest('[data-navigator-item]');
     if (!item) return;
@@ -125,9 +127,11 @@
     sessionStorage.setItem(focusKey, focusedItemId);
     saveSession({query, focused_item_id: item.dataset.navigatorItem, scroll_position: window.scrollY});
     navigator.sendBeacon?.(`/api/catalog/items/${item.dataset.navigatorItem}/events`, new Blob([JSON.stringify({event_type: link.hasAttribute('data-gallery-detail-open') ? 'view' : 'open'})], {type: 'application/json'}));
-  }));
+  });
 
-  document.querySelectorAll('.navigator-favorite').forEach((button) => button.addEventListener('click', async () => {
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('.navigator-favorite');
+    if (!button || button.disabled) return;
     const item = button.closest('[data-navigator-item]');
     const enabled = button.dataset.favorite === '1';
     const status = document.getElementById('navigator-action-status');
@@ -148,7 +152,7 @@
     } finally {
       button.disabled = false;
     }
-  }));
+  });
 
   let scrollTimer;
   window.addEventListener('scroll', () => {

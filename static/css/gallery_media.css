@@ -1,0 +1,46 @@
+/* Image-led gallery and continuous reading, shared by all desktop appearances. */
+html[data-ui] .browse-page .gallery-card,
+html[data-ui] .browse-page .gallery-card:hover,
+html[data-ui] .browse-page .gallery-card:focus-within {
+    border: 0; border-radius: 0; background: transparent; box-shadow: none; transform: none;
+}
+html[data-ui] .browse-page .gallery-card-media { border-radius: 0; background: transparent; overflow: hidden; }
+html[data-ui] .browse-page .gallery-card-media img { transform: none; }
+html[data-ui] .browse-page .gallery-card-body { padding: 6px 0 0; gap: 3px; }
+html[data-ui] .browse-page .gallery-card h3 { min-height: 0; margin: 0; font-size: .88rem; font-weight: 500; line-height: 1.45; }
+.browse-page .gallery-card-source { display: none; }
+.browse-page .gallery-album-count { margin: 0; color: var(--fo-muted-text); font-size: .75rem; }
+.browse-page .gallery-item-name { margin: 0 0 8px; overflow-wrap: anywhere; font-size: .85rem; }
+.browse-page .gallery-card-actions { opacity: 0; transition: opacity 120ms ease; }
+.browse-page .gallery-card:is(:hover, :focus-within) .gallery-card-actions { opacity: 1; }
+.browse-page .gallery-card[data-media-category="image"] .gallery-type-badge { display: none; }
+.browse-page .gallery-grid[data-gallery-names="auto"] .gallery-card[data-card-type="image"] .gallery-card-body,
+.browse-page .gallery-grid[data-gallery-names="hide"] .gallery-card-body { display: none; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"] { gap: 8px; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"].is-masonry-ready { grid-auto-rows: 4px; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"] .gallery-card { align-self: start; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"][data-gallery-shape="auto"] .gallery-card[data-media-category="image"] .gallery-card-media { aspect-ratio: auto; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"][data-gallery-shape="auto"] .gallery-card[data-media-category="image"] .gallery-card-media img { width: 100%; height: auto; max-height: none; display: block; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"][data-gallery-shape="auto"] .gallery-card[data-media-category="video"] .gallery-card-media { aspect-ratio: 16 / 9; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="grid"][data-gallery-shape="auto"] .gallery-card[data-media-category="album"] .gallery-card-media { aspect-ratio: 3 / 4; }
+.gallery-continuous-media { display: none; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] {
+    display: flex; flex-direction: column; gap: 8px; width: min(100%, 900px); margin-inline: auto;
+}
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-card { display: block; width: 100%; padding: 0; margin: 0; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-card-body,
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-card-actions,
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-type-badge,
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-duration-badge,
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-card:has([data-continuous-media]) > .gallery-card-media { display: none; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] .gallery-continuous-media { display: block; width: 100%; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] :is(.gallery-card-media, .gallery-continuous-media) { min-height: 0; aspect-ratio: auto; }
+html[data-ui] .browse-page .gallery-grid[data-gallery-view="list"] :is(img, video) {
+    display: block; width: 100%; height: auto; max-height: none; object-fit: contain; border: 0; border-radius: 0; margin: 0;
+}
+.gallery-continuous-media video { background: #111; aspect-ratio: 16 / 9; }
+.gallery-media-error { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 180px; color: var(--fo-muted-text); }
+.browse-results:has([data-gallery-view="list"]) :is(.browse-names-control, .browse-shape-control, .browse-media-hint) { display: none; }
+.gallery-pagination [data-browse-load-status] { color: var(--fo-muted-text); font-size: .85rem; }
+.gallery-pagination [aria-disabled="true"] { pointer-events: none; opacity: .6; }
+@media (prefers-reduced-motion: reduce) { .browse-page .gallery-card-actions { transition: none; } }

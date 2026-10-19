@@ -132,6 +132,8 @@ def _navigator_url(query: CatalogQuery, *, cursor: str | None = None) -> str:
         pairs.append(("view", "list"))
     if request.args.get("shape") in {"landscape", "portrait", "square"}:
         pairs.append(("shape", request.args["shape"]))
+    if request.args.get("names") in {"auto", "show", "hide"}:
+        pairs.append(("names", request.args["names"]))
     context = getattr(g, "navigator_context", None)
     if context and apply_source_preference(CatalogQuery.create(**context["query"])).signature() == query.signature():
         pairs.append(("context", context["id"]))

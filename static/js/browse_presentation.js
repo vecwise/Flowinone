@@ -26,8 +26,8 @@
         const scope = grid.dataset.mediaScope;
         hint.textContent = shape === 'auto'
           ? scope === 'video' ? '影片 16:9'
-            : ['image', 'album'].includes(scope) ? '直式 3:4'
-              : '混合 4:3'
+            : scope === 'image' ? '圖片原比例' : scope === 'album' ? '直式 3:4'
+              : '圖片原比例 · 影片 16:9 · 圖集 3:4'
           : '不影響篩選';
       }
       root.querySelectorAll('a[href]').forEach((link) => {
@@ -44,9 +44,11 @@
         } else return;
         link.href = target.pathname + target.search + target.hash;
       });
+      if (global.CustomEvent) root.dispatchEvent(new global.CustomEvent('flowinone:shape-changed'));
     };
     setShape(new URL(global.location.href).searchParams.get('shape') || 'auto');
     select.addEventListener('change', () => setShape(select.value));
+    root.addEventListener?.('flowinone:items-added', () => setShape(select.value));
     root.querySelectorAll('[data-media-filter]').forEach((radio) => {
       radio.addEventListener('change', () => {
         const type = root.querySelector('#navigator-type');

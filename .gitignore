@@ -15,6 +15,7 @@ docs/*
 !docs/renderer-architecture.md
 !docs/hands-on.md
 !docs/ui-lab.md
+!docs/gallery-reading.md
 
 # Machine-local Flowinone extensions. Never include these in source or builds.
 .flowinone_local/
