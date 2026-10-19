@@ -13,7 +13,7 @@ from src.file_handler.eagle_integration import is_eagle_available
 from src.flowinone.config import CHROME_BOOKMARK_PATH
 
 from src.flowinone.web.ui import browse_view, render_catalog_browse
-from src.flowinone.web.browse_sources import apply_source_preference, source_preference
+from src.flowinone.web.browse_sources import SOURCE_OPTIONS, apply_source_preference, source_preference
 
 from . import api as _api  # Register JSON routes on the shared Blueprint.
 from .browse import CatalogService
@@ -137,6 +137,42 @@ def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
     return apply_source_preference(CatalogQuery.create(**values))
 
 
+def _gallery_home(query: CatalogQuery) -> bool:
+    return not any((query.q, query.item_type, query.media, query.folder, query.tags,
+                    query.favorite, query.unviewed, query.duration_min is not None,
+                    query.duration_max is not None, query.added_from, query.added_to,
+                    query.cursor, query.sort != "recently_added"))
+
+
+def _gallery_filter_chips(query: CatalogQuery) -> list[dict]:
+    chips = []
+
+    def add(label, **changes):
+        chips.append({"label": label, "url": _quick_filter_url(query, **changes)})
+
+    if query.q:
+        add(f"搜尋：{query.q}", q="")
+    for tag in query.tags:
+        add(tag, tags=tuple(value for value in query.tags if value != tag))
+    if query.media:
+        add(MEDIA_LABELS[query.media], media="")
+    if query.item_type:
+        add(ITEM_TYPE_LABELS.get(query.item_type, query.item_type), type="", item_type="")
+    if query.folder:
+        add(f"資料夾：{query.folder}", folder="")
+    if query.favorite:
+        add("只看最愛", favorite=False)
+    if query.unviewed:
+        add("尚未瀏覽", unviewed=False)
+    if query.duration_min is not None or query.duration_max is not None:
+        minimum = query.duration_min if query.duration_min is not None else 0
+        maximum = query.duration_max if query.duration_max is not None else "不限"
+        add(f"長度：{minimum}–{maximum} 秒", duration_min=None, duration_max=None)
+    if query.added_from or query.added_to:
+        add(f"加入日期：{query.added_from or '不限'}–{query.added_to or '不限'}", added_from="", added_to="")
+    return chips
+
+
 def _navigator_topics(
     service: CatalogService, query: CatalogQuery, facets: dict, *, active_sources: tuple[str, ...],
 ) -> list[dict]:
@@ -145,7 +181,7 @@ def _navigator_topics(
     candidates = [tag for tag in facets["tags"] if tag["count"] < item_count * 0.9]
     # A small library may have only one tag shared by every item.
     candidates = candidates or facets["tags"]
-    show_previews = not query.tags and not query.cursor
+    show_previews = _gallery_home(query)
     topics = []
     for tag in candidates[:6]:
         preview = show_previews and len(topics) < 3
@@ -304,7 +340,10 @@ def navigator_page():
     if query.sort == "random" and not query.seed:
         values = query.public_dict()
         values["seed"] = secrets.randbelow(2_147_483_646) + 1
-        return redirect(_navigator_url(CatalogQuery.create(**values)))
+        target = _navigator_url(CatalogQuery.create(**values))
+        if request.args.get("resume_scroll") == "0":
+            target += "&resume_scroll=0"
+        return redirect(target)
 
     eagle_available = is_eagle_available() if "eagle" in query.sources else True
     active_sources = tuple(source for source in query.sources if source != "eagle" or eagle_available)
@@ -367,14 +406,29 @@ def navigator_page():
             CatalogQuery.create(**{**query.public_dict(), "cursor": ""})
         )
     )
+    filter_chips = _gallery_filter_chips(query)
+    gallery_heading = (
+        active_context["label"] if active_context else
+        "、".join(query.tags) if query.tags else
+        f"「{query.q}」的搜尋結果" if query.q else
+        query.folder.rsplit(" / ", 1)[-1] if query.folder else
+        f"{MEDIA_LABELS[query.media]}收藏" if query.media else "全部收藏"
+    )
+    source_summary = "全部來源" if set(query.sources) == set(CATALOG_SOURCES) else "＋".join(
+        label for key, label in SOURCE_OPTIONS if key in query.sources
+    )
     show_context = bool(
         active_context or query.q or query.item_type or query.media or query.folder or query.tags
         or query.favorite or query.unviewed or query.duration_min is not None
         or query.duration_max is not None or query.added_from or query.added_to
-        or query.sort != "recently_added"
     )
     return render_catalog_browse(
-        title="我的收藏 · Flowinone",
+        title=f"{gallery_heading} · Flowinone",
+        gallery_heading=gallery_heading,
+        gallery_home=_gallery_home(query),
+        filter_chips=filter_chips,
+        filter_count=len(filter_chips) + int(set(query.sources) != set(CATALOG_SOURCES)),
+        source_summary=source_summary,
         current_context={
             "label": active_context["label"] if active_context else "目前條件",
             "named": bool(active_context),
@@ -395,6 +449,10 @@ def navigator_page():
         reset_url=_navigator_url(reset_query),
         random_url=_navigator_url(CatalogQuery.create(**random_values)),
         all_sources_url=_navigator_url(_with_scope(query, "all")),
+        sort_fields=[(key, value) for key, value in _navigator_query_pairs(query)
+                     if key not in {"sort", "cursor"}]
+                    + ([("view", "list")] if view == "list" else [])
+                    + ([("shape", request.args["shape"])] if request.args.get("shape") else []),
         recent_sessions=_navigator_recent_sessions(service),
         saved_searches=_navigator_saved_searches(service),
         quick_filter_urls={

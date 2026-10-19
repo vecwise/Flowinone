@@ -13,6 +13,7 @@
     {% block custom_style %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ui_pages.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ui_variants.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/catalog_compact.css') }}">
 
 </head>
 
@@ -20,10 +21,9 @@
     <a class="skip-link" href="#main-content">跳到主要內容</a>
     <header class="app-header">
       {% include '_navbar.html' %}
-      {% include 'components/_browse_sources.html' %}
     </header>
-    {% include 'components/_ui_switcher.html' %}
     {% block page_content %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/compact_menus.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui_switcher.js') }}"></script>
     <script src="{{ url_for('static', filename='js/browse_sources.js') }}"></script>
 </body>

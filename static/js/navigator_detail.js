@@ -190,10 +190,13 @@
         if (!item) return;
         event.preventDefault();
         returnFocus = link;
+        const pageScroll = global.scrollY;
         trail.length = 0;
         if (typeof dialog.showModal === 'function') dialog.showModal();
         else dialog.setAttribute('open', '');
-        close.focus();
+        close.focus({preventScroll: true});
+        // Opening/focusing a native dialog can move the document behind it.
+        if (global.scrollY !== pageScroll) global.scrollTo?.({top: pageScroll, behavior: 'instant'});
         void load(item.dataset.navigatorItem);
       });
     });
@@ -205,7 +208,7 @@
       if (typeof dialog.close === 'function') dialog.close();
       else {
         dialog.removeAttribute('open');
-        returnFocus?.focus();
+        returnFocus?.focus({preventScroll: true});
       }
     });
     dialog.addEventListener('close', () => {
@@ -213,7 +216,7 @@
       activeId = null;
       video.pause?.();
       video.removeAttribute('src');
-      returnFocus?.focus();
+      returnFocus?.focus({preventScroll: true});
     });
     const postOpen = () => {
       if (!activeId) return;

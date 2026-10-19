@@ -61,7 +61,6 @@
         <button class="action-button" type="button" data-gallery-detail-back hidden>返回上個項目</button>
         <span class="eyebrow">收藏預覽</span>
       </div>
-      {% with picker_id='ui-choice-preview', picker_label='預覽介面' %}{% include 'components/_ui_picker.html' %}{% endwith %}
       <button class="navigator-dialog-close" type="button" data-gallery-detail-close aria-label="關閉詳情">關閉</button>
     </header>
     <span class="sr-only" data-ui-status role="status"></span>
@@ -86,6 +85,12 @@
     sessionStorage.removeItem(focusKey);
   }
   const restoredScroll = page.dataset.resumeScroll !== '' ? page.dataset.resumeScroll : saved;
+  // A resume position is a one-time navigation instruction, not part of the return URL.
+  if (new URL(location.href).searchParams.has('resume_scroll')) {
+    const cleanUrl = new URL(location.href);
+    cleanUrl.searchParams.delete('resume_scroll');
+    history.replaceState(history.state, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+  }
   if (target) requestAnimationFrame(() => target.scrollIntoView({block: 'center'}));
   else if (restoredScroll) requestAnimationFrame(() => window.scrollTo({top: Number(restoredScroll), behavior: 'instant'}));
   let browseSession = sessionStorage.getItem(sessionKey);
@@ -156,6 +161,7 @@
 
 })();
 </script>
+<script src="{{ url_for('static', filename='js/navigator_controls.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_commands.js') }}"></script>
 <script src="{{ url_for('static', filename='js/current_context.js') }}"></script>
 <script src="{{ url_for('static', filename='js/navigator_view.js') }}"></script>

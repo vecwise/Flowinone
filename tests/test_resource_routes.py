@@ -120,8 +120,8 @@ def test_named_view_is_shareable_and_visible_in_resource_detail(resource_app):
     page = BeautifulSoup(client.get(entry.headers["Location"]).data, "html.parser")
     context = page.select_one(".current-context")
     assert "我的研究視角" in context.get_text()
-    assert f"/navigator/views/{saved['id']}/" in context.select_one('[data-context-share-url]')["value"]
-    navigator_clear = context.find("a", string="清除條件")["href"]
+    assert f"/navigator/views/{saved['id']}/" in page.select_one('.catalog-share-context [data-context-share-url]')["value"]
+    navigator_clear = context.find("a", string="清除篩選")["href"]
     assert BeautifulSoup(client.get(navigator_clear).data, "html.parser").select_one(".current-context") is None
     resource_link = page.select_one(".gallery-card-media")["href"]
     assert resource_link.startswith(created["detail_url"] + "?return_to=")

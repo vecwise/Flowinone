@@ -1,5 +1,6 @@
 <div class="detail-shell ui-detail-layout" {% if preview %}data-gallery-detail-content hidden{% endif %}>
   <section class="reader-surface ui-detail-main" data-detail-kind="{{ detail.kind or 'preview' }}">
+    {% if preview or detail.kind != 'resource' %}
     <div class="media-stage">
       {% if preview or detail.kind != 'video' %}<img {% if preview %}data-gallery-detail-image{% endif %} src="{{ detail.source_url or detail.thumbnail_url or url_for('static', filename='default_thumbnail.svg') }}" alt="{{ detail.title or '' }}" {% if detail.kind == 'resource' %}width="640" height="360"{% endif %}>{% endif %}
       {% if preview or detail.kind == 'video' %}
@@ -8,13 +9,14 @@
       </video>
       {% endif %}
     </div>
+    {% endif %}
     {% if preview %}
     <p class="navigator-detail-source" data-gallery-detail-source></p>
     <a class="navigator-detail-folder" data-gallery-detail-folder hidden href="#"></a>
     <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
     {% endif %}
-    <p class="navigator-detail-description" {% if preview %}data-gallery-detail-description{% endif %}>{{ detail.description or '目前沒有額外說明。' }}</p>
-    <div class="gallery-tags" {% if preview %}data-gallery-detail-tags{% endif %} aria-label="標籤">{% for tag in detail.tags or [] %}<span>{{ tag }}</span>{% endfor %}</div>
+    {% if preview or detail.kind != 'resource' %}<p class="navigator-detail-description" {% if preview %}data-gallery-detail-description{% endif %}>{{ detail.description or '目前沒有額外說明。' }}</p>{% endif %}
+    <div class="gallery-tags" {% if preview %}data-gallery-detail-tags{% endif %} aria-label="標籤">{% for tag in detail.tags or [] %}<a href="{{ url_for('catalog.navigator_page', scope='all', tags=tag) }}">{{ tag }}</a>{% endfor %}</div>
     <div class="action-row navigator-detail-actions">
       {% if preview %}
       <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>
@@ -28,9 +30,10 @@
       {% if detail.kind == 'resource' %}
       <section class="resource-surface"><h2>摘要</h2><p>{{ resource.summary_short or resource.description or '目前沒有摘要，可開啟原文閱讀。' }}</p>{% if resource.why_this_matters %}<h3>內容重點</h3><p>{{ resource.why_this_matters }}</p>{% endif %}</section>
       <section class="resource-surface"><h2>全文</h2>{% if resource.extracted_text %}<pre class="resource-reader">{{ resource.extracted_text }}</pre>{% else %}<p>目前沒有全文，可開啟原文閱讀。</p>{% endif %}</section>
+      {% if detail.thumbnail_url %}<details class="resource-preview-cover"><summary>預覽圖</summary><img src="{{ detail.thumbnail_url }}" alt="{{ detail.title }}" loading="lazy"></details>{% endif %}
       {% else %}
       <div class="detail-meta-strip">{% for label in [metadata.ext, media.size_display, media.modified_time] %}{% if label %}<span class="meta-chip">{{ label }}</span>{% endif %}{% endfor %}</div>
-      {% include 'components/_metadata_panel.html' %}
+      <details class="detail-metadata"><summary>檔案資訊</summary>{% include 'components/_metadata_panel.html' %}</details>
       {% endif %}
     {% endif %}
   </section>

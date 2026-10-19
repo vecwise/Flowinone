@@ -33,7 +33,14 @@
   try {
     const focused = sessionStorage.getItem('flowinone-source-focus');
     sessionStorage.removeItem('flowinone-source-focus');
-    inputs.find((input) => input.value === focused)?.focus({preventScroll: true});
+    const target = inputs.find((input) => input.value === focused);
+    // Source controls now live in folded panels. Reopen them before restoring focus.
+    let panel = target?.closest?.('details');
+    while (panel) {
+      panel.open = true;
+      panel = panel.parentElement?.closest('details');
+    }
+    target?.focus({preventScroll: true});
   } catch (_) { /* Native controls still work without storage. */ }
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) window.location.reload();

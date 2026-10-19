@@ -6,10 +6,21 @@
   <div class="nav-links">
     <a class="{{ 'is-active' if not managing and not testing_routes and not testing_ui else '' }}" href="{{ url_for('catalog.navigator_page', scope='all') }}" {% if not managing and not testing_routes and not testing_ui %}aria-current="page"{% endif %}>我的收藏</a>
     <a class="{{ 'is-active' if managing else '' }}" href="{{ url_for('local.content_library') }}" {% if managing %}aria-current="page"{% endif %}>管理收藏</a>
-    <a class="{{ 'is-active' if testing_routes else '' }}" href="{{ url_for('local.route_guide') }}" {% if testing_routes %}aria-current="page"{% endif %}>頁面測試</a>
-    <a class="{{ 'is-active' if testing_ui else '' }}" href="{{ url_for('local.ui_lab', return_to=lab_return_url if testing_ui else request.full_path.rstrip('?')) }}" data-ui-lab-entry {% if testing_ui %}aria-current="page"{% endif %}>UI Lab</a>
   </div>
   {% if request.endpoint != 'catalog.navigator_page' %}
   <form class="search-container" action="{{ url_for('catalog.navigator_page') }}" method="get" role="search"><label class="sr-only" for="globalSearch">搜尋所選來源的收藏</label><input id="globalSearch" type="search" placeholder="搜尋所選來源" name="q"><input type="hidden" name="scope" value="all">{% for source in browse_selected_sources %}<input type="hidden" name="source" value="{{ source }}">{% endfor %}<button type="submit">搜尋</button></form>
   {% endif %}
+  <details class="app-settings compact-menu">
+    <summary>設定</summary>
+    <div class="compact-menu-panel">
+      <h2>外觀</h2>
+      {% include 'components/_ui_switcher.html' %}
+      {% if request.endpoint != 'catalog.navigator_page' %}
+      <h2>瀏覽來源</h2>{% include 'components/_browse_sources.html' %}
+      {% endif %}
+      <h2>開發工具</h2>
+      <a href="{{ url_for('local.route_guide') }}" {% if testing_routes %}aria-current="page"{% endif %}>頁面測試</a>
+      <a href="{{ url_for('local.ui_lab', return_to=lab_return_url if testing_ui else request.full_path.rstrip('?')) }}" data-ui-lab-entry {% if testing_ui %}aria-current="page"{% endif %}>UI Lab</a>
+    </div>
+  </details>
 </nav>

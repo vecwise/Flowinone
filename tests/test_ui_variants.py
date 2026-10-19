@@ -39,7 +39,8 @@ def test_every_variant_renders_all_three_families_and_version_comparison(ui_app,
         assert f"ui={variant}" in page.select_one('.nav-links a')["href"]
         assert page.select_one('script[src="/static/js/ui_switcher.js"]')
         if family == "browse":
-            assert page.select_one('[data-gallery-detail] [data-ui-select]')
+            assert page.select_one('[data-gallery-detail] [data-ui-select]') is None
+            assert page.select_one('.app-settings [data-ui-select]')
 
 
 def test_lab_has_nine_fair_comparison_links_and_preserves_original_page(ui_app):
@@ -66,7 +67,7 @@ def test_lab_has_nine_fair_comparison_links_and_preserves_original_page(ui_app):
         assert parse_qs(destination.query)["tags"] == ["設計", "UX"]
         assert parse_qs(destination.query)["seed"] == ["123"]
     home = BeautifulSoup(client.get("/", follow_redirects=True).data, "html.parser")
-    assert home.select_one('.nav-links a[data-ui-lab-entry]')
+    assert home.select_one('.app-settings a[data-ui-lab-entry]')
     empty_client = ui_app.test_client()
     for unsafe in ("//evil.example/", "https://evil.example/", "/api/catalog/items", "/serve_image/a.jpg"):
         rejected = BeautifulSoup(empty_client.get("/ui-lab/", query_string={"return_to": unsafe}).data, "html.parser")

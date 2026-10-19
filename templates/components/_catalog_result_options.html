@@ -1,0 +1,22 @@
+<details class="compact-menu catalog-result-options">
+  <summary aria-label="結果顯示與更多操作">⋯</summary>
+  <div class="compact-menu-panel">
+    {% include 'components/_thumbnail_tools.html' %}
+    <label class="browse-shape-control" for="browse-shape">縮圖比例
+      <select id="browse-shape" data-gallery-shape-option>
+        {% for key, label in [('auto','依內容'),('landscape','橫式 16:9'),('portrait','直式 3:4'),('square','方形 1:1')] %}<option value="{{ key }}" {% if request.args.get('shape', 'auto') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <span class="browse-media-hint" data-gallery-shape-hint role="status"></span>
+    <button class="action-button" type="button" data-save-search-open>儲存為常用條件</button>
+    <button class="action-button" type="button" data-command-palette-open>快速開啟 ⌘ K</button>
+    <div class="catalog-share-context">
+      <div class="current-context-controls">
+        <label class="current-context-share"><span class="sr-only">目前條件的連結</span><input data-context-share-url value="{{ current_context.share_url if current_context else request.url }}" readonly></label>
+        <button class="action-button" type="button" data-copy-context>複製連結</button>
+        {% if current_context %}<a href="{{ reset_url }}">清除條件</a>{% endif %}
+      </div>
+      <span data-context-copy-status role="status"></span>
+    </div>
+  </div>
+</details>

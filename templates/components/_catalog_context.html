@@ -1,0 +1,8 @@
+{% if current_context %}
+<div class="current-context catalog-context" aria-label="目前瀏覽條件">
+  <strong class="sr-only">{{ current_context.label }}</strong>
+  {% for chip in filter_chips %}<a class="catalog-filter-chip" href="{{ chip.url }}" aria-label="移除條件：{{ chip.label }}">{{ chip.label }} <span aria-hidden="true">×</span></a>{% endfor %}
+  <a class="catalog-clear" href="{{ reset_url }}">清除篩選</a>
+  <span class="sr-only" data-context-copy-status role="status"></span>
+</div>
+{% endif %}

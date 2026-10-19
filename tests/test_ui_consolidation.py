@@ -141,7 +141,9 @@ def test_version_comparison_belongs_to_detail_and_duplicate_review_to_management
     assert versions.select_one('[data-page-family="detail"].resource-versions-page')
     assert versions.select_one('#version-from')
     assert versions.select_one('.nav-links a[aria-current="page"]')["href"] == "/navigator/?scope=all"
-    assert versions.select_one('nav[aria-label="資源詳情檢視"] a[aria-current="page"]').get_text() == "版本差異"
+    assert versions.select_one('nav[aria-label="資源詳情檢視"]') is None
+    assert versions.select_one('h1').get_text() == "內容版本與差異"
+    assert detail.select_one('#resource-management a[href$="versions/"]')
     assert versions.select_one('.ui-detail-main') is None
     duplicates = BeautifulSoup(ui_client.get("/catalog/duplicate-review/").data, "html.parser")
     assert duplicates.select_one('[data-page-family="manage"][data-duplicate-review]')
@@ -156,7 +158,9 @@ def test_navigation_exposes_all_enabled_source_views(ui_client, monkeypatch):
         "eagle": True, "chrome": True, "youtube": True, "db": True,
     })
     page = BeautifulSoup(ui_client.get("/library/").data, "html.parser")
-    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏", "頁面測試", "UI Lab"]
+    assert [link.get_text(strip=True) for link in page.select('.nav-links a')] == ["我的收藏", "管理收藏"]
+    assert page.select_one('.app-settings a[href="/route-guide/"]')
+    assert page.select_one('.app-settings a[data-ui-lab-entry]')
     assert page.select_one('.nav-links a[aria-current="page"]')["href"] == "/library/"
     expected = {"/folders/", "/chrome/", "/chrome_youtube/", "/EAGLE_folders/", "/EAGLE_tags/",
                 "/EAGLE_smart_folders/", "/EAGLE_stream/", "/resources/", "/item_db", "/catalog/duplicate-review/"}

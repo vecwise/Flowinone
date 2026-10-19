@@ -69,11 +69,12 @@ def test_collection_form_keeps_legacy_filters_in_collapsed_controls(client):
     assert form.select_one('input[name="source"][type="hidden"]')["value"] == "local"
     assert soup.select_one('#global-source-form input[name="source"][checked]')["value"] == "local"
     assert form.select_one('.gallery-source-filter') is None
-    assert form.select_one('input[name="tags"]')["value"] == "reference"
+    assert soup.select_one('input[name="tags"][form="navigator-query"]')["value"] == "reference"
     assert form.select_one('input[name="limit"]')["value"] == "12"
     assert form.select_one('input[name="added_from"]')["value"] == "2026-09-01"
     assert soup.select_one(".navigator-advanced[open]") is None
-    assert "已套用" in soup.select_one(".navigator-advanced summary").get_text()
+    assert "篩選" in soup.select_one(".navigator-advanced summary").get_text()
+    assert soup.select_one(".navigator-advanced summary span").get_text() == "5"
     expanded = client.get(soup.select_one(".navigator-scope-note a")["href"])
     assert expanded.status_code == 200
     assert BeautifulSoup(expanded.data, "html.parser").select_one('input[name="scope"]')["value"] == "all"
@@ -161,10 +162,10 @@ def test_topic_links_and_previews_keep_all_navigator_filters(client, topic_catal
     soup = BeautifulSoup(response.data, "html.parser")
     assert len(_topic_links(soup)) == 1
     card = soup.select_one(".navigator-topic-card")
-    assert card["data-topic"] == "Design"
-    assert card.select_one("header small").get_text() == "1 個項目"
-    assert card.select_one("[data-topic-item]")["data-topic-item"] == ids["bookmark"]
-    for link in [*_topic_links(soup), *card.select("a")]:
+    assert card is None  # Filtered galleries offer topic links without discovery previews.
+    assert soup.select_one('.catalog-home-topics') is None
+    assert soup.select_one('.navigator-sessions') is None
+    for link in _topic_links(soup):
         params = parse_qs(urlsplit(link["href"]).query)
         assert all(params[key] == [value] for key, value in filters.items() if key not in {"duration_min", "duration_max"})
         assert float(params["duration_min"][0]) == 10

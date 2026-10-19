@@ -14,8 +14,8 @@ UI_VARIANTS = (
      "description": "暖白畫廊配色，縮圖優先、縮短留白，適合比較影像與尋找靈感。",
      "layouts": ("影像優先的緊密網格", "寬幅主體、橫向接著看", "來源展卡與功能分區")},
     {"key": "workbench", "label": "素材工作台", "number": "02", "tagline": "看得多，做得快",
-     "description": "冷灰工具介面、側欄篩選與緊湊資訊，適合整理與處理收藏。",
-     "layouts": ("側欄篩選與密集網格", "主體與資訊工具並排", "側邊功能列與密集狀態列")},
+     "description": "冷灰工具介面、精簡篩選與緊湊資訊，適合整理與處理收藏。",
+     "layouts": ("精簡工具列與密集網格", "主體與資訊工具並排", "側邊功能列與密集狀態列")},
 )
 UI_KEYS = frozenset(item["key"] for item in UI_VARIANTS)
 # Only HTML pages and their legacy redirects participate. Never decorate assets or APIs.

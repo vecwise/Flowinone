@@ -18,7 +18,7 @@ class Element {
   replaceChildren(...children) { this.children = children; }
   removeAttribute(name) { delete this[name]; }
   pause() { this.paused = true; }
-  focus() { this.focused = true; }
+  focus(options) { this.focused = true; this.focusOptions = options; }
   click(event = {}) { return this.listeners.click?.(event); }
 }
 
@@ -30,7 +30,7 @@ function harness(firstItem = {}) {
   const parts = Object.fromEntries(names.map((name) => [name, new Element()]));
   const dialog = new Element();
   dialog.querySelector = (selector) => parts[selector.replace('[data-gallery-detail-', '').replace(']', '')];
-  dialog.showModal = () => { dialog.open = true; };
+  dialog.showModal = () => { dialog.open = true; window.scrollY = 362; };
   dialog.close = () => { dialog.open = false; dialog.listeners.close?.(); };
   const link = new Element();
   link.closest = () => ({dataset: {navigatorItem: 'first'}});
@@ -48,6 +48,8 @@ function harness(firstItem = {}) {
   Object.assign(items.first, firstItem);
   const window = {
     document,
+    scrollY: 464,
+    scrollTo({top}) { this.scrollY = top; },
     location: {href: 'http://localhost/navigator/?scope=gallery&source=bookmarks&q=old'},
     fetch: async (url, options) => {
       requests.push({url, options});
@@ -59,7 +61,7 @@ function harness(firstItem = {}) {
     },
   };
   vm.runInNewContext(source, {window, URL, URLSearchParams});
-  return {parts, dialog, link, requests};
+  return {parts, dialog, link, requests, window};
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -122,4 +124,16 @@ test('a merged bookmark opens its readable Resource with the return context', as
   assert.equal(destination.searchParams.get('return_to'), '/navigator/?scope=gallery&source=bookmarks&q=old');
   parts.read.click();
   assert.equal(JSON.parse(requests.at(-1).options.body).event_type, 'open');
+});
+
+
+test('opening and closing a preview keeps the gallery position despite native dialog focus scrolling', async () => {
+  const {parts, link, window} = harness();
+  link.click({button: 0, preventDefault() {}});
+  await flush();
+  assert.equal(window.scrollY, 464);
+  assert.equal(parts.close.focusOptions.preventScroll, true);
+  parts.close.click();
+  assert.equal(link.focusOptions.preventScroll, true);
+  assert.equal(window.scrollY, 464);
 });

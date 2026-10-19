@@ -39,7 +39,7 @@ def test_home_exposes_guide_and_empty_guide_never_writes_or_contacts_eagle(guide
     monkeypatch.setattr(route_guide.eagle_client, "get_smart_folders", unexpected_request)
     monkeypatch.setattr("src.flowinone.catalog.blueprint.is_eagle_available", lambda: False)
     home = BeautifulSoup(client.get("/", follow_redirects=True).data, "html.parser")
-    assert home.select_one('.nav-links a[href="/route-guide/"]')
+    assert home.select_one('.app-settings a[href="/route-guide/"]')
     statements = []
 
     def record(_connection, _cursor, statement, *_args):
@@ -56,7 +56,7 @@ def test_home_exposes_guide_and_empty_guide_never_writes_or_contacts_eagle(guide
     assert page.select_one('main[data-page-family="manage"]')
     assert "3 種模板" in page.get_text()
     assert page.select_one("#routes-compare") is None
-    assert page.select_one('.nav-links a[aria-current="page"]')["href"] == "/route-guide/"
+    assert page.select_one('.app-settings a[aria-current="page"]')["href"] == "/route-guide/"
     assert page.select_one('main form[method="post"]') is None
     assert "缺少樣本" in page.select_one('[data-route-endpoint="media.view_image"]').get_text()
     assert "來源未就緒" in page.select_one('[data-route-endpoint="eagle.eagle_stream"]').get_text()

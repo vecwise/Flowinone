@@ -68,12 +68,15 @@ def results(soup):
     return {item["data-navigator-item"] for item in soup.select("[data-navigator-item]")}
 
 
-def test_source_bar_precedes_page_filters_and_is_not_duplicated(collection):
+def test_source_picker_is_folded_in_filters_without_nested_or_duplicate_forms(collection):
     client, _, _ = collection
     soup = page(client)
     assert checked(soup) == {"bookmarks", "local", "eagle", "resources"}
-    assert soup.select_one(".app-header #global-source-form") is not None
-    assert soup.select_one(".navigator-advanced input[type=checkbox][name=source]") is None
+    assert soup.select_one(".app-header #global-source-form") is None
+    assert soup.select_one(".navigator-advanced #global-source-form") is not None
+    assert soup.select_one(".navigator-advanced[open]") is None
+    assert soup.select_one("form form") is None
+    assert len(soup.select('#global-source-form')) == 1
     assert len(soup.select('.navigator-query input[type=hidden][name=source]')) == 4
 
 

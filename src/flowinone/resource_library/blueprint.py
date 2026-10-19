@@ -45,7 +45,7 @@ def _resource_current_context(resource_id: str) -> dict | None:
         return None
     if target.scheme or target.netloc or target.path != "/navigator/":
         return None
-    return_url = target.path + (f"?{target.query}" if target.query else "")
+    return_url = target.path + (f"?{target.query}" if target.query else "") + (f"#{target.fragment}" if target.fragment else "")
     params = parse_qs(target.query)
     context_id = params.get("context", [""])[0]
     saved = None

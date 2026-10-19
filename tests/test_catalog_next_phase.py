@@ -828,8 +828,8 @@ def test_new_catalog_routes_render(tmp_path, monkeypatch):
     legacy_bookmark_filter = BeautifulSoup(
         client.get("/navigator/?scope=gallery&type=bookmark").data, "html.parser"
     )
-    assert legacy_bookmark_filter.select_one('input[name="source"][value="bookmarks"]').has_attr("checked")
-    assert not legacy_bookmark_filter.select_one('input[name="source"][value="local"]').has_attr("checked")
+    assert legacy_bookmark_filter.select_one('#global-source-form input[name="source"][value="bookmarks"]').has_attr("checked")
+    assert not legacy_bookmark_filter.select_one('#global-source-form input[name="source"][value="local"]').has_attr("checked")
     assert legacy_bookmark_filter.select_one('#navigator-type').get_text(" ", strip=True).startswith("全部類型")
     explained_search = client.get("/navigator/?scope=all&source=bookmarks&q=web")
     assert "命中：標題" in explained_search.get_data(as_text=True)

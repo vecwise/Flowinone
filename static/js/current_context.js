@@ -1,5 +1,5 @@
 (() => {
-  document.querySelectorAll('.current-context').forEach((section) => {
+  document.querySelectorAll('.current-context, .catalog-share-context').forEach((section) => {
     const button = section.querySelector('[data-copy-context]');
     const input = section.querySelector('[data-context-share-url]');
     const status = section.querySelector('[data-context-copy-status]');

@@ -1,0 +1,42 @@
+  <details class="navigator-theme-entry compact-menu">
+    <summary>主題／常用</summary>
+    <div class="compact-menu-panel">
+    <div class="navigator-theme-row navigator-topic-list" aria-label="可探索主題">
+      <h2 id="navigator-theme-heading">今天想看什麼</h2>
+      {% if query.tags %}<span class="navigator-theme-current">目前：{{ query.tags|join('、') }}</span>{% endif %}
+      {% for topic in topics %}<a class="navigator-chip {% if topic.selected %}is-active{% endif %}" href="{{ topic.url }}" {% if topic.selected %}aria-current="true"{% endif %}>{{ topic.name }} <small>{{ topic.count }}</small></a>{% endfor %}
+      {% if query.tags %}<a class="navigator-theme-clear" href="{{ topic_clear_url }}">清除主題</a>{% endif %}
+      {% if not topics %}<span class="navigator-explore-empty">目前條件下沒有可探索的標籤主題；可調整篩選或同步來源。</span>{% endif %}
+    </div>
+    {% if saved_searches %}
+    <div class="navigator-theme-row" aria-label="常用條件">
+      <span class="navigator-theme-label">常用</span>
+      {% for saved in saved_searches %}
+      <span class="navigator-saved-search" data-saved-search-id="{{ saved.id }}">
+        <a href="{{ saved.url }}" title="{{ saved.summary }}">{{ saved.label }}</a>
+        <details class="navigator-saved-search-tools"><summary aria-label="管理常用條件：{{ saved.label }}">更多</summary><button class="navigator-saved-search-delete" type="button" data-delete-saved-search="{{ saved.id }}" aria-label="移除常用條件：{{ saved.label }}">移除</button></details>
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if topics and gallery_home %}
+    <p class="navigator-topic-hint">從現有標籤接著探索。</p>
+    <div class="navigator-topic-recommendations" aria-label="主題推薦">
+      {% for topic in topics if topic['items'] %}
+      <article class="navigator-topic-card" data-topic="{{ topic.name }}">
+        <header><h3><a href="{{ topic.url }}">{{ topic.name }}</a></h3><small>{{ topic.count }} 個項目</small></header>
+        <ul>
+          {% for item in topic['items'] %}
+          <li><a class="navigator-topic-item" href="{{ item.browse_url }}" data-topic-item="{{ item.id }}">
+            <img src="{{ item.thumbnail_ref or url_for('static', filename='default_thumbnail.svg') }}" alt="" width="48" height="48" loading="lazy" decoding="async">
+            <span><strong>{{ item.title }}</strong><small>{{ item.launch_source_label }} · 主題：{{ topic.name }}</small></span>
+          </a></li>
+          {% endfor %}
+        </ul>
+        <a class="navigator-topic-more" href="{{ topic.url }}">繼續探索此主題 →</a>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+    </div>
+  </details>

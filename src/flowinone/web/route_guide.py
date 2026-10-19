@@ -149,7 +149,7 @@ def build_route_guide(database):
         entry("local.view_grid", "舊 Grid 入口", "→ browse.html", sample="local_folder", note="轉到 /both/，使用視覺模式。"),
         entry("local.view_slide", "舊 Slide 入口", "→ browse.html", sample="local_folder", note="轉到 /both/，使用閱讀模式。"),
         entry("catalog.navigator_saved_view", "已儲存的常用條件", "→ browse.html", sample="saved_view", fallback="catalog.navigator_page",
-              note="先在我的收藏 → 更多篩選，儲存一個常用條件。" if "saved_view" not in examples else "轉到對應的收藏條件。"),
+              note="先在我的收藏 → 結果右上 ⋯，儲存一個常用條件。" if "saved_view" not in examples else "轉到對應的收藏條件。"),
         entry("catalog.navigator_page", "舊素材範圍", "browse.html", values={"scope": "gallery"}, note="與收藏共用路由，只包含本機、Eagle 與書籤。"),
     ]
     debug_enabled = "debug.debug_print" in rules

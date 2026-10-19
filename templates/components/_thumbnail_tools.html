@@ -1,0 +1,16 @@
+  <details class="thumbnail-tools" data-thumbnail-tools data-chrome-page="{{ 'true' if request.blueprint == 'chrome' else 'false' }}" hidden>
+    <summary>縮圖維護 <span>批次重試與進度</span></summary>
+    <div class="thumbnail-tools-heading"><div><h2 id="thumbnail-tools-heading">Chrome 書籤縮圖</h2><p>批次重試失敗、未爬與待重試項目；相同網址只處理一次。</p></div></div>
+    <div class="thumbnail-tools-actions">
+      <label for="thumbnail-retry-scope">重試範圍
+        <select id="thumbnail-retry-scope" data-thumbnail-scope><option value="page">這一頁的 Chrome 書籤</option><option value="all">全部 Chrome 書籤</option></select>
+      </label>
+      <button type="button" class="action-button" data-thumbnail-batch>批次重試未成功縮圖</button>
+    </div>
+    <div data-thumbnail-run hidden>
+      <p id="thumbnailSyncStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+      <progress data-thumbnail-progress value="0" max="1" aria-label="本輪縮圖重爬進度"></progress>
+      <p class="thumbnail-run-hint">重爬在背景進行，離開頁面後可回來查看。失敗項目會保留原封面或網站佔位圖。</p>
+      <details data-thumbnail-results hidden><summary data-thumbnail-result-summary>查看本輪結果</summary><ul data-thumbnail-result-list></ul></details>
+    </div>
+  </details>

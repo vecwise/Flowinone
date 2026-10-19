@@ -161,7 +161,7 @@ def test_shared_browse_ui_keeps_filters_paging_and_shape_without_filtering_data(
     client = app.test_client()
     path = f'/navigator/?q=Reference&source=local&tags=design&media=video&shape=portrait&limit=1&ui={ui}'
     page = BeautifulSoup(client.get(path).data, 'html.parser')
-    assert page.select_one('input[name="media"][value="video"][checked]')
+    assert page.select_one('select[name="media"] option[value="video"][selected]')
     assert page.select_one('[data-gallery-shape="portrait"][data-media-scope="video"]')
     assert page.select_one('[data-media-category="video"]')
     assert page.select_one('.navigator-advanced #navigator-type')
@@ -176,7 +176,7 @@ def test_shared_browse_ui_keeps_filters_paging_and_shape_without_filtering_data(
     landscape = BeautifulSoup(client.get(path.replace('shape=portrait', 'shape=landscape')).data, 'html.parser')
     assert [card['id'] for card in landscape.select('.gallery-card')] == [card['id'] for card in page.select('.gallery-card')]
     empty = BeautifulSoup(client.get(f'/navigator/?q=nomatches&media=album&ui={ui}').data, 'html.parser')
-    assert empty.select_one('input[value="album"][checked]')
+    assert empty.select_one('select[name="media"] option[value="album"][selected]')
     assert empty.select_one('.gallery-empty a')
 
 
@@ -193,3 +193,57 @@ def test_source_folders_share_shape_rules_and_legacy_type_links_still_choose_med
             assert page.select_one('[data-gallery-shape="square"]')['data-media-scope'] == scope
     page = BeautifulSoup(app.test_client().get('/navigator/?type=image&source=local').data, 'html.parser')
     assert page.select_one('[data-media-scope="image"]')
+
+
+def test_sort_form_uses_applied_filters_and_sorts_across_batches(media_app):
+    app, _ = media_app
+    client = app.test_client()
+    first = client.get('/api/catalog/items?q=Reference&source=local&tags=design&media=video&limit=1').get_json()
+    page = BeautifulSoup(client.get('/navigator/', query_string={
+        'q': 'Reference', 'source': 'local', 'tags': 'design', 'media': 'video',
+        'limit': 1, 'cursor': first['next_cursor'], 'view': 'list', 'shape': 'square', 'ui': 'curator',
+    }).data, 'html.parser')
+    form = page.select_one('#navigator-sort-form')
+    fields = [(field['name'], field['value']) for field in form.select('input[type=hidden]')]
+    assert not {'cursor', 'context', 'sort'} & {name for name, _ in fields}
+    for pair in [('q', 'Reference'), ('source', 'local'), ('tags', 'design'), ('media', 'video'), ('view', 'list'), ('shape', 'square')]:
+        assert pair in fields
+    assert page.select_one('form.navigator-query #navigator-sort') is None
+    assert page.select_one('[data-catalog-sort] option[selected]')['value'] == 'recently_added'
+    from werkzeug.datastructures import MultiDict
+    target = client.get('/navigator/', query_string=MultiDict([*fields, ('sort', 'title')]))
+    titles = []
+    while True:
+        soup = BeautifulSoup(target.data, 'html.parser')
+        titles.extend(card.get_text(strip=True) for card in soup.select('.gallery-card h3'))
+        next_link = soup.select_one('[data-browse-link]')
+        if not next_link:
+            break
+        target = client.get(next_link['href'])
+    assert titles == ['Reference 0', 'Reference 1', 'Reference 2']
+
+
+def test_removing_one_chip_keeps_other_filters_and_invalidates_paging(media_app):
+    app, _ = media_app
+    client = app.test_client()
+    soup = BeautifulSoup(client.get('/navigator/?q=Reference&source=local&tags=design&tags=art&tag_mode=all&type=video&sort=title&limit=1&view=list&shape=square').data, 'html.parser')
+    target = soup.select_one('a[aria-label="移除條件：art"]')['href']
+    params = parse_qs(urlsplit(target).query)
+    for key, value in [('q', 'Reference'), ('source', 'local'), ('tags', 'design'), ('tag_mode', 'all'), ('type', 'video'), ('sort', 'title'), ('limit', '1'), ('view', 'list'), ('shape', 'square')]:
+        assert params[key] == [value]
+    assert 'cursor' not in params
+    assert BeautifulSoup(client.get(target).data, 'html.parser').select_one('.gallery-card')
+
+
+def test_random_sort_redirect_retains_one_time_top_position_and_stable_seed(media_app):
+    app, _ = media_app
+    client = app.test_client()
+    response = client.get('/navigator/?q=Reference&source=local&media=video&sort=random&limit=1&resume_scroll=0')
+    params = parse_qs(urlsplit(response.location).query)
+    assert int(params['seed'][0]) > 0
+    assert params['resume_scroll'] == ['0']
+    page = BeautifulSoup(client.get(response.location).data, 'html.parser')
+    assert page.select_one('[data-resume-scroll]')['data-resume-scroll'] == '0'
+    next_url = page.select_one('[data-browse-link]')['href']
+    assert parse_qs(urlsplit(next_url).query)['seed'] == params['seed']
+    assert 'resume_scroll' not in parse_qs(urlsplit(next_url).query)

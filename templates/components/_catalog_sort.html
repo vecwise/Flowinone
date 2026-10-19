@@ -1,0 +1,11 @@
+<form class="catalog-sort" id="navigator-sort-form" method="get" aria-label="結果排序">
+  {% for key, value in sort_fields %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+  <label class="sr-only" for="navigator-sort">結果排序</label>
+  <select id="navigator-sort" name="sort" data-catalog-sort>
+    {% for key, label in [('recently_added','最近加入'),('newest','最新內容'),('relevance','搜尋相關度'),('title','標題'),('random','隨機探索'),('most_viewed','最常瀏覽'),('recently_viewed','最近瀏覽'),('favorites','我的最愛')] %}
+    <option value="{{ key }}" {% if query.sort == key %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button class="action-button" type="submit">排序</button></noscript>
+</form>
+{% if query.sort == 'random' %}<a class="catalog-reshuffle" href="{{ random_url }}" data-catalog-reshuffle>再隨機一次</a>{% endif %}
