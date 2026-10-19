@@ -25,6 +25,7 @@ from .media import MEDIA_LABELS
 from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
 from .eagle_library import EagleLibraryService
+from .targets import BrowseTargetService
 
 NAVIGATOR_SCOPE_SOURCES = {
     "gallery": tuple(source for source in CATALOG_SOURCES if source != "resources"),
@@ -65,6 +66,7 @@ def _navigator_query() -> CatalogQuery:
         item_type=item_type,
         media=request.args.get("media"),
         folder=request.args.get("folder"),
+        target=request.args.get("target"),
         tags=request.args.getlist("tags") or request.args.get("tags"),
         tag_mode=request.args.get("tag_mode"), favorite=request.args.get("favorite"),
         unviewed=request.args.get("unviewed"),
@@ -86,6 +88,8 @@ def _navigator_query_pairs(query: CatalogQuery, *, cursor: str | None = None) ->
         pairs.append(("media", query.media))
     if query.folder:
         pairs.append(("folder", query.folder))
+    if query.target:
+        pairs.append(("target", query.target))
     if query.tags:
         pairs.extend((("tags", ",".join(query.tags)), ("tag_mode", query.tag_mode)))
     if query.favorite:
@@ -139,7 +143,7 @@ def _with_scope(query: CatalogQuery, scope: str) -> CatalogQuery:
 
 
 def _gallery_home(query: CatalogQuery) -> bool:
-    return not any((query.q, query.item_type, query.media, query.folder, query.tags,
+    return not any((query.q, query.item_type, query.media, query.folder, query.target, query.tags,
                     query.favorite, query.unviewed, query.duration_min is not None,
                     query.duration_max is not None, query.added_from, query.added_to,
                     query.cursor, query.sort != "recently_added"))
@@ -153,6 +157,9 @@ def _gallery_filter_chips(query: CatalogQuery) -> list[dict]:
 
     if query.q:
         add(f"搜尋：{query.q}", q="")
+    if query.target:
+        target = g.navigator_target
+        add(f"{target['prefix']}：{target['label']}", target="")
     for tag in query.tags:
         add(tag, tags=tuple(value for value in query.tags if value != tag))
     if query.media:
@@ -189,7 +196,7 @@ def _navigator_topics(
         values = query.public_dict()
         values.update({
             "sources": active_sources,
-            "tags": (tag["name"],), "tag_mode": "any", "cursor": "",
+            "tags": (tag["name"],), "tag_mode": "any", "cursor": "", "target": "",
             "limit": 3 if preview else 1,
         })
         topic_query = CatalogQuery.create(**values)
@@ -197,10 +204,10 @@ def _navigator_topics(
         if not page["total_estimate"]:
             continue
         items = visible_items(service, page, topic_query) if preview else []
-        # Topic links switch only the tag, retaining the Navigator context.
-        target = _quick_filter_url(query, tags=topic_query.tags, tag_mode="any")
+        # Topics replace a typed destination while retaining other browse filters.
+        target = _quick_filter_url(query, tags=topic_query.tags, tag_mode="any", target="")
         preview_target = _quick_filter_url(
-            query, tags=topic_query.tags, tag_mode="any", limit=max(query.limit, len(items)),
+            query, tags=topic_query.tags, tag_mode="any", target="", limit=max(query.limit, len(items)),
         )
         topics.append({
             "name": tag["name"], "count": page["total_estimate"], "url": target,
@@ -234,6 +241,7 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
             or session_query.item_type
             or session_query.media
             or session_query.tags
+            or session_query.target
             or session_query.favorite
             or session_query.unviewed
             or session_query.duration_min is not None
@@ -271,6 +279,12 @@ def _navigator_recent_sessions(service: CatalogService) -> list[dict]:
 
 def _saved_search_summary(query: CatalogQuery) -> str:
     details = []
+    if query.target:
+        try:
+            target = BrowseTargetService(_database()).describe(query.target)
+            details.append(f"{target['prefix']}：{target['label']}")
+        except LookupError:
+            details.append("已失效的瀏覽入口")
     if query.q:
         details.append(f"「{query.q}」")
     if query.tags:
@@ -321,7 +335,13 @@ def navigator_page():
         return_url = url_for("catalog.navigator_page") + ("?" + urlencode(pairs) if pairs else "")
         return redirect(url_for("local.content_library", return_to=return_url) + "#collection-maintenance")
     service = CatalogService(_database())
-    query = _navigator_query()
+    try:
+        query = _navigator_query()
+        g.navigator_target = BrowseTargetService(_database()).describe(query.target) if query.target else None
+    except ValueError as exc:
+        abort(400, description=str(exc))
+    except LookupError:
+        abort(404, description="找不到這個瀏覽入口。")
     preferred = source_preference()
     if preferred and (tuple(request.args.getlist("source")) != preferred
                       or request.args.get("scope", "all") != "all"):
@@ -412,6 +432,7 @@ def navigator_page():
     filter_chips = _gallery_filter_chips(query)
     gallery_heading = (
         active_context["label"] if active_context else
+        g.navigator_target["label"] if query.target else
         "、".join(query.tags) if query.tags else
         f"「{query.q}」的搜尋結果" if query.q else
         query.folder.rsplit(" / ", 1)[-1] if query.folder else
@@ -421,7 +442,7 @@ def navigator_page():
         label for key, label in SOURCE_OPTIONS if key in query.sources
     )
     show_context = bool(
-        active_context or query.q or query.item_type or query.media or query.folder or query.tags
+        active_context or query.q or query.item_type or query.media or query.folder or query.target or query.tags
         or query.favorite or query.unviewed or query.duration_min is not None
         or query.duration_max is not None or query.added_from or query.added_to
     )
@@ -444,6 +465,7 @@ def navigator_page():
         resume_scroll=request.args.get("resume_scroll", ""),
         payload=payload,
         query=query,
+        browse_target=g.navigator_target,
         catalog_sources=[
             {"key": source, "label": SOURCE_LABELS[source]}
             for source in CATALOG_SOURCES

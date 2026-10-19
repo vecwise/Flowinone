@@ -58,6 +58,10 @@
       <p>目前來源未包含書籤，無法瀏覽此書籤資料夾。可加入書籤來源，或清除資料夾條件。</p>
       <button class="action-button primary" type="submit" form="global-source-form" name="source_action" value="add_bookmarks">加入書籤來源</button>
       <a class="action-button" href="{{ folder_clear_url }}">清除資料夾條件</a>
+      {% elif browse.kind == 'catalog' and browse_target and browse_target.kind == 'eagle_folder' and 'eagle' not in query.sources %}
+      <p>目前來源未包含 EAGLE，請在篩選面板加入 EAGLE 來源，或清除資料夾條件。</p>
+      {% elif browse.kind == 'catalog' and browse_target and browse_target.kind == 'eagle_folder' and not eagle_available %}
+      <p>EAGLE 來源目前無法使用，請開啟對應的資源庫並檢查來源與同步。</p>
       {% else %}<p>可調整篩選，或在篩選面板變更來源。</p>{% endif %}
       {% if reset_url %}<a class="action-button" href="{{ reset_url }}">清除頁內篩選</a>{% endif %}
     </section>{% endif %}

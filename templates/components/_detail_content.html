@@ -16,7 +16,26 @@
     <h2 id="navigator-detail-title" data-gallery-detail-title></h2>
     {% endif %}
     {% if preview or detail.kind != 'resource' %}<p class="navigator-detail-description" {% if preview %}data-gallery-detail-description{% endif %}>{{ detail.description or '目前沒有額外說明。' }}</p>{% endif %}
+    {% if not preview and detail.browse_targets %}
+    {% for kind, label in [('tag', '標籤'), ('person', '人物'), ('eagle_folder', 'EAGLE 資料夾')] %}
+    {% set entries = detail.browse_targets|selectattr('kind', 'equalto', kind)|list %}
+    {% if entries %}<section class="navigator-browse-group" aria-label="{{ label }}"><h3>{{ label }}</h3>
+      <div class="gallery-tags">{% for entry in entries %}<a href="{{ entry.url }}">{{ entry.label }}</a>{% endfor %}</div>
+    </section>{% endif %}
+    {% endfor %}
+    {% else %}
     <div class="gallery-tags" {% if preview %}data-gallery-detail-tags{% endif %} aria-label="標籤">{% for tag in detail.tags or [] %}<a href="{{ url_for('catalog.navigator_page', scope='all', tags=tag) }}">{{ tag }}</a>{% endfor %}</div>
+    {% endif %}
+    {% if preview %}
+    <section class="navigator-browse-group" data-gallery-detail-people-group hidden aria-labelledby="navigator-detail-people-title">
+      <h3 id="navigator-detail-people-title">人物</h3>
+      <div class="gallery-tags" data-gallery-detail-people></div>
+    </section>
+    <section class="navigator-browse-group" data-gallery-detail-folders-group hidden aria-labelledby="navigator-detail-folders-title">
+      <h3 id="navigator-detail-folders-title">EAGLE 資料夾</h3>
+      <div class="gallery-tags" data-gallery-detail-folders></div>
+    </section>
+    {% endif %}
     <div class="action-row navigator-detail-actions">
       {% if preview %}
       <a class="action-button primary" data-gallery-detail-launch href="#">開啟來源</a>

@@ -819,6 +819,8 @@
 .navigator-detail-main h2 { margin: 0; font-size: clamp(1.4rem, 3vw, 2rem); line-height: 1.25; }
 .navigator-detail-source { margin: 0; color: var(--fo-primary); font-size: .78rem; font-weight: 800; }
 .navigator-detail-folder { color: var(--fo-primary); font-size: .83rem; overflow-wrap: anywhere; }
+.navigator-browse-group h3 { margin: 0 0 6px; font-size: .8rem; color: var(--fo-muted-text); }
+.navigator-browse-group .gallery-tags a { overflow-wrap: anywhere; }
 .navigator-detail-description { margin: 0; color: var(--fo-muted-text); line-height: 1.6; overflow-wrap: anywhere; }
 .navigator-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .navigator-detail-related { border-inline-start: 1px solid var(--fo-border); padding: 20px; background: var(--fo-bg); }

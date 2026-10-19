@@ -12,7 +12,7 @@
     if (query.folder) params.set('folder', query.folder);
     const itemSuffix = params.toString() ? `?${params}` : '';
     const relatedParams = new URLSearchParams(params);
-    ['q', 'scope', 'type', 'media', 'tag_mode', 'duration_min', 'duration_max', 'added_from', 'added_to'].forEach((key) => {
+    ['q', 'scope', 'type', 'media', 'target', 'tag_mode', 'duration_min', 'duration_max', 'added_from', 'added_to'].forEach((key) => {
       if (query[key] !== null && query[key] !== undefined && query[key] !== '') {
         relatedParams.set(key, query[key]);
       }
@@ -30,6 +30,10 @@
     const title = dialog.querySelector('[data-gallery-detail-title]');
     const description = dialog.querySelector('[data-gallery-detail-description]');
     const tags = dialog.querySelector('[data-gallery-detail-tags]');
+    const people = dialog.querySelector('[data-gallery-detail-people]');
+    const peopleGroup = dialog.querySelector('[data-gallery-detail-people-group]');
+    const folders = dialog.querySelector('[data-gallery-detail-folders]');
+    const foldersGroup = dialog.querySelector('[data-gallery-detail-folders-group]');
     const launch = dialog.querySelector('[data-gallery-detail-launch]');
     const read = dialog.querySelector('[data-gallery-detail-read]');
     const related = dialog.querySelector('[data-gallery-detail-related]');
@@ -52,6 +56,23 @@
         url.searchParams.append('source', 'bookmarks');
       }
       return `${url.pathname}${url.search}`;
+    };
+
+    const renderTargets = (container, entries) => {
+      if (!container) return;
+      container.replaceChildren();
+      entries.forEach((entry) => {
+        const chip = root.createElement('a');
+        chip.textContent = entry.label;
+        const destination = new URL(entry.url, global.location.href);
+        const current = new URL(global.location.href);
+        // Enter another set with its own membership; carry only display choices.
+        ['view', 'shape'].forEach((key) => {
+          if (current.searchParams.has(key)) destination.searchParams.set(key, current.searchParams.get(key));
+        });
+        chip.href = destination.pathname + destination.search;
+        container.append(chip);
+      });
     };
 
     const requestJson = async (url) => {
@@ -125,6 +146,14 @@
         chip.href = filterUrl('tags', tag);
         tags.append(chip);
       });
+      const targets = item.browse_targets || [];
+      if (item.browse_targets) renderTargets(tags, targets.filter((entry) => entry.kind === 'tag'));
+      const personTargets = targets.filter((entry) => entry.kind === 'person');
+      const folderTargets = targets.filter((entry) => entry.kind === 'eagle_folder');
+      renderTargets(people, personTargets);
+      renderTargets(folders, folderTargets);
+      if (peopleGroup) peopleGroup.hidden = !personTargets.length;
+      if (foldersGroup) foldersGroup.hidden = !folderTargets.length;
       launch.hidden = !item.launch_uri;
       if (item.launch_uri) {
         if (/^\/(resources|image|video|EAGLE_image|EAGLE_video)\//.test(item.launch_uri)) {

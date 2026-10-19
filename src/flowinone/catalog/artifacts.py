@@ -137,6 +137,9 @@ class PersonService:
     def link(self, person_id: str, item_id: str, *, confidence: float | None = None, source: str = "user") -> None:
         with self.database.write_transaction() as conn:
             conn.execute(text("INSERT OR REPLACE INTO item_people(catalog_item_id,person_id,confidence,source,created_at) VALUES(:item,:person,:confidence,:source,:created)"), {"item": item_id, "person": person_id, "confidence": confidence, "source": source[:24], "created": utc_now_text()})
+        # Person membership participates in cached exact totals.
+        from .browse import CatalogService
+        CatalogService.mark_browse_data_changed(self.database)
 
 
 __all__ = ["CatalogArtifactService", "OCRProvider", "PersonService", "TesseractOCRProvider"]

@@ -101,6 +101,8 @@ def render_catalog_browse(**context):
 
 def render_media_detail(**context):
     media, metadata = context["media"], context["metadata"]
+    origin = context.pop("catalog_origin", None)
+    targets = detail_browse_targets(*origin) if origin else []
     context.setdefault("title", f"{metadata.get('name') or media.get('name') or '項目詳情'} · Flowinone")
     return render_template("detail.html", detail={
         "kind": context["media_kind"], "title": metadata.get("name") or media.get("name"),
@@ -110,7 +112,16 @@ def render_media_detail(**context):
         "thumbnail_url": media.get("thumbnail_route"), "source_url": media.get("source_url"),
         "mime_type": media.get("mime_type"), "download_url": media.get("download_url"),
         "original_url": media.get("original_url"),
+        "browse_targets": targets,
     }, notice=request.args.get("notice"), **context)
+
+
+def detail_browse_targets(source, key):
+    from .database import request_database
+    from .browse_sources import current_sources
+    from src.flowinone.catalog.targets import BrowseTargetService
+
+    return BrowseTargetService(request_database()).for_origin(source, key, sources=current_sources())
 
 
 def safe_browse_return(value):
@@ -145,6 +156,7 @@ def render_resource_detail(**context):
         "tags": resource.get("tag_names") or [], "thumbnail_url": resource.get("thumbnail_url"),
         "parent_url": current_context.get("return_url") or url_for("catalog.navigator_page", scope="all"),
         "original_url": resource.get("original_url"),
+        "browse_targets": detail_browse_targets("resources", resource["id"]),
     }, related_items=related, **context)
 
 

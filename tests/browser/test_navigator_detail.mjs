@@ -25,7 +25,7 @@ class Element {
 function harness(firstItem = {}) {
   const names = [
     'status', 'content', 'image', 'video', 'source', 'folder', 'title', 'description', 'tags',
-    'launch', 'read', 'related', 'back', 'close',
+    'launch', 'read', 'related', 'back', 'close', 'people', 'people-group', 'folders', 'folders-group',
   ];
   const parts = Object.fromEntries(names.map((name) => [name, new Element()]));
   const dialog = new Element();
@@ -136,4 +136,35 @@ test('opening and closing a preview keeps the gallery position despite native di
   parts.close.click();
   assert.equal(link.focusOptions.preventScroll, true);
   assert.equal(window.scrollY, 464);
+});
+
+test('typed destinations switch sets, carry display choices, and reset when another item opens', async () => {
+  const browseTargets = [
+    {kind: 'tag', label: '木質 & warm:色', url: '/navigator/?scope=all&source=eagle&target=tag%3Atag-id'},
+    {kind: 'person', label: 'A <name>', url: '/navigator/?scope=all&source=eagle&target=person%3Aperson-id'},
+    {kind: 'eagle_folder', label: '室內參考', url: '/navigator/?scope=all&source=eagle&target=eagle_folder%3Alibrary%3Afolder-id'},
+  ];
+  const {parts, link, window} = harness({browse_targets: browseTargets});
+  window.location.href = 'http://localhost/navigator/?q=old&tags=old&target=person:old&cursor=old&view=list&shape=square';
+  link.click({button: 0, preventDefault() {}});
+  await flush();
+  assert.equal(parts.tags.children[0].textContent, '木質 & warm:色');
+  assert.equal(parts.people.children[0].textContent, 'A <name>');
+  assert.equal(parts['people-group'].hidden, false);
+  assert.equal(parts['folders-group'].hidden, false);
+  for (const [container, expected] of [[parts.tags, 'tag:tag-id'], [parts.people, 'person:person-id'], [parts.folders, 'eagle_folder:library:folder-id']]) {
+    const destination = new URL(container.children[0].href, 'http://localhost');
+    assert.equal(destination.pathname, '/navigator/');
+    assert.equal(destination.searchParams.get('target'), expected);
+    assert.equal(destination.searchParams.get('source'), 'eagle');
+    assert.equal(destination.searchParams.get('view'), 'list');
+    assert.equal(destination.searchParams.get('shape'), 'square');
+    ['q', 'tags', 'cursor', 'folder'].forEach((key) => assert.equal(destination.searchParams.has(key), false));
+  }
+  parts.related.children[0].click();
+  await flush();
+  assert.equal(parts['people-group'].hidden, true);
+  assert.equal(parts['folders-group'].hidden, true);
+  assert.equal(parts.people.children.length, 0);
+  assert.equal(parts.folders.children.length, 0);
 });

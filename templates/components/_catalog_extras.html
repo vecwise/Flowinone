@@ -111,7 +111,7 @@
   };
   const defaultSources = query.scope === 'gallery' ? ['local', 'eagle', 'bookmarks'] : ['local', 'eagle', 'bookmarks', 'resources'];
   const meaningfulQuery = Boolean(
-    query.q || query.type || query.folder || query.tags.length || query.favorite || query.unviewed ||
+    query.q || query.type || query.folder || query.target || query.tags.length || query.favorite || query.unviewed ||
     query.duration_min != null || query.duration_max != null || query.sort !== 'recently_added' ||
     query.sources.join(',') !== defaultSources.join(',')
   );

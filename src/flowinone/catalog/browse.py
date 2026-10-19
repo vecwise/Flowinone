@@ -20,6 +20,7 @@ from .eagle_library import EagleLibraryService
 from .locking import database_is_locked
 from .media import media_category, media_category_sql
 from .query import CatalogQuery, _fts_query, _json
+from .targets import BrowseTargetService
 
 CATALOG_BROWSE_CACHE_MAX_ENTRIES = 128
 CATALOG_BROWSE_CACHE_COMPONENT = "catalog_browse_cache"
@@ -296,6 +297,12 @@ class CatalogService:
         conditions = ["i.is_deleted=0", "COALESCE(us.hidden,0)=0"]
         eagle_allowed = self._eagle_allowed()
         conditions.append(self._visibility_sql())
+        if query.target:
+            condition, target_params = BrowseTargetService(self.database).predicate(
+                query.target, sources=query.sources, eagle_allowed=eagle_allowed,
+            )
+            conditions.append(condition)
+            params.update(target_params)
         if candidate_ids is not None:
             placeholders = []
             for index, item_id in enumerate(candidate_ids):

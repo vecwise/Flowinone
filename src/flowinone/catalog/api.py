@@ -40,6 +40,7 @@ from .similarity import CatalogSimilarityService
 from .sync import CatalogSyncService
 from .watch import CatalogSourceWatcher
 from .eagle_library import EagleLibraryService, EagleLibraryError
+from .targets import BrowseTargetService
 
 
 @bp.get("/api/catalog/eagle/library")
@@ -96,6 +97,9 @@ def api_item(item_id: str):
         if source_preference() and item_id not in service.matching_ids(context, [item_id]):
             return api_error("Catalog item is outside selected sources", 404)
         visible = visible_items(service, {"items": [item]}, context)
+        item["browse_targets"] = BrowseTargetService(_database()).for_item(
+            item_id, sources=context.sources, eagle_allowed=service._eagle_allowed(),
+        )
         if visible and visible[0]["item_type"] == "video" and visible[0].get("launch_source") in {"local", "eagle"}:
             visible[0]["playback_uri"] = url_for("catalog.catalog_video_playback", item_id=item_id, source=visible[0]["launch_source"])
         return validated_json(

@@ -44,6 +44,7 @@ class CatalogQuery:
     item_type: str = ""
     media: str = ""
     folder: str = ""
+    target: str = ""
     tags: tuple[str, ...] = ()
     tag_mode: str = "any"
     favorite: bool = False
@@ -59,6 +60,10 @@ class CatalogQuery:
 
     @classmethod
     def create(cls, **values: Any) -> "CatalogQuery":
+        target = str(values.get("target") or "")
+        if target:
+            from .targets import BrowseTarget
+            target = BrowseTarget.parse(target).key
         raw_sources = values.get("sources") or CATALOG_SOURCES
         if isinstance(raw_sources, str):
             raw_sources = raw_sources.split(",")
@@ -107,6 +112,7 @@ class CatalogQuery:
             item_type=str(values.get("item_type") or values.get("type") or "").strip().lower()[:40],
             media=media if media in MEDIA_LABELS else "",
             folder=str(values.get("folder") or "").strip()[:500],
+            target=target,
             tags=tags,
             tag_mode="all" if str(values.get("tag_mode") or "any").lower() == "all" else "any",
             favorite=bool(values.get("favorite") in (True, 1, "1", "true", "yes")),
@@ -150,6 +156,7 @@ class CatalogQuery:
             "type": self.item_type or None,
             **({"media": self.media} if self.media else {}),
             "folder": self.folder or None,
+            **({"target": self.target} if self.target else {}),
             "tags": list(self.tags),
             "tag_mode": self.tag_mode,
             "favorite": self.favorite,

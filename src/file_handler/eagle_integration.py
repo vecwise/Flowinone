@@ -1,5 +1,6 @@
 """Eagle integration helpers for Flowinone."""
 
+import hashlib
 import mimetypes
 import os
 import random
@@ -360,6 +361,21 @@ def get_eagle_catalog_source(*, force=False):
     return {
         "identity": str(identity), "version": str(version),
         "name": str(data.get("name") or ""), "path": str(data.get("path") or ""),
+    }
+
+
+def get_eagle_catalog_folders():
+    """Return folder names and their library signature from one metadata snapshot."""
+    response = _get_eagle_library_info()
+    if response.get("status") != "success":
+        raise ExternalServiceError("Failed to fetch Eagle folder metadata")
+    data = response.get("data") or {}
+    identity = data.get("id") or data.get("libraryId") or data.get("path")
+    if not identity:
+        raise ExternalServiceError("Eagle library identity is unavailable")
+    return hashlib.sha256(str(identity).encode()).hexdigest(), {
+        str(folder["id"]): str(folder.get("name") or folder["id"])
+        for folder, _parent in _iter_eagle_folders(data.get("folders")) if folder.get("id")
     }
 
 

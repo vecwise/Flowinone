@@ -264,6 +264,7 @@ def _render_eagle_detail(item_id: str, media_kind: str):
     )
     return render_media_detail(
         media_kind=media_kind,
+        catalog_origin=("eagle", item_id),
         media=detail_dict,
         metadata=metadata_dict,
         related_items=merge_related(

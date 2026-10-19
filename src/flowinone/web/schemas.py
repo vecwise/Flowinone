@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field, RootModel, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import Field, RootModel, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator
 
 from .api import ApiInput, ApiOutput, ApiQuery
 
 
 CatalogSource = Literal["local", "eagle", "bookmarks", "resources"]
+
+
+def _validate_browse_target(value):
+    if value:
+        from src.flowinone.catalog.targets import BrowseTarget
+        return BrowseTarget.parse(value).key
+    return value
 
 
 class EmptyRequest(ApiInput):
@@ -94,6 +101,8 @@ class CatalogEventRequest(ApiInput):
 
 
 class CatalogQueryInput(ApiInput):
+    target: StrictStr | None = Field(default=None, max_length=1000)
+    _valid_target = field_validator("target")(_validate_browse_target)
     media: Literal["", "video", "image", "album", "page"] | None = None
     q: StrictStr = Field(default="", max_length=300)
     scope: Literal["all", "gallery", "resources"] = "all"
@@ -211,6 +220,8 @@ class SavedSearchLimitQuery(ApiQuery):
 
 
 class CatalogListQuery(ApiQuery):
+    target: str = Field(default="", max_length=1000)
+    _valid_target = field_validator("target")(_validate_browse_target)
     media: Literal["", "video", "image", "album", "page"] = ""
     q: str = Field(default="", max_length=300)
     scope: Literal["all", "gallery", "resources"] = "all"
@@ -347,6 +358,13 @@ class EagleStreamOutput(ApiOutput):
     nextOffset: int
 
 
+class CatalogBrowseTargetOutput(ApiOutput):
+    kind: Literal["tag", "person", "eagle_folder"]
+    target: str
+    label: str
+    url: str
+
+
 class CatalogItemOutput(ApiOutput):
     id: str
     title: str
@@ -355,6 +373,7 @@ class CatalogItemOutput(ApiOutput):
     sources: list[str] = []
     match_reason: dict[str, str] | None = None
     playback_uri: str | None = None
+    browse_targets: list[CatalogBrowseTargetOutput] = []
 
 
 class CatalogFacetsOutput(ApiOutput):

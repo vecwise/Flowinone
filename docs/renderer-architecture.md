@@ -54,6 +54,10 @@ FLOWINONE_HEADLESS=1 conda run -n py3.11 python run.py
 5. 結果右上「⋯」可儲存為常用條件、複製條件連結與選擇縮圖比例；`⌘/Ctrl + K` 可開啟常用動作與條件。
 6. 「設定與維護」可進入重複圖片檢閱與「來源與同步」。先分析本機圖片，圖片卡「更多」中的「找相似圖片」才有結果。
 
+收藏預覽與已建立 Catalog 索引的項目詳情可點擊標籤、已連結人物及 EAGLE 資料夾，進入同一套 Navigator 查看相關項目。切換入口會清除原本的搜尋與頁內條件，保留來源選擇；進入後可繼續搜尋、篩選、排序與分頁。人物入口沿用既有 `people`／`item_people` 關係，尚不會把人物名稱 tag 自動轉成人物。
+
+入口使用 `target=tag:<id>`、`target=person:<id>`、`target=eagle_folder:<library-signature>:<folder-id>`。EAGLE 資料夾顯示直接歸屬於該 folder 的索引項目；來源樹狀頁仍用於瀏覽子資料夾。來源未包含 EAGLE 時會提示調整來源，不會自行開啟該來源。
+
 ### 3.2 我不知道資源在哪個來源
 
 「我的收藏」預設會搜尋 Local、Eagle、Bookmarks 與 Resources。其他頁面的導覽列搜尋也會進全部收藏。

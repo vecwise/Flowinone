@@ -108,6 +108,7 @@ def _render_local_detail(path: str, media_kind: str):
     detail_dict = serialize_detail(detail)
     return render_media_detail(
         media_kind=media_kind,
+        catalog_origin=("local", detail_dict.get("relative_path") or path),
         media=detail_dict,
         metadata=metadata_dict,
         related_items=merge_related(
